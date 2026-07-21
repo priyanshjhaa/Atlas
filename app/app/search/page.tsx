@@ -1,2 +1,2 @@
-import { AtlasApp } from "../../../components/atlas-app";
-export default function Page() { return <AtlasApp page="search" />; }
+import { SearchPage } from "@/components/features/explore";
+export default function Page() { return <SearchPage />; }

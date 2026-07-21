@@ -269,6 +269,33 @@ button { color: inherit; }
   .app-topbar { padding-right: 14px; }.app-topbar .freshness { display: none; }.global-search { width: calc(100vw - 120px); }.page-content { padding: 28px 15px 60px; }.page-header { align-items: flex-start; flex-direction: column; }.page-header .button, .page-header .view-actions { width: 100%; }.metrics-grid { grid-template-columns: 1fr 1fr; }.metric-card { min-height: 120px; padding: 15px; }.metric-card strong { font-size: 30px; }.panel--graph { min-height: 370px; }.atlas-graph--compact { min-height: 300px; }.analysis-aside { grid-template-columns: 1fr; }.field-row { grid-template-columns: 1fr; }.form-footer { align-items: flex-start; flex-direction: column; gap: 14px; }.form-footer .button { width: 100%; }.report-top { align-items: flex-start; flex-direction: column; gap: 14px; }.report-top > div { width: 100%; justify-content: space-between; }.report-hero { align-items: flex-start; flex-direction: column; }.risk-score { border-left: 0; border-top: 1px solid rgba(147,135,255,.45); width: 100%; }.report-aside { grid-template-columns: 1fr; }.path-diagram { justify-content: flex-start; }.graph-toolbar { grid-template-columns: 1fr; }.graph-toolbar > .button { width: 100%; }.filter-pills { grid-column: 1; }.graph-canvas .atlas-graph { height: 500px; }.search-hero { height: 54px; }.connector-stats { gap: 8px; }.repository-table { overflow-x: auto; }.repository-table > * { min-width: 650px; }.sync-stages { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.settings-panel { padding: 18px; }
 }
 
+/* Authentication */
+.auth-page { min-height: 100vh; position: relative; overflow: hidden; display: grid; place-items: center; padding: 110px 24px 90px; background: #151419; isolation: isolate; }
+.auth-page::before { content: ""; position: absolute; z-index: -2; width: 760px; height: 760px; border-radius: 50%; background: radial-gradient(circle, rgba(234, 106, 69, .18), rgba(234, 106, 69, 0) 68%); transform: translate(-42%, -35%); }
+.auth-page::after { content: ""; position: absolute; z-index: -2; right: -220px; bottom: -300px; width: 720px; height: 720px; border-radius: 50%; background: radial-gradient(circle, rgba(105, 202, 190, .12), rgba(105, 202, 190, 0) 68%); }
+.auth-page__grid { position: absolute; inset: 0; z-index: -3; opacity: .25; background-image: linear-gradient(rgba(255, 255, 255, .035) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, .035) 1px, transparent 1px); background-size: 54px 54px; mask-image: radial-gradient(circle at center, black, transparent 75%); }
+.auth-brand { position: absolute; top: 34px; left: 42px; }
+.auth-brand .brand { font-size: 21px; }
+.sign-in-card { width: min(480px, 100%); padding: 46px; border: 1px solid rgba(255, 255, 255, .09); border-radius: 24px; background: rgba(27, 25, 31, .84); box-shadow: 0 32px 100px rgba(0, 0, 0, .35); backdrop-filter: blur(24px); }
+.sign-in-card__eyebrow { color: var(--orange); font-size: 10px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+.sign-in-card h1 { margin-top: 18px; font-family: Georgia, serif; font-size: clamp(42px, 6vw, 58px); font-weight: 400; line-height: .98; letter-spacing: -.045em; }
+.sign-in-card > p { margin-top: 22px; color: var(--muted); font-size: 14px; line-height: 1.7; }
+.sign-in-button { width: 100%; min-height: 50px; margin-top: 30px; justify-content: center; font-size: 13px; }
+.sign-in-card .auth-error { margin-top: 14px; color: #ff9b87; font-size: 12px; }
+.sign-in-card > small { display: block; margin-top: 18px; color: var(--muted-2); font-size: 10px; line-height: 1.6; text-align: center; }
+.auth-footer { position: absolute; bottom: 30px; color: var(--muted-2); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.sidebar-user { min-width: 0; }
+.sidebar-user div { min-width: 0; }
+.sidebar-user b, .sidebar-user span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-user button:disabled { opacity: .45; cursor: wait; }
+
+@media (max-width: 600px) {
+  .auth-page { padding: 90px 16px 70px; }
+  .auth-brand { top: 24px; left: 24px; }
+  .sign-in-card { padding: 34px 24px; }
+  .auth-footer { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }

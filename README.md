@@ -15,6 +15,20 @@ npm run dev
 
 The development server prints the local preview URL when it starts.
 
+## Authentication
+
+Atlas uses Better Auth with GitHub as its only sign-in provider. Authentication is currently stateless, so this frontend milestone does not require database migrations.
+
+1. Create a GitHub OAuth app with this callback URL:
+
+   ```text
+   http://localhost:3000/api/auth/callback/github
+   ```
+
+2. Copy `.env.example` to `.env.local` and configure `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `BETTER_AUTH_URL`, and a high-entropy `BETTER_AUTH_SECRET` of at least 32 characters.
+
+3. Keep repository ingestion separate from login. GitHub sign-in requests profile and email access only; a GitHub App will later provide explicit repository access.
+
 ## Quality checks
 
 ```bash
@@ -27,7 +41,8 @@ npm run build
 ## Product routes
 
 - `/` — marketing experience
-- `/app` — workspace overview
+- `/sign-in` — GitHub sign-in
+- `/app` — protected workspace overview
 - `/app/impact/new` — planned-change and pull-request input
 - `/app/impact/demo` — evidence-backed impact report
 - `/app/graph` — engineering knowledge graph
