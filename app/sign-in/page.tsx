@@ -20,9 +20,25 @@ export default async function SignInPage({
   return (
     <main className="auth-page">
       <div className="auth-page__grid" aria-hidden="true" />
-      <header className="auth-brand"><AtlasMark /></header>
+      <div className="auth-page__orbit auth-page__orbit--outer" aria-hidden="true" />
+      <div className="auth-page__orbit auth-page__orbit--inner" aria-hidden="true" />
+      <div className="auth-page__landscape" aria-hidden="true" />
+      <header className="auth-brand">
+        <AtlasMark />
+        <span>Engineering intelligence</span>
+      </header>
+      <section className="auth-story" aria-label="About Atlas">
+        <span>Engineering intelligence, connected</span>
+        <h2>Understand your system<br />before you change it.</h2>
+        <p>Atlas connects code, architecture, history, and decisions so every change begins with the full picture.</p>
+        <div className="auth-story__signal" aria-label="Atlas workspace preview">
+          <div><b>31</b><small>Relationships traced</small></div>
+          <div><b>5</b><small>Repositories connected</small></div>
+          <div><b>1</b><small>Living system model</small></div>
+        </div>
+      </section>
       <SignInCard error={error} />
-      <p className="auth-footer">One identity. Explicit repository access. Evidence you can verify.</p>
+      <p className="auth-footer">Atlas · Engineering intelligence for every change</p>
     </main>
   );
 }
