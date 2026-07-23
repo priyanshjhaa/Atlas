@@ -27,16 +27,6 @@ export default async function SignInPage({
         <AtlasMark />
         <span>Engineering intelligence</span>
       </header>
-      <section className="auth-story" aria-label="About Atlas">
-        <span>Engineering intelligence, connected</span>
-        <h2>Understand your system<br />before you change it.</h2>
-        <p>Atlas connects code, architecture, history, and decisions so every change begins with the full picture.</p>
-        <div className="auth-story__signal" aria-label="Atlas workspace preview">
-          <div><b>31</b><small>Relationships traced</small></div>
-          <div><b>5</b><small>Repositories connected</small></div>
-          <div><b>1</b><small>Living system model</small></div>
-        </div>
-      </section>
       <SignInCard error={error} />
       <p className="auth-footer">Atlas · Engineering intelligence for every change</p>
     </main>
