@@ -1,2 +1,2 @@
-import { AtlasApp } from "../../../components/atlas-app";
-export default function Page() { return <AtlasApp page="sources" />; }
+import { SourcesPage } from "@/components/features/workspace";
+export default function Page() { return <SourcesPage />; }

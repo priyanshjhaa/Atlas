@@ -1,2 +1,7 @@
-import { AtlasApp } from "../../components/atlas-app";
-export default function Page() { return <AtlasApp page="dashboard" />; }
+import { DashboardPage } from "@/components/features/dashboard";
+import { requireAtlasSession } from "@/lib/auth-session";
+
+export default async function Page() {
+  const session = await requireAtlasSession();
+  return <DashboardPage userName={session.user.name} />;
+}
