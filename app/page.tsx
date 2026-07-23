@@ -5,13 +5,13 @@ import {
   CircleDot,
   Code2,
   GitPullRequest,
-  Menu,
   Network,
   Search,
   Sparkles,
 } from "lucide-react";
 import { AtlasMark, ConfidenceBadge } from "../components/brand";
 import { AtlasGraph } from "../components/atlas-graph";
+import { MarketingNav } from "../components/marketing/marketing-nav";
 
 export const metadata = {
   title: "Atlas — Engineering intelligence for every change",
@@ -21,18 +21,7 @@ export const metadata = {
 export default function Home() {
   return (
     <main className="marketing">
-      <nav className="floating-nav" aria-label="Primary navigation">
-        <AtlasMark />
-        <div className="nav-links">
-          <a href="#product">Product</a>
-          <a href="#intelligence">Intelligence</a>
-          <a href="#evidence">Evidence</a>
-        </div>
-        <Link href="/app" className="button button--small button--ghost">
-          Open workspace <ArrowRight size={15} />
-        </Link>
-        <button className="menu-button" aria-label="Open navigation"><Menu size={19} /></button>
-      </nav>
+      <MarketingNav />
 
       <section className="hero">
         <div className="hero-grid" aria-hidden="true" />

@@ -31,6 +31,8 @@ function initials(name: string) {
 export function AppShell({ user, children }: { user: AtlasSession["user"]; children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
   async function signOut() {
@@ -40,18 +42,21 @@ export function AppShell({ user, children }: { user: AtlasSession["user"]; child
   }
 
   return (
-    <div className="app-frame">
+    <div className={`app-frame ${collapsed ? "sidebar-collapsed" : ""}`}>
       <button className="mobile-nav-toggle" onClick={() => setMobileOpen(!mobileOpen)} aria-label="Toggle navigation"><Menu size={18} /></button>
       <aside className={`app-sidebar ${mobileOpen ? "is-open" : ""}`}>
-        <div className="sidebar-top"><AtlasMark /><button aria-label="Collapse sidebar"><PanelLeftClose size={17} /></button></div>
-        <button className="workspace-switcher"><span>{workspace.initials}</span><div><b>{workspace.name}</b><small>12 repositories</small></div><ChevronDown size={14} /></button>
+        <div className="sidebar-top"><AtlasMark compact={collapsed} /><button onClick={() => setCollapsed((current) => !current)} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-pressed={collapsed}><PanelLeftClose size={17} /></button></div>
+        <div className="workspace-control">
+          <button className="workspace-switcher" onClick={() => setWorkspaceOpen((current) => !current)} aria-expanded={workspaceOpen}><span>{workspace.initials}</span><div><b>{workspace.name}</b><small>12 repositories</small></div><ChevronDown size={14} /></button>
+          {workspaceOpen && <div className="workspace-menu"><b>Current workspace</b><span>{workspace.name}</span><Link href="/app/settings" onClick={() => setWorkspaceOpen(false)}>Workspace settings</Link></div>}
+        </div>
         <nav aria-label="Workspace">{navItems.map((item) => { const Icon = item.icon; const active = item.href === "/app" ? pathname === "/app" : pathname.startsWith(item.href.replace("/new", "")); return <Link className={active ? "active" : ""} href={item.href} key={item.href} onClick={() => setMobileOpen(false)}><Icon size={17} /><span>{item.label}</span>{item.label === "Impact analysis" && <i>NEW</i>}</Link>; })}</nav>
         <nav className="sidebar-utility" aria-label="Workspace utilities">{utilityItems.map((item) => { const Icon = item.icon; return <Link className={pathname.startsWith(item.href) ? "active" : ""} href={item.href} key={item.href} onClick={() => setMobileOpen(false)}><Icon size={17} /><span>{item.label}</span></Link>; })}</nav>
         <div className="index-card"><div><span>Index coverage</span><b>{workspace.coverage}%</b></div><div className="mini-progress"><i style={{ width: `${workspace.coverage}%` }} /></div><p><StatusDot /> Updated {workspace.indexedAt}</p></div>
         <div className="sidebar-user"><i>{initials(user.name)}</i><div><b>{user.name}</b><span>{user.email}</span></div><button onClick={signOut} disabled={signingOut} aria-label="Sign out"><LogOut size={15} /></button></div>
       </aside>
       {mobileOpen && <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
-      <main className="app-main"><div className="app-topbar"><div className="global-search"><Search size={15} /><span>Search {workspace.name}…</span><kbd>⌘ K</kbd></div><div><button aria-label="Notifications"><Bell size={17} /><i /></button><span className="freshness"><StatusDot /> Graph current</span></div></div><div className="page-content">{children}</div></main>
+      <main className="app-main"><div className="app-topbar"><Link href="/app/search" className="global-search"><Search size={15} /><span>Search {workspace.name}…</span><kbd>⌘ K</kbd></Link><div><Link href="/app/activity" className="topbar-icon" aria-label="Notifications"><Bell size={17} /><i /></Link><span className="freshness"><StatusDot /> Graph current</span></div></div><div className="page-content">{children}</div></main>
     </div>
   );
 }
