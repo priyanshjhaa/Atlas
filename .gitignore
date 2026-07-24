@@ -2,9 +2,10 @@
 
 # Local implementation roadmap
 ATLAS_PLAN.md
+BACKEND_FOUNDATION_PLAN.md
 
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -14,7 +15,10 @@ ATLAS_PLAN.md
 !.yarn/versions
 
 # testing
-/coverage
+coverage/
+
+# backend build output
+backend/dist/
 
 # next.js
 /.next/
