@@ -28,6 +28,9 @@ export const auth = betterAuth({
   appName: "Atlas",
   baseURL: authBaseUrl,
   secret: process.env.BETTER_AUTH_SECRET,
+  advanced: {
+    cookiePrefix: "atlas",
+  },
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: authSchema,

@@ -3,7 +3,11 @@ import { redirect } from "next/navigation";
 import { auth, type AtlasSession } from "./auth";
 
 export async function getAtlasSession(): Promise<AtlasSession | null> {
-  return auth.api.getSession({ headers: await headers() });
+  try {
+    return await auth.api.getSession({ headers: await headers() });
+  } catch {
+    return null;
+  }
 }
 
 export async function requireAtlasSession(): Promise<AtlasSession> {
