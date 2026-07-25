@@ -2,6 +2,7 @@ import { Module, RequestMethod } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { LoggerModule } from "nestjs-pino";
 import { validateEnvironment } from "./config/environment";
+import { DatabaseModule } from "./database/database.module";
 import { HealthController } from "./health/health.controller";
 import { HealthService } from "./health/health.service";
 
@@ -12,6 +13,7 @@ import { HealthService } from "./health/health.service";
       isGlobal: true,
       validate: validateEnvironment,
     }),
+    DatabaseModule,
     LoggerModule.forRoot({
       forRoutes: [{ path: "{*splat}", method: RequestMethod.ALL }],
       pinoHttp: {

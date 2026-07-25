@@ -15,6 +15,8 @@ cd backend
 cp .env.example .env
 npm install
 docker compose up -d
+npm run db:migrate
+npm run db:seed
 npm run dev
 ```
 
@@ -34,5 +36,15 @@ npm test
 npm run build
 ```
 
-Readiness currently validates application configuration only. PostgreSQL and
-Redis readiness checks will be added with the database foundation milestone.
+`/v1/ready` validates both application configuration and PostgreSQL
+connectivity. Redis connectivity will be included when background queues are
+introduced.
+
+## Database commands
+
+```bash
+npm run db:generate # generate a migration after changing schema.ts
+npm run db:migrate  # apply pending migrations
+npm run db:seed     # idempotently seed the local Northstar workspace
+npm run db:studio   # inspect local data with Drizzle Studio
+```

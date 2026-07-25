@@ -1,4 +1,5 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, ServiceUnavailableException } from "@nestjs/common";
+import { DatabaseService } from "../database/database.service";
 
 export interface ServiceStatus {
   status: "ok" | "ready";
@@ -6,11 +7,14 @@ export interface ServiceStatus {
   timestamp: string;
   checks?: {
     configuration: "ok";
+    database: "ok";
   };
 }
 
 @Injectable()
 export class HealthService {
+  constructor(private readonly database: DatabaseService) {}
+
   health(): ServiceStatus {
     return {
       status: "ok",
@@ -19,13 +23,27 @@ export class HealthService {
     };
   }
 
-  readiness(): ServiceStatus {
+  async readiness(): Promise<ServiceStatus> {
+    try {
+      await this.database.ping();
+    } catch {
+      throw new ServiceUnavailableException({
+        status: "not_ready",
+        service: "atlas-api",
+        checks: {
+          configuration: "ok",
+          database: "unavailable",
+        },
+      });
+    }
+
     return {
       status: "ready",
       service: "atlas-api",
       timestamp: new Date().toISOString(),
       checks: {
         configuration: "ok",
+        database: "ok",
       },
     };
   }
