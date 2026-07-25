@@ -7,6 +7,11 @@ const environmentSchema = z.object({
   FRONTEND_ORIGIN: z.url().default("http://localhost:3000"),
   DATABASE_URL: z.url().default("postgresql://atlas:atlas@localhost:5432/atlas"),
   REDIS_URL: z.url().default("redis://localhost:6379"),
+  AUTH_JWKS_URL: z
+    .url()
+    .default("http://localhost:3000/api/auth/jwks"),
+  AUTH_ISSUER: z.url().default("http://localhost:3000"),
+  AUTH_AUDIENCE: z.url().default("http://localhost:4000"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 });
 

@@ -12,14 +12,16 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . --ignore-pattern .next"
+    "lint": "eslint . --ignore-pattern .next --ignore-pattern backend"
   },
   "dependencies": {
     "@xyflow/react": "^12.11.2",
     "better-auth": "^1.6.23",
+    "drizzle-orm": "^0.45.2",
     "lucide-react": "^1.24.0",
     "motion": "^12.42.2",
-    "next": "16.2.6",
+    "next": "^16.2.11",
+    "pg": "^8.22.0",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },
@@ -29,6 +31,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "22.19.19",
+    "@types/pg": "^8.20.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "eslint": "9.39.4",

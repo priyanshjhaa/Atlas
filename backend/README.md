@@ -25,6 +25,7 @@ The API listens on `http://localhost:4000` by default.
 ```text
 GET /v1/health
 GET /v1/ready
+GET /v1/me
 ```
 
 ## Quality commands
@@ -48,3 +49,29 @@ npm run db:migrate  # apply pending migrations
 npm run db:seed     # idempotently seed the local Northstar workspace
 npm run db:studio   # inspect local data with Drizzle Studio
 ```
+
+## Authentication boundary
+
+The Next.js application owns GitHub sign-in and Better Auth sessions. It
+publishes signing keys at `GET /api/auth/jwks` and issues short-lived JWTs for
+the independently deployed NestJS API.
+
+Protected API requests use:
+
+```text
+Authorization: Bearer <better-auth-jwt>
+```
+
+NestJS verifies the JWT issuer, audience, signature, and expiry, then validates
+the referenced session against PostgreSQL. Deleting or revoking the Better Auth
+session therefore invalidates API access immediately, even if the JWT has time
+remaining.
+
+Workspace-protected endpoints additionally require:
+
+```text
+X-Atlas-Workspace-Id: <workspace-uuid>
+```
+
+Controllers declare accepted roles with `@WorkspaceRoles(...)`. Public routes
+must be explicitly marked with `@Public()`.
