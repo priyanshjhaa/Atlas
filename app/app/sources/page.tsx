@@ -1,2 +1,12 @@
 import { SourcesPage } from "@/components/features/workspace";
-export default function Page() { return <SourcesPage />; }
+import { getAtlasWorkspaceData } from "@/lib/workspace-api";
+
+export default async function Page() {
+  const { activeWorkspace, repositories } = await getAtlasWorkspaceData();
+  return (
+    <SourcesPage
+      repositories={repositories}
+      workspace={activeWorkspace}
+    />
+  );
+}

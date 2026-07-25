@@ -26,6 +26,14 @@ The API listens on `http://localhost:4000` by default.
 GET /v1/health
 GET /v1/ready
 GET /v1/me
+POST /v1/workspaces
+GET /v1/workspaces/:workspaceId
+PATCH /v1/workspaces/:workspaceId
+GET /v1/workspaces/:workspaceId/members
+POST /v1/workspaces/:workspaceId/members
+PATCH /v1/workspaces/:workspaceId/members/:memberId
+DELETE /v1/workspaces/:workspaceId/members/:memberId
+GET /v1/workspaces/:workspaceId/repositories
 ```
 
 ## Quality commands

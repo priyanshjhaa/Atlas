@@ -6,6 +6,7 @@ import { AuthModule } from "./auth/auth.module";
 import { DatabaseModule } from "./database/database.module";
 import { HealthController } from "./health/health.controller";
 import { HealthService } from "./health/health.service";
+import { WorkspacesModule } from "./workspaces/workspaces.module";
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { HealthService } from "./health/health.service";
     }),
     DatabaseModule,
     AuthModule,
+    WorkspacesModule,
     LoggerModule.forRoot({
       forRoutes: [{ path: "{*splat}", method: RequestMethod.ALL }],
       pinoHttp: {

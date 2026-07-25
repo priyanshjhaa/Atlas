@@ -4,9 +4,18 @@ import { useMemo, useState } from "react";
 import { Bell, Check, Database, Filter, GitBranch, Plus, RefreshCw, Search, Settings, ShieldCheck, Users, X } from "lucide-react";
 import { ConfidenceBadge } from "@/components/brand";
 import { PageHeader, StatusDot } from "@/components/app/shared";
-import { activity, repositories } from "@/lib/mock-data";
+import type { AtlasRepository, AtlasWorkspace } from "@/lib/api-types";
+import { activity } from "@/lib/mock-data";
 
-export function SourcesPage() {
+function formatLastSync(value: string | null) {
+  if (!value) return "Not synced";
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+export function SourcesPage({ repositories, workspace }: { repositories: AtlasRepository[]; workspace: AtlasWorkspace }) {
   const [githubConnected, setGithubConnected] = useState(true);
   const [notionConnected, setNotionConnected] = useState(true);
   const [query, setQuery] = useState("");
@@ -15,7 +24,7 @@ export function SourcesPage() {
 
   const visibleRepositories = useMemo(
     () => repositories.filter((repo) => repo.name.toLowerCase().includes(query.toLowerCase())),
-    [query],
+    [query, repositories],
   );
 
   function connect(source: "github" | "notion") {
@@ -34,8 +43,8 @@ export function SourcesPage() {
         <article className="connector-card">
           <div className="connector-top"><i><GitBranch size={22} /></i><ConfidenceBadge type="observed" /></div>
           <h2>GitHub</h2>
-          <p>Code, pull requests, commits, authors, and reviews from Northstar Labs.</p>
-          <div className="connector-stats"><div><b>12</b><span>repositories</span></div><div><b>1.4k</b><span>pull requests</span></div><div><b>4m</b><span>last sync</span></div></div>
+          <p>Code, pull requests, commits, authors, and reviews from {workspace.name}.</p>
+          <div className="connector-stats"><div><b>{repositories.length}</b><span>repositories</span></div><div><b>—</b><span>pull requests</span></div><div><b>—</b><span>last sync</span></div></div>
           <div className="connector-footer"><label><input type="checkbox" checked={githubConnected} onChange={(event) => setGithubConnected(event.target.checked)} /><span /></label><b>{githubConnected ? "Connected" : "Paused"}</b><button onClick={() => setDialog("github")}>Manage</button></div>
         </article>
         <article className="connector-card">
@@ -56,8 +65,8 @@ export function SourcesPage() {
           <div><span>GitHub repositories</span><h2>Index coverage</h2></div>
           <label className="search-input search-input--small"><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter repositories" /></label>
         </div>
-        <div className="table-head"><span>Repository</span><span>Language</span><span>Files</span><span>Status</span><span>Updated</span></div>
-        {visibleRepositories.map((repo) => <div className="table-row" key={repo.name}><span><GitBranch size={15} /><b>{repo.name}</b></span><span>{repo.language}</span><span>{repo.files}</span><span><StatusDot state={repo.status === "Syncing" ? "running" : "ready"} /> {repo.status}</span><span>{repo.updated}</span></div>)}
+        <div className="table-head"><span>Repository</span><span>Branch</span><span>Visibility</span><span>Status</span><span>Last synced</span></div>
+        {visibleRepositories.map((repo) => <div className="table-row" key={repo.id}><span><GitBranch size={15} /><b>{repo.owner}/{repo.name}</b></span><span>{repo.defaultBranch ?? "—"}</span><span>{repo.isPrivate ? "Private" : "Public"}</span><span><StatusDot state={repo.isActive ? "ready" : "running"} /> {repo.isActive ? "Active" : "Paused"}</span><span>{formatLastSync(repo.lastSyncedAt)}</span></div>)}
         {visibleRepositories.length === 0 && <div className="empty-state"><Search size={20} /><h2>No repositories found</h2><p>Try another repository name.</p></div>}
       </section>
 

@@ -17,10 +17,12 @@ export interface WorkspaceAccess {
   name: string;
   slug: string;
   role: WorkspaceRole;
+  repositoryCount: number;
 }
 
 export interface AtlasRequest {
   headers: Record<string, string | string[] | undefined>;
+  params?: Record<string, string | undefined>;
   auth?: AuthenticatedIdentity;
   workspace?: WorkspaceAccess;
 }

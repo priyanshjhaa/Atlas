@@ -1,9 +1,10 @@
 import { Injectable } from "@nestjs/common";
-import { and, eq, gt } from "drizzle-orm";
+import { and, count, eq, gt } from "drizzle-orm";
 import { DatabaseService } from "../database/database.service";
 import {
   sessions,
   users,
+  repositories,
   workspaceMembers,
   workspaces,
 } from "../database/schema";
@@ -60,10 +61,18 @@ export class AuthRepository {
         name: workspaces.name,
         slug: workspaces.slug,
         role: workspaceMembers.role,
+        repositoryCount: count(repositories.id),
       })
       .from(workspaceMembers)
       .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
-      .where(eq(workspaceMembers.userId, userId));
+      .leftJoin(repositories, eq(repositories.workspaceId, workspaces.id))
+      .where(eq(workspaceMembers.userId, userId))
+      .groupBy(
+        workspaces.id,
+        workspaces.name,
+        workspaces.slug,
+        workspaceMembers.role,
+      );
   }
 
   async findWorkspaceAccess(
@@ -76,14 +85,22 @@ export class AuthRepository {
         name: workspaces.name,
         slug: workspaces.slug,
         role: workspaceMembers.role,
+        repositoryCount: count(repositories.id),
       })
       .from(workspaceMembers)
       .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
+      .leftJoin(repositories, eq(repositories.workspaceId, workspaces.id))
       .where(
         and(
           eq(workspaceMembers.userId, userId),
           eq(workspaceMembers.workspaceId, workspaceId),
         ),
+      )
+      .groupBy(
+        workspaces.id,
+        workspaces.name,
+        workspaces.slug,
+        workspaceMembers.role,
       )
       .limit(1);
 

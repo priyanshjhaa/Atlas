@@ -4,6 +4,7 @@ import type {
   AtlasRequest,
   AuthenticatedIdentity,
   WorkspaceRole,
+  WorkspaceAccess,
 } from "./auth.types";
 
 export const IS_PUBLIC_KEY = "atlas:is-public";
@@ -23,5 +24,17 @@ export const CurrentIdentity = createParamDecorator(
     }
 
     return request.auth;
+  },
+);
+
+export const CurrentWorkspace = createParamDecorator(
+  (_data: unknown, context: ExecutionContext): WorkspaceAccess => {
+    const request = context.switchToHttp().getRequest<AtlasRequest>();
+
+    if (!request.workspace) {
+      throw new Error("CurrentWorkspace used without a workspace role guard.");
+    }
+
+    return request.workspace;
   },
 );

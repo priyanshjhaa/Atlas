@@ -26,10 +26,20 @@ export class WorkspaceRoleGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<AtlasRequest>();
     const header = request.headers["x-atlas-workspace-id"];
-    const untrustedWorkspaceId = Array.isArray(header) ? header[0] : header;
+    const headerWorkspaceId = Array.isArray(header) ? header[0] : header;
+    const parameterWorkspaceId = request.params?.workspaceId;
+    const untrustedWorkspaceId = parameterWorkspaceId ?? headerWorkspaceId;
 
     if (!request.auth || !untrustedWorkspaceId) {
       throw new ForbiddenException("A workspace context is required.");
+    }
+
+    if (
+      parameterWorkspaceId &&
+      headerWorkspaceId &&
+      parameterWorkspaceId !== headerWorkspaceId
+    ) {
+      throw new ForbiddenException("Workspace contexts do not match.");
     }
 
     let workspaceId: string;
