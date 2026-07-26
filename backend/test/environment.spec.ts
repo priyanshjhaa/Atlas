@@ -33,4 +33,12 @@ describe("validateEnvironment", () => {
 
     expect(environment.GITHUB_APP_ID).toBe("12345");
   });
+
+  it("requires an API key only for remote embeddings", () => {
+    expect(() =>
+      validateEnvironment({ EMBEDDINGS_PROVIDER: "openai" }),
+    ).toThrow("OPENAI_API_KEY is required");
+    expect(validateEnvironment({ EMBEDDINGS_PROVIDER: "local" }))
+      .toMatchObject({ EMBEDDINGS_PROVIDER: "local" });
+  });
 });

@@ -285,6 +285,7 @@ export class SyncJobsRepository {
     repositoryId: string,
     revision: string,
     outcome: "updated" | "no_change",
+    details: Record<string, unknown> = {},
   ): Promise<void> {
     await this.database.client.transaction(async (transaction) => {
       const now = new Date();
@@ -302,7 +303,7 @@ export class SyncJobsRepository {
           status: "completed",
           progress: 100,
           stage: outcome,
-          result: { outcome, revision },
+          result: { outcome, revision, ...details },
           completedAt: now,
           updatedAt: now,
         })
@@ -314,7 +315,7 @@ export class SyncJobsRepository {
           action: "repository.sync.completed",
           targetType: "sync_job",
           targetId: syncJobId,
-          metadata: { repositoryId, outcome, revision },
+          metadata: { repositoryId, outcome, revision, ...details },
         });
       }
     });

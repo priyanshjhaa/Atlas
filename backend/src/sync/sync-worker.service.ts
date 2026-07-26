@@ -4,6 +4,11 @@ import { UnrecoverableError, Worker } from "bullmq";
 import type { Job } from "bullmq";
 import type { Environment } from "../config/environment";
 import { GitHubAppService } from "../connectors/github-app.service";
+import {
+  IngestionCancelledError,
+  IngestionService,
+} from "../intelligence/ingestion.service";
+import type { IngestionSummary } from "../intelligence/intelligence.types";
 import { redisConnectionFromUrl } from "./redis-connection";
 import { SyncJobsRepository } from "./sync-jobs.repository";
 import {
@@ -14,6 +19,7 @@ import {
 export interface SyncResult {
   outcome: "updated" | "no_change" | "cancelled";
   revision?: string;
+  summary?: IngestionSummary;
 }
 
 @Injectable()
@@ -25,6 +31,7 @@ export class SyncWorkerService implements OnModuleDestroy {
     private readonly config: ConfigService<Environment, true>,
     private readonly jobs: SyncJobsRepository,
     private readonly github: GitHubAppService,
+    private readonly ingestion: IngestionService,
   ) {}
 
   start(): void {
@@ -102,20 +109,31 @@ export class SyncWorkerService implements OnModuleDestroy {
         return { outcome: "no_change", revision };
       }
 
-      await this.progress(job, 70, "preparing_repository_snapshot");
-      if (await this.cancelled(job.data.syncJobId)) {
-        return { outcome: "cancelled" };
-      }
-      await this.progress(job, 90, "publishing_source_revision");
+      const summary = await this.ingestion.ingest({
+        workspaceId: context.workspaceId,
+        repositoryId: context.repositoryId,
+        repositoryName: context.name,
+        owner: context.owner,
+        installationId: context.installationId,
+        revision,
+        progress: (percent, stage) => this.progress(job, percent, stage),
+        cancellationRequested: () =>
+          this.jobs.cancellationRequested(job.data.syncJobId),
+      });
       await this.jobs.complete(
         job.data.syncJobId,
         context.repositoryId,
         revision,
         "updated",
+        { ...summary },
       );
       await job.updateProgress(100);
-      return { outcome: "updated", revision };
+      return { outcome: "updated", revision, summary };
     } catch (error) {
+      if (error instanceof IngestionCancelledError) {
+        await this.jobs.markCancelled(job.data.syncJobId);
+        return { outcome: "cancelled" };
+      }
       const attempts = job.opts.attempts ?? 1;
       const retrying =
         !(error instanceof UnrecoverableError) && attempt < attempts;

@@ -5,10 +5,12 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  real,
   text,
   timestamp,
   uniqueIndex,
   uuid,
+  vector,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -222,6 +224,181 @@ export const repositories = pgTable(
     ),
     index("repositories_workspace_id_idx").on(table.workspaceId),
     index("repositories_connector_id_idx").on(table.connectorId),
+  ],
+);
+
+export const codeFiles = pgTable(
+  "code_files",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    repositoryId: uuid("repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    path: text("path").notNull(),
+    language: text("language").notNull(),
+    checksum: text("checksum").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    sourceRevision: text("source_revision").notNull(),
+    parsedAt: timestamp("parsed_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("code_files_repository_path_unique").on(
+      table.repositoryId,
+      table.path,
+    ),
+    index("code_files_workspace_id_idx").on(table.workspaceId),
+    index("code_files_repository_id_idx").on(table.repositoryId),
+  ],
+);
+
+export const codeSymbols = pgTable(
+  "code_symbols",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    repositoryId: uuid("repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    fileId: uuid("file_id")
+      .notNull()
+      .references(() => codeFiles.id, { onDelete: "cascade" }),
+    stableKey: text("stable_key").notNull(),
+    name: text("name").notNull(),
+    kind: text("kind").notNull(),
+    lineStart: integer("line_start").notNull(),
+    lineEnd: integer("line_end").notNull(),
+    exported: boolean("exported").default(false).notNull(),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("code_symbols_repository_stable_key_unique").on(
+      table.repositoryId,
+      table.stableKey,
+    ),
+    index("code_symbols_workspace_id_idx").on(table.workspaceId),
+    index("code_symbols_repository_id_idx").on(table.repositoryId),
+    index("code_symbols_file_id_idx").on(table.fileId),
+  ],
+);
+
+export const codeChunks = pgTable(
+  "code_chunks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    repositoryId: uuid("repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    fileId: uuid("file_id")
+      .notNull()
+      .references(() => codeFiles.id, { onDelete: "cascade" }),
+    chunkIndex: integer("chunk_index").notNull(),
+    content: text("content").notNull(),
+    summary: text("summary"),
+    language: text("language").notNull(),
+    tokenCount: integer("token_count").notNull(),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    embedding: vector("embedding", { dimensions: 1536 }),
+  },
+  (table) => [
+    uniqueIndex("code_chunks_file_chunk_unique").on(
+      table.fileId,
+      table.chunkIndex,
+    ),
+    index("code_chunks_workspace_id_idx").on(table.workspaceId),
+    index("code_chunks_repository_id_idx").on(table.repositoryId),
+    index("code_chunks_file_id_idx").on(table.fileId),
+    index("code_chunks_embedding_hnsw_idx").using(
+      "hnsw",
+      table.embedding.op("vector_cosine_ops"),
+    ),
+  ],
+);
+
+export const codeRelationships = pgTable(
+  "code_relationships",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    repositoryId: uuid("repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    sourceFileId: uuid("source_file_id")
+      .notNull()
+      .references(() => codeFiles.id, { onDelete: "cascade" }),
+    targetFileId: uuid("target_file_id")
+      .notNull()
+      .references(() => codeFiles.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    stableKey: text("stable_key").notNull(),
+    provenance: text("provenance").notNull(),
+    confidence: real("confidence").notNull(),
+    sourceRevision: text("source_revision").notNull(),
+    evidence: jsonb("evidence")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("code_relationships_repository_stable_key_unique").on(
+      table.repositoryId,
+      table.stableKey,
+    ),
+    index("code_relationships_workspace_id_idx").on(table.workspaceId),
+    index("code_relationships_repository_id_idx").on(table.repositoryId),
+    index("code_relationships_source_file_id_idx").on(table.sourceFileId),
+    index("code_relationships_target_file_id_idx").on(table.targetFileId),
+  ],
+);
+
+export const architectureSnapshots = pgTable(
+  "architecture_snapshots",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    repositoryId: uuid("repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    sourceRevision: text("source_revision").notNull(),
+    summary: text("summary").notNull(),
+    moduleMap: jsonb("module_map")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    diagram: text("diagram").notNull(),
+    generatedAt: timestamp("generated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("architecture_snapshots_repository_revision_unique").on(
+      table.repositoryId,
+      table.sourceRevision,
+    ),
+    index("architecture_snapshots_workspace_id_idx").on(table.workspaceId),
+    index("architecture_snapshots_repository_id_idx").on(table.repositoryId),
   ],
 );
 

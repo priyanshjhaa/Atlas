@@ -63,6 +63,12 @@ export interface AtlasSyncJob {
   result: {
     outcome?: "updated" | "no_change";
     revision?: string;
+    filesIndexed?: number;
+    chunksCreated?: number;
+    symbolsExtracted?: number;
+    relationshipsExtracted?: number;
+    languages?: string[];
+    embeddingProvider?: "local" | "openai";
   } | null;
   errorCode: string | null;
   errorMessage: string | null;

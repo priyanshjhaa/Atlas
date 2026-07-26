@@ -68,4 +68,6 @@ npm run build
 - `/app/activity` — live repository synchronization jobs and progress
 - `/app/settings` — workspace settings
 
-Atlas is a new product. CodeMap remains independent; selected repository-intelligence services will be incorporated later as a one-time code fork.
+Atlas is a new product. CodeMap remains independent; selected
+repository-intelligence services have been incorporated as a documented,
+one-time backend code fork with no runtime dependency on CodeMap.

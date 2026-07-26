@@ -1,6 +1,9 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { importPKCS8, SignJWT } from "jose";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { extract } from "tar";
 import type { Environment } from "../config/environment";
 
 export interface GitHubInstallation {
@@ -64,6 +67,63 @@ export class GitHubAppService {
       token,
     );
     return commit.sha;
+  }
+
+  async downloadRepositoryArchive(input: {
+    installationId: string;
+    owner: string;
+    repository: string;
+    revision: string;
+    destinationPath: string;
+    signal?: AbortSignal;
+  }): Promise<{ bytesDownloaded: number }> {
+    const token = await this.createInstallationToken(input.installationId);
+    const timeout = AbortSignal.timeout(30_000);
+    const signal = input.signal
+      ? AbortSignal.any([input.signal, timeout])
+      : timeout;
+    const response = await fetch(
+      `https://api.github.com/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}/tarball/${encodeURIComponent(input.revision)}`,
+      {
+        signal,
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${token}`,
+          "X-GitHub-Api-Version": this.apiVersion,
+        },
+      },
+    );
+    if (!response.ok) {
+      throw new ServiceUnavailableException(
+        `GitHub archive request failed with status ${response.status}.`,
+      );
+    }
+
+    const maximumArchiveBytes = 100 * 1024 * 1024;
+    const announcedSize = Number(response.headers.get("content-length") ?? 0);
+    if (announcedSize > maximumArchiveBytes) {
+      throw new ServiceUnavailableException(
+        "The repository archive exceeds the 100 MB ingestion limit.",
+      );
+    }
+    const archive = Buffer.from(await response.arrayBuffer());
+    if (archive.byteLength > maximumArchiveBytes) {
+      throw new ServiceUnavailableException(
+        "The repository archive exceeds the 100 MB ingestion limit.",
+      );
+    }
+
+    await mkdir(input.destinationPath, { recursive: true });
+    const archivePath = join(input.destinationPath, "repository.tar.gz");
+    await writeFile(archivePath, archive);
+    await extract({
+      cwd: input.destinationPath,
+      file: archivePath,
+      preservePaths: false,
+      strict: true,
+      strip: 1,
+    });
+    return { bytesDownloaded: archive.byteLength };
   }
 
   private async createInstallationToken(

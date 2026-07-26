@@ -17,6 +17,9 @@ const environmentSchema = z.object({
   GITHUB_APP_WEBHOOK_SECRET: z.string().min(16).optional(),
   CONNECTOR_ENCRYPTION_KEY: z.string().min(1).optional(),
   SYNC_WORKER_CONCURRENCY: z.coerce.number().int().positive().max(20).default(2),
+  REPOSITORY_STORAGE_PATH: z.string().min(1).default("/tmp/atlas-repositories"),
+  EMBEDDINGS_PROVIDER: z.enum(["local", "openai"]).default("local"),
+  OPENAI_API_KEY: z.string().min(1).optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 }).superRefine((environment, context) => {
   const githubValues = [
@@ -31,6 +34,13 @@ const environmentSchema = z.object({
       code: "custom",
       message: "All GitHub App and connector encryption values are required together.",
       path: ["GITHUB_APP_ID"],
+    });
+  }
+  if (environment.EMBEDDINGS_PROVIDER === "openai" && !environment.OPENAI_API_KEY) {
+    context.addIssue({
+      code: "custom",
+      message: "OPENAI_API_KEY is required when EMBEDDINGS_PROVIDER is openai.",
+      path: ["OPENAI_API_KEY"],
     });
   }
 });

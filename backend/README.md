@@ -47,6 +47,8 @@ GET /v1/workspaces/:workspaceId/sync-jobs
 POST /v1/workspaces/:workspaceId/sync-jobs
 POST /v1/workspaces/:workspaceId/sync-jobs/:syncJobId/cancel
 POST /v1/workspaces/:workspaceId/sync-jobs/:syncJobId/retry
+GET /v1/workspaces/:workspaceId/repositories/:repositoryId/intelligence/architecture
+POST /v1/workspaces/:workspaceId/repositories/:repositoryId/intelligence/search
 ```
 
 ## Quality commands
@@ -144,6 +146,35 @@ API command: npm run start
 Worker command: npm run start:worker
 ```
 
-Repository parsing and index construction intentionally begin in Milestone 7;
-this worker currently establishes repository freshness and the durable job
-lifecycle they will run inside.
+## Repository intelligence
+
+The worker now runs the Atlas-owned CodeMap service fork after detecting a new
+GitHub revision:
+
+1. Download and safely extract the GitHub App archive into temporary storage.
+2. Discover supported source files within file-count and byte limits.
+3. Parse TypeScript/JavaScript symbols, imports, exports, and citation chunks.
+4. Extract observed local-import relationships with evidence and confidence.
+5. Generate deterministic local embeddings or optional OpenAI embeddings.
+6. Atomically replace the repository index and create an architecture snapshot.
+
+The exact source commit, included concepts, exclusions, and Atlas adaptations
+are recorded in `src/intelligence/CODEMAP_FORK.md`. Atlas does not depend on the
+CodeMap repository at runtime and does not automatically merge later CodeMap
+changes.
+
+Local embeddings are the default and require no external service:
+
+```env
+EMBEDDINGS_PROVIDER=local
+```
+
+To use OpenAI embeddings:
+
+```env
+EMBEDDINGS_PROVIDER=openai
+OPENAI_API_KEY=...
+```
+
+The index is always tenant-scoped. Static relationships store source revision,
+evidence, `typescript_static_import` provenance, and confidence `1.0`.

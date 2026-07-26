@@ -9,6 +9,7 @@ import { HealthController } from "./health/health.controller";
 import { HealthService } from "./health/health.service";
 import { WorkspacesModule } from "./workspaces/workspaces.module";
 import { SyncModule } from "./sync/sync.module";
+import { IntelligenceModule } from "./intelligence/intelligence.module";
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { SyncModule } from "./sync/sync.module";
     DatabaseModule,
     AuthModule,
     ConnectorsModule,
+    IntelligenceModule,
     SyncModule,
     WorkspacesModule,
     LoggerModule.forRoot({
