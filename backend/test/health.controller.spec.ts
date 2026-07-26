@@ -2,12 +2,18 @@ import { describe, expect, it } from "vitest";
 import { HealthController } from "../src/health/health.controller";
 import { HealthService } from "../src/health/health.service";
 import type { DatabaseService } from "../src/database/database.service";
+import type { SyncQueueService } from "../src/sync/sync-queue.service";
 
 describe("HealthController", () => {
   const database = {
     ping: async () => undefined,
   } as DatabaseService;
-  const controller = new HealthController(new HealthService(database));
+  const syncQueue = {
+    ping: async () => undefined,
+  } as SyncQueueService;
+  const controller = new HealthController(
+    new HealthService(database, syncQueue),
+  );
 
   it("reports liveness", () => {
     expect(controller.health()).toMatchObject({
@@ -23,6 +29,7 @@ describe("HealthController", () => {
       checks: {
         configuration: "ok",
         database: "ok",
+        redis: "ok",
       },
     });
   });

@@ -1,15 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Bell, Check, Database, Filter, GitBranch, Plus, RefreshCw, Search, Settings, ShieldCheck, Users, X } from "lucide-react";
 import { ConfidenceBadge } from "@/components/brand";
 import { PageHeader, StatusDot } from "@/components/app/shared";
 import type {
   AtlasGitHubConnector,
   AtlasRepository,
+  AtlasSyncJob,
   AtlasWorkspace,
 } from "@/lib/api-types";
-import { activity } from "@/lib/mock-data";
 
 function formatLastSync(value: string | null) {
   if (!value) return "Not synced";
@@ -113,24 +113,149 @@ export function SourcesPage({
   );
 }
 
-export function ActivityPage() {
+const syncStages = [
+  "starting",
+  "fetching_source_revision",
+  "preparing_repository_snapshot",
+  "publishing_source_revision",
+  "updated",
+];
+
+function syncStageLabel(stage: string) {
+  return stage
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function syncTime(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+export function ActivityPage({
+  initialJobs,
+  workspace,
+}: {
+  initialJobs: AtlasSyncJob[];
+  workspace: AtlasWorkspace;
+}) {
+  const [jobs, setJobs] = useState(initialJobs);
   const [syncing, setSyncing] = useState(false);
   const [filter, setFilter] = useState<"all" | "running" | "completed">("all");
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
-  const events = [...activity, { time: "Yesterday", title: "Repository disconnected", detail: "legacy-auth-proxy · data removed", state: "done" }, { time: "Yesterday", title: "GitHub permissions updated", detail: "2 repositories added by Priyansh", state: "done" }];
-  const visibleEvents = events.filter((item) => filter === "all" || (filter === "running" ? item.state === "running" : item.state !== "running"));
+  const [notice, setNotice] = useState("");
+  const canSynchronize = workspace.role !== "viewer";
+  const activeJob = jobs.find((job) =>
+    ["queued", "running"].includes(job.status),
+  );
+  const visibleJobs = jobs.filter(
+    (job) =>
+      filter === "all" ||
+      (filter === "running"
+        ? ["queued", "running"].includes(job.status)
+        : job.status === "completed"),
+  );
+  const completedJobs = jobs.filter((job) => job.status === "completed");
+  const successfulJobs = completedJobs.length;
+  const noChangeJobs = completedJobs.filter(
+    (job) => job.result?.outcome === "no_change",
+  ).length;
+  const durations = completedJobs
+    .filter((job) => job.startedAt && job.completedAt)
+    .map(
+      (job) =>
+        new Date(job.completedAt as string).getTime() -
+        new Date(job.startedAt as string).getTime(),
+    )
+    .sort((a, b) => a - b);
+  const medianDuration = durations.length
+    ? Math.round(durations[Math.floor(durations.length / 2)] / 1_000)
+    : 0;
+
+  async function refresh() {
+    const response = await fetch(
+      `/api/sync-jobs?workspaceId=${encodeURIComponent(workspace.id)}`,
+      { cache: "no-store" },
+    );
+    if (response.ok) setJobs((await response.json()) as AtlasSyncJob[]);
+  }
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      void fetch(
+        `/api/sync-jobs?workspaceId=${encodeURIComponent(workspace.id)}`,
+        { cache: "no-store" },
+      )
+        .then((response) =>
+          response.ok ? response.json() as Promise<AtlasSyncJob[]> : null,
+        )
+        .then((nextJobs) => {
+          if (nextJobs) setJobs(nextJobs);
+        });
+    }, 4_000);
+    return () => window.clearInterval(interval);
+  }, [workspace.id]);
+
+  async function syncAll() {
+    setSyncing(true);
+    setNotice("");
+    const response = await fetch("/api/sync-jobs", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": crypto.randomUUID(),
+      },
+      body: JSON.stringify({ workspaceId: workspace.id }),
+    });
+    if (response.ok) {
+      const queued = (await response.json()) as AtlasSyncJob[];
+      setNotice(
+        queued.length
+          ? `${queued.length} repository synchronization job${queued.length === 1 ? "" : "s"} queued.`
+          : "Connect at least one active repository before synchronizing.",
+      );
+      await refresh();
+    } else {
+      setNotice("Atlas could not queue synchronization jobs.");
+    }
+    setSyncing(false);
+  }
+
+  async function jobAction(jobId: string, action: "cancel" | "retry") {
+    const response = await fetch(`/api/sync-jobs/${jobId}/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceId: workspace.id }),
+    });
+    setNotice(
+      response.ok
+        ? action === "cancel"
+          ? "Cancellation requested."
+          : "Synchronization queued for retry."
+        : `Atlas could not ${action} this synchronization job.`,
+    );
+    await refresh();
+  }
 
   return (
     <>
-      <PageHeader eyebrow="Repository intelligence" title="Sync activity" detail="Watch Atlas transform engineering sources into structured, searchable context." action={<button className="button button--primary" onClick={() => setSyncing(true)} disabled={syncing}><RefreshCw className={syncing ? "spin" : ""} size={15} /> {syncing ? "Sync queued" : "Sync all"}</button>} />
-      {syncing && <p className="action-notice" aria-live="polite">A frontend sync preview has been queued. Backend workers will replace this simulated state.</p>}
+      <PageHeader eyebrow="Repository intelligence" title="Sync activity" detail="Watch Atlas synchronize repository revisions before the indexing pipeline processes them." action={<button className="button button--primary" onClick={() => void syncAll()} disabled={syncing || !canSynchronize}><RefreshCw className={syncing ? "spin" : ""} size={15} /> {syncing ? "Queueing…" : "Sync all"}</button>} />
+      {notice && <p className="action-notice" aria-live="polite">{notice}</p>}
       <div className="activity-grid">
-        <section className="panel active-sync"><div className="panel-heading"><div><span>Currently indexing</span><h2>billing-service</h2></div><span className="running-badge"><RefreshCw className="spin" size={13} /> Running</span></div><div className="sync-progress"><div><span>Resolving symbols and imports</span><b>68%</b></div><div className="progress-track"><i style={{ width: "68%" }} /></div><p>438 of 719 files · 24 seconds elapsed</p></div><div className="sync-stages">{["Download source", "Parse project", "Resolve graph", "Create embeddings", "Publish index"].map((step, index) => <div className={index < 2 ? "done" : index === 2 ? "current" : ""} key={step}><i>{index < 2 ? <Check size={12} /> : index + 1}</i><span>{step}</span></div>)}</div></section>
-        <section className="panel activity-stats"><div><span>Successful syncs</span><strong>284</strong><p>99.3% this month</p></div><div><span>Median duration</span><strong>42s</strong><p>−8s from last week</p></div><div><span>Graph changes</span><strong>241</strong><p>this week</p></div></section>
+        <section className="panel active-sync">
+          <div className="panel-heading"><div><span>{activeJob ? "Current synchronization" : "Queue status"}</span><h2>{activeJob ? `${activeJob.repositoryOwner}/${activeJob.repositoryName}` : "No active jobs"}</h2></div>{activeJob && <span className="running-badge"><RefreshCw className={activeJob.status === "running" ? "spin" : ""} size={13} /> {activeJob.cancelRequestedAt ? "Cancelling" : syncStageLabel(activeJob.status)}</span>}</div>
+          <div className="sync-progress"><div><span>{activeJob ? syncStageLabel(activeJob.stage) : "Ready for the next repository update"}</span><b>{activeJob?.progress ?? 0}%</b></div><div className="progress-track"><i style={{ width: `${activeJob?.progress ?? 0}%` }} /></div><p>{activeJob ? `Attempt ${Math.max(activeJob.attempt, 1)} · queued ${syncTime(activeJob.createdAt)}` : "Synchronization jobs will appear here as soon as they are queued."}</p></div>
+          <div className="sync-stages">{syncStages.map((step, index) => { const currentIndex = activeJob ? Math.max(syncStages.indexOf(activeJob.stage), 0) : -1; return <div className={index < currentIndex ? "done" : index === currentIndex ? "current" : ""} key={step}><i>{index < currentIndex ? <Check size={12} /> : index + 1}</i><span>{syncStageLabel(step)}</span></div>; })}</div>
+          {activeJob && canSynchronize && <div className="settings-actions"><button className="button button--ghost" onClick={() => void jobAction(activeJob.id, "cancel")} disabled={Boolean(activeJob.cancelRequestedAt)}>Cancel synchronization</button></div>}
+        </section>
+        <section className="panel activity-stats"><div><span>Successful syncs</span><strong>{successfulJobs}</strong><p>{jobs.length ? `${Math.round((successfulJobs / jobs.length) * 100)}% of recent jobs` : "No jobs yet"}</p></div><div><span>Median duration</span><strong>{medianDuration}s</strong><p>across completed jobs</p></div><div><span>No-change syncs</span><strong>{noChangeJobs}</strong><p>work safely skipped</p></div></section>
       </div>
       <section className="panel activity-log">
         <div className="panel-heading"><div><span>Workspace events</span><h2>Recent activity</h2></div><div className="activity-filters"><Filter size={14} />{(["all", "running", "completed"] as const).map((item) => <button className={filter === item ? "active" : ""} onClick={() => setFilter(item)} key={item}>{item}</button>)}</div></div>
-        <div className="timeline">{visibleEvents.map((item) => <div key={`${item.time}-${item.title}`}><StatusDot state={item.state === "running" ? "running" : "ready"} /><span>{item.time}</span><p><b>{item.title}</b><small>{item.detail}</small></p><button onClick={() => setSelectedEvent(selectedEvent === item.title ? null : item.title)}>{selectedEvent === item.title ? "Hide" : "Details"}</button>{selectedEvent === item.title && <small className="timeline-detail">Event details are available locally; backend logs will be attached during integration.</small>}</div>)}</div>
+        <div className="timeline">{visibleJobs.map((job) => <div key={job.id}><StatusDot state={job.status === "running" || job.status === "queued" ? "running" : "ready"} /><span>{syncTime(job.createdAt)}</span><p><b>{job.repositoryOwner}/{job.repositoryName}</b><small>{syncStageLabel(job.status)} · {syncStageLabel(job.stage)}</small></p><button onClick={() => setSelectedEvent(selectedEvent === job.id ? null : job.id)}>{selectedEvent === job.id ? "Hide" : "Details"}</button>{selectedEvent === job.id && <small className="timeline-detail">{job.errorMessage ?? `${job.result?.outcome === "no_change" ? "No source changes detected" : "Repository revision synchronized"}${job.result?.revision ? ` · ${job.result.revision.slice(0, 12)}` : ""}`}{job.status === "failed" && canSynchronize && <button className="button button--ghost" onClick={() => void jobAction(job.id, "retry")}>Retry</button>}</small>}</div>)}</div>
+        {visibleJobs.length === 0 && <div className="empty-state"><RefreshCw size={20} /><h2>No synchronization jobs</h2><p>Queue a sync to start tracking repository freshness.</p></div>}
       </section>
     </>
   );

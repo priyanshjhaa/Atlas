@@ -8,6 +8,7 @@ import { DatabaseModule } from "./database/database.module";
 import { HealthController } from "./health/health.controller";
 import { HealthService } from "./health/health.service";
 import { WorkspacesModule } from "./workspaces/workspaces.module";
+import { SyncModule } from "./sync/sync.module";
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { WorkspacesModule } from "./workspaces/workspaces.module";
     DatabaseModule,
     AuthModule,
     ConnectorsModule,
+    SyncModule,
     WorkspacesModule,
     LoggerModule.forRoot({
       forRoutes: [{ path: "{*splat}", method: RequestMethod.ALL }],

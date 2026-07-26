@@ -16,6 +16,7 @@ const environmentSchema = z.object({
   GITHUB_APP_PRIVATE_KEY: z.string().min(1).optional(),
   GITHUB_APP_WEBHOOK_SECRET: z.string().min(16).optional(),
   CONNECTOR_ENCRYPTION_KEY: z.string().min(1).optional(),
+  SYNC_WORKER_CONCURRENCY: z.coerce.number().int().positive().max(20).default(2),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 }).superRefine((environment, context) => {
   const githubValues = [

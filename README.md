@@ -65,7 +65,7 @@ npm run build
 - `/app/architecture` — system architecture
 - `/app/search` — engineering search
 - `/app/sources` — GitHub and Notion sources
-- `/app/activity` — indexing activity
+- `/app/activity` — live repository synchronization jobs and progress
 - `/app/settings` — workspace settings
 
 Atlas is a new product. CodeMap remains independent; selected repository-intelligence services will be incorporated later as a one-time code fork.

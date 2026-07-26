@@ -10,6 +10,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -211,6 +212,7 @@ export const repositories = pgTable(
     isPrivate: boolean("is_private").default(false).notNull(),
     isActive: boolean("is_active").default(true).notNull(),
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    lastSyncedRevision: text("last_synced_revision"),
     ...timestamps,
   },
   (table) => [
@@ -233,12 +235,18 @@ export const syncJobs = pgTable(
     repositoryId: uuid("repository_id")
       .notNull()
       .references(() => repositories.id, { onDelete: "cascade" }),
+    requestedByUserId: text("requested_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     status: syncJobStatus("status").default("queued").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
     attempt: integer("attempt").default(0).notNull(),
     progress: integer("progress").default(0).notNull(),
+    stage: text("stage").default("queued").notNull(),
+    result: jsonb("result").$type<Record<string, unknown>>(),
     errorCode: text("error_code"),
     errorMessage: text("error_message"),
+    cancelRequestedAt: timestamp("cancel_requested_at", { withTimezone: true }),
     startedAt: timestamp("started_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     ...timestamps,
@@ -251,6 +259,9 @@ export const syncJobs = pgTable(
     index("sync_jobs_workspace_id_idx").on(table.workspaceId),
     index("sync_jobs_repository_id_idx").on(table.repositoryId),
     index("sync_jobs_status_idx").on(table.status),
+    uniqueIndex("sync_jobs_repository_active_unique")
+      .on(table.workspaceId, table.repositoryId)
+      .where(sql`${table.status} in ('queued', 'running')`),
   ],
 );
 

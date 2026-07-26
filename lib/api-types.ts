@@ -44,6 +44,35 @@ export interface AtlasGitHubConnector {
   updatedAt: string;
 }
 
+export type AtlasSyncJobStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface AtlasSyncJob {
+  id: string;
+  repositoryId: string;
+  repositoryOwner: string;
+  repositoryName: string;
+  status: AtlasSyncJobStatus;
+  attempt: number;
+  progress: number;
+  stage: string;
+  result: {
+    outcome?: "updated" | "no_change";
+    revision?: string;
+  } | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  cancelRequestedAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AtlasWorkspaceData {
   me: AtlasMe;
   activeWorkspace: AtlasWorkspace;

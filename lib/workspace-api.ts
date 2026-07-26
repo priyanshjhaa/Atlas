@@ -6,6 +6,7 @@ import type {
   AtlasMe,
   AtlasGitHubConnector,
   AtlasRepository,
+  AtlasSyncJob,
   AtlasWorkspaceData,
 } from "./api-types";
 import { fetchAtlasApi } from "./backend-client";
@@ -66,4 +67,19 @@ export async function getAtlasGitHubConnectors(
     },
   );
   return readApiResponse<AtlasGitHubConnector[]>(response);
+}
+
+export async function getAtlasSyncJobs(
+  workspaceId: string,
+): Promise<AtlasSyncJob[]> {
+  const response = await fetchAtlasApi(
+    `/v1/workspaces/${workspaceId}/sync-jobs`,
+    {
+      cache: "no-store",
+      headers: {
+        "X-Atlas-Workspace-Id": workspaceId,
+      },
+    },
+  );
+  return readApiResponse<AtlasSyncJob[]>(response);
 }

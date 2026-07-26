@@ -21,6 +21,12 @@ npm run dev
 ```
 
 The API listens on `http://localhost:4000` by default.
+Run the synchronization worker in a second terminal:
+
+```bash
+cd backend
+npm run dev:worker
+```
 
 ```text
 GET /v1/health
@@ -37,6 +43,10 @@ GET /v1/workspaces/:workspaceId/repositories
 GET /v1/workspaces/:workspaceId/connectors/github
 POST /v1/workspaces/:workspaceId/connectors/github/installations
 POST /v1/webhooks/github
+GET /v1/workspaces/:workspaceId/sync-jobs
+POST /v1/workspaces/:workspaceId/sync-jobs
+POST /v1/workspaces/:workspaceId/sync-jobs/:syncJobId/cancel
+POST /v1/workspaces/:workspaceId/sync-jobs/:syncJobId/retry
 ```
 
 ## Quality commands
@@ -48,9 +58,8 @@ npm test
 npm run build
 ```
 
-`/v1/ready` validates both application configuration and PostgreSQL
-connectivity. Redis connectivity will be included when background queues are
-introduced.
+`/v1/ready` validates application configuration, PostgreSQL, and Redis
+connectivity.
 
 ## Database commands
 
@@ -111,3 +120,30 @@ openssl rand -base64 32
 GitHub installation access tokens are created only when needed and are not
 stored. Installation metadata is encrypted with AES-256-GCM, webhook signatures
 are verified against the raw request body, and delivery IDs are deduplicated.
+
+## Synchronization jobs
+
+The API process produces `atlas-repository-sync` BullMQ jobs and the separate
+worker process consumes them. PostgreSQL remains the authoritative source for
+status and progress, while Redis coordinates delivery.
+
+- A request-level idempotency key and an active-job database constraint prevent
+  duplicate work.
+- Failed jobs retry up to three times with exponential backoff.
+- Cancellation requests are persisted so a separately deployed worker can
+  observe them between processing stages.
+- The worker compares the GitHub default-branch HEAD SHA with the last
+  synchronized revision and reports `no_change` without repeating work.
+- Queue, running, completed, failed, cancelled, retry, stage, progress, and
+  diagnostic data are exposed to the Activity screen.
+
+For Railway, deploy the same backend source as two services:
+
+```text
+API command: npm run start
+Worker command: npm run start:worker
+```
+
+Repository parsing and index construction intentionally begin in Milestone 7;
+this worker currently establishes repository freshness and the durable job
+lifecycle they will run inside.

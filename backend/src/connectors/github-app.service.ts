@@ -35,11 +35,7 @@ export class GitHubAppService {
   async listInstallationRepositories(
     installationId: string,
   ): Promise<GitHubRepository[]> {
-    const tokenResponse = await this.request<{ token: string }>(
-      `/app/installations/${installationId}/access_tokens`,
-      await this.createAppJwt(),
-      { method: "POST" },
-    );
+    const token = await this.createInstallationToken(installationId);
     const repositories: GitHubRepository[] = [];
 
     for (let page = 1; ; page += 1) {
@@ -47,13 +43,38 @@ export class GitHubAppService {
         repositories: GitHubRepository[];
       }>(
         `/installation/repositories?per_page=100&page=${page}`,
-        tokenResponse.token,
+        token,
       );
       repositories.push(...response.repositories);
       if (response.repositories.length < 100) break;
     }
 
     return repositories;
+  }
+
+  async getRepositoryHead(
+    installationId: string,
+    owner: string,
+    repository: string,
+    ref: string,
+  ): Promise<string> {
+    const token = await this.createInstallationToken(installationId);
+    const commit = await this.request<{ sha: string }>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/commits/${encodeURIComponent(ref)}`,
+      token,
+    );
+    return commit.sha;
+  }
+
+  private async createInstallationToken(
+    installationId: string,
+  ): Promise<string> {
+    const response = await this.request<{ token: string }>(
+      `/app/installations/${installationId}/access_tokens`,
+      await this.createAppJwt(),
+      { method: "POST" },
+    );
+    return response.token;
   }
 
   private async createAppJwt(): Promise<string> {
