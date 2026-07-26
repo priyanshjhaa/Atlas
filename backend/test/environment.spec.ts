@@ -16,4 +16,21 @@ describe("validateEnvironment", () => {
       "Invalid backend environment",
     );
   });
+
+  it("requires the complete GitHub App configuration as one unit", () => {
+    expect(() =>
+      validateEnvironment({ GITHUB_APP_ID: "12345" }),
+    ).toThrow("All GitHub App and connector encryption values");
+  });
+
+  it("accepts a complete GitHub App configuration", () => {
+    const environment = validateEnvironment({
+      GITHUB_APP_ID: "12345",
+      GITHUB_APP_PRIVATE_KEY: "base64-private-key",
+      GITHUB_APP_WEBHOOK_SECRET: "a-long-webhook-secret",
+      CONNECTOR_ENCRYPTION_KEY: "base64-encryption-key",
+    });
+
+    expect(environment.GITHUB_APP_ID).toBe("12345");
+  });
 });

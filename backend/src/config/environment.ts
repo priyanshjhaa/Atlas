@@ -12,7 +12,26 @@ const environmentSchema = z.object({
     .default("http://localhost:3000/api/auth/jwks"),
   AUTH_ISSUER: z.url().default("http://localhost:3000"),
   AUTH_AUDIENCE: z.url().default("http://localhost:4000"),
+  GITHUB_APP_ID: z.string().min(1).optional(),
+  GITHUB_APP_PRIVATE_KEY: z.string().min(1).optional(),
+  GITHUB_APP_WEBHOOK_SECRET: z.string().min(16).optional(),
+  CONNECTOR_ENCRYPTION_KEY: z.string().min(1).optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
+}).superRefine((environment, context) => {
+  const githubValues = [
+    environment.GITHUB_APP_ID,
+    environment.GITHUB_APP_PRIVATE_KEY,
+    environment.GITHUB_APP_WEBHOOK_SECRET,
+    environment.CONNECTOR_ENCRYPTION_KEY,
+  ];
+  const configured = githubValues.filter(Boolean).length;
+  if (configured > 0 && configured < githubValues.length) {
+    context.addIssue({
+      code: "custom",
+      message: "All GitHub App and connector encryption values are required together.",
+      path: ["GITHUB_APP_ID"],
+    });
+  }
 });
 
 export type Environment = z.infer<typeof environmentSchema>;

@@ -34,6 +34,9 @@ POST /v1/workspaces/:workspaceId/members
 PATCH /v1/workspaces/:workspaceId/members/:memberId
 DELETE /v1/workspaces/:workspaceId/members/:memberId
 GET /v1/workspaces/:workspaceId/repositories
+GET /v1/workspaces/:workspaceId/connectors/github
+POST /v1/workspaces/:workspaceId/connectors/github/installations
+POST /v1/webhooks/github
 ```
 
 ## Quality commands
@@ -83,3 +86,28 @@ X-Atlas-Workspace-Id: <workspace-uuid>
 
 Controllers declare accepted roles with `@WorkspaceRoles(...)`. Public routes
 must be explicitly marked with `@Public()`.
+
+## GitHub repository connector
+
+Repository access uses a separate GitHub App; the GitHub OAuth app remains
+limited to Atlas sign-in. Configure the GitHub App with:
+
+- Setup URL: `http://localhost:3000/api/github/callback`
+- Webhook URL: a public tunnel to `http://localhost:4000/v1/webhooks/github`
+- Repository permissions: Contents (read) and Pull requests (read)
+- Events: Installation and Installation repositories
+
+Add the app ID, base64-encoded private key, webhook secret, and a base64-encoded
+32-byte connector encryption key to `backend/.env`. Add the app slug as
+`GITHUB_APP_SLUG` in the web application's `.env.local`.
+
+Generate suitable encoded values with:
+
+```bash
+base64 < github-app.private-key.pem | tr -d '\n'
+openssl rand -base64 32
+```
+
+GitHub installation access tokens are created only when needed and are not
+stored. Installation metadata is encrypted with AES-256-GCM, webhook signatures
+are verified against the raw request body, and delivery IDs are deduplicated.

@@ -4,7 +4,11 @@ import { useMemo, useState } from "react";
 import { Bell, Check, Database, Filter, GitBranch, Plus, RefreshCw, Search, Settings, ShieldCheck, Users, X } from "lucide-react";
 import { ConfidenceBadge } from "@/components/brand";
 import { PageHeader, StatusDot } from "@/components/app/shared";
-import type { AtlasRepository, AtlasWorkspace } from "@/lib/api-types";
+import type {
+  AtlasGitHubConnector,
+  AtlasRepository,
+  AtlasWorkspace,
+} from "@/lib/api-types";
 import { activity } from "@/lib/mock-data";
 
 function formatLastSync(value: string | null) {
@@ -15,8 +19,15 @@ function formatLastSync(value: string | null) {
   }).format(new Date(value));
 }
 
-export function SourcesPage({ repositories, workspace }: { repositories: AtlasRepository[]; workspace: AtlasWorkspace }) {
-  const [githubConnected, setGithubConnected] = useState(true);
+export function SourcesPage({
+  githubConnectors,
+  repositories,
+  workspace,
+}: {
+  githubConnectors: AtlasGitHubConnector[];
+  repositories: AtlasRepository[];
+  workspace: AtlasWorkspace;
+}) {
   const [notionConnected, setNotionConnected] = useState(true);
   const [query, setQuery] = useState("");
   const [dialog, setDialog] = useState<"connect" | "github" | "notion" | null>(null);
@@ -26,12 +37,21 @@ export function SourcesPage({ repositories, workspace }: { repositories: AtlasRe
     () => repositories.filter((repo) => repo.name.toLowerCase().includes(query.toLowerCase())),
     [query, repositories],
   );
+  const githubConnector = githubConnectors.find(
+    (connector) => connector.status === "active",
+  );
+  const canManageGitHub = ["owner", "admin"].includes(workspace.role);
 
   function connect(source: "github" | "notion") {
-    if (source === "github") setGithubConnected(true);
-    if (source === "notion") setNotionConnected(true);
-    setNotice(`${source === "github" ? "GitHub" : "Notion"} is ready for configuration.`);
-    setDialog(source);
+    if (source === "github") {
+      window.location.assign(
+        `/api/github/install?workspaceId=${encodeURIComponent(workspace.id)}`,
+      );
+      return;
+    }
+    setNotionConnected(true);
+    setNotice("Notion is ready for preview configuration.");
+    setDialog("notion");
   }
 
   return (
@@ -45,7 +65,7 @@ export function SourcesPage({ repositories, workspace }: { repositories: AtlasRe
           <h2>GitHub</h2>
           <p>Code, pull requests, commits, authors, and reviews from {workspace.name}.</p>
           <div className="connector-stats"><div><b>{repositories.length}</b><span>repositories</span></div><div><b>—</b><span>pull requests</span></div><div><b>—</b><span>last sync</span></div></div>
-          <div className="connector-footer"><label><input type="checkbox" checked={githubConnected} onChange={(event) => setGithubConnected(event.target.checked)} /><span /></label><b>{githubConnected ? "Connected" : "Paused"}</b><button onClick={() => setDialog("github")}>Manage</button></div>
+          <div className="connector-footer"><StatusDot state={githubConnector ? "ready" : "running"} /><b>{githubConnector ? `Connected to ${githubConnector.configuration.account ?? "GitHub"}` : "Not connected"}</b><button onClick={() => githubConnector ? setDialog("github") : connect("github")} disabled={!canManageGitHub}>{githubConnector ? "Manage" : "Connect"}</button></div>
         </article>
         <article className="connector-card">
           <div className="connector-top"><i className="notion-icon">N</i><ConfidenceBadge type="observed" /></div>
@@ -76,14 +96,14 @@ export function SourcesPage({ repositories, workspace }: { repositories: AtlasRe
             <button className="dialog-close" onClick={() => setDialog(null)} aria-label="Close"><X size={17} /></button>
             {dialog === "connect" ? (
               <>
-                <span>Connect context</span><h2>Choose a source</h2><p>Connections stay in frontend preview mode until the backend integration is added.</p>
-                <div className="dialog-actions"><button className="button button--primary" onClick={() => connect("github")}><GitBranch size={15} /> GitHub</button><button className="button button--ghost" onClick={() => connect("notion")}>N · Notion</button></div>
+                <span>Connect context</span><h2>Choose a source</h2><p>GitHub uses a dedicated App installation so you control exactly which repositories Atlas can access.</p>
+                <div className="dialog-actions"><button className="button button--primary" onClick={() => connect("github")} disabled={!canManageGitHub}><GitBranch size={15} /> {githubConnector ? "Update GitHub access" : "Connect GitHub"}</button><button className="button button--ghost" onClick={() => connect("notion")}>N · Notion preview</button></div>
               </>
             ) : (
               <>
-                <span>Source settings</span><h2>{dialog === "github" ? "GitHub" : "Notion"}</h2><p>Connection controls are ready. Repository and permission persistence will be connected to the backend later.</p>
+                <span>Source settings</span><h2>{dialog === "github" ? "GitHub" : "Notion"}</h2><p>{dialog === "github" ? `Atlas is connected to ${githubConnector?.configuration.account ?? "this GitHub installation"}. Repository access is managed on GitHub.` : "Notion remains a frontend preview and will be connected in a later phase."}</p>
                 <label className="field"><span>Sync cadence</span><select defaultValue="automatic"><option value="automatic">Automatic</option><option value="hourly">Every hour</option><option value="manual">Manual only</option></select></label>
-                <button className="button button--primary" onClick={() => { setNotice(`${dialog === "github" ? "GitHub" : "Notion"} source preferences saved locally.`); setDialog(null); }}>Save preferences</button>
+                {dialog === "github" ? <button className="button button--primary" onClick={() => connect("github")} disabled={!canManageGitHub}>Manage repositories on GitHub</button> : <button className="button button--primary" onClick={() => { setNotice("Notion source preferences saved locally."); setDialog(null); }}>Save preview preferences</button>}
               </>
             )}
           </section>

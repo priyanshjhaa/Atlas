@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import type {
   AtlasMe,
+  AtlasGitHubConnector,
   AtlasRepository,
   AtlasWorkspaceData,
 } from "./api-types";
@@ -51,3 +52,18 @@ export const getAtlasWorkspaceData = cache(
     };
   },
 );
+
+export async function getAtlasGitHubConnectors(
+  workspaceId: string,
+): Promise<AtlasGitHubConnector[]> {
+  const response = await fetchAtlasApi(
+    `/v1/workspaces/${workspaceId}/connectors/github`,
+    {
+      cache: "no-store",
+      headers: {
+        "X-Atlas-Workspace-Id": workspaceId,
+      },
+    },
+  );
+  return readApiResponse<AtlasGitHubConnector[]>(response);
+}

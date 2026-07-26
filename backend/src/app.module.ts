@@ -3,6 +3,7 @@ import { ConfigModule } from "@nestjs/config";
 import { LoggerModule } from "nestjs-pino";
 import { validateEnvironment } from "./config/environment";
 import { AuthModule } from "./auth/auth.module";
+import { ConnectorsModule } from "./connectors/connectors.module";
 import { DatabaseModule } from "./database/database.module";
 import { HealthController } from "./health/health.controller";
 import { HealthService } from "./health/health.service";
@@ -17,6 +18,7 @@ import { WorkspacesModule } from "./workspaces/workspaces.module";
     }),
     DatabaseModule,
     AuthModule,
+    ConnectorsModule,
     WorkspacesModule,
     LoggerModule.forRoot({
       forRoutes: [{ path: "{*splat}", method: RequestMethod.ALL }],

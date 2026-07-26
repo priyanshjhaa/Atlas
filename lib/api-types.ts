@@ -31,6 +31,19 @@ export interface AtlasRepository {
   lastSyncedAt: string | null;
 }
 
+export interface AtlasGitHubConnector {
+  id: string;
+  status: "pending" | "active" | "failed" | "revoked";
+  installationId: string | null;
+  configuration: {
+    account?: string;
+    accountType?: string;
+    repositorySelection?: "all" | "selected";
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AtlasWorkspaceData {
   me: AtlasMe;
   activeWorkspace: AtlasWorkspace;

@@ -187,8 +187,7 @@ export const connectors = pgTable(
   },
   (table) => [
     index("connectors_workspace_id_idx").on(table.workspaceId),
-    uniqueIndex("connectors_workspace_provider_installation_unique").on(
-      table.workspaceId,
+    uniqueIndex("connectors_provider_installation_unique").on(
       table.provider,
       table.providerInstallationId,
     ),
@@ -282,6 +281,14 @@ export const auditEvents = pgTable(
     index("audit_events_created_at_idx").on(table.createdAt),
   ],
 );
+
+export const githubWebhookDeliveries = pgTable("github_webhook_deliveries", {
+  id: text("id").primaryKey(),
+  event: text("event").notNull(),
+  processedAt: timestamp("processed_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
 
 export type User = typeof users.$inferSelect;
 export type Workspace = typeof workspaces.$inferSelect;
