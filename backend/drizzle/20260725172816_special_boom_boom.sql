@@ -1,0 +1,2 @@
+DROP INDEX "connectors_workspace_provider_installation_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "connectors_provider_installation_unique" ON "connectors" USING btree ("provider","provider_installation_id");

@@ -1,0 +1,56 @@
+import { Module, RequestMethod } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
+import { LoggerModule } from "nestjs-pino";
+import { validateEnvironment } from "./config/environment";
+import { AuthModule } from "./auth/auth.module";
+import { ConnectorsModule } from "./connectors/connectors.module";
+import { DatabaseModule } from "./database/database.module";
+import { HealthController } from "./health/health.controller";
+import { HealthService } from "./health/health.service";
+import { WorkspacesModule } from "./workspaces/workspaces.module";
+import { SyncModule } from "./sync/sync.module";
+import { IntelligenceModule } from "./intelligence/intelligence.module";
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      cache: true,
+      isGlobal: true,
+      validate: validateEnvironment,
+    }),
+    DatabaseModule,
+    AuthModule,
+    ConnectorsModule,
+    IntelligenceModule,
+    SyncModule,
+    WorkspacesModule,
+    LoggerModule.forRoot({
+      forRoutes: [{ path: "{*splat}", method: RequestMethod.ALL }],
+      pinoHttp: {
+        level: process.env.LOG_LEVEL ?? "info",
+        redact: {
+          paths: [
+            "req.headers.authorization",
+            "req.headers.cookie",
+            "res.headers.set-cookie",
+          ],
+          censor: "[REDACTED]",
+        },
+        transport:
+          process.env.NODE_ENV === "production"
+            ? undefined
+            : {
+                target: "pino-pretty",
+                options: {
+                  colorize: true,
+                  singleLine: true,
+                  translateTime: "SYS:standard",
+                },
+              },
+      },
+    }),
+  ],
+  controllers: [HealthController],
+  providers: [HealthService],
+})
+export class AppModule {}

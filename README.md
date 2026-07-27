@@ -23,11 +23,15 @@ The web application is prepared for a native Next.js deployment on Vercel. No cu
 - Start command: `npm run start`
 - Node.js: 22 or newer
 
-Configure `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `GITHUB_CLIENT_ID`, and `GITHUB_CLIENT_SECRET` in the deployment environment. Heavy repository ingestion and analysis services will be deployed separately when the backend is introduced.
+Configure the Better Auth, GitHub OAuth, database, backend URL, and GitHub App
+values in the deployment environment. The NestJS API is deployed separately to
+Railway.
 
 ## Authentication
 
-Atlas uses Better Auth with GitHub as its only sign-in provider. Authentication is currently stateless, so this frontend milestone does not require database migrations.
+Atlas uses Better Auth with GitHub as its only sign-in provider. Users and
+sessions are persisted in PostgreSQL, and protected backend requests use
+short-lived Better Auth JWTs that are also checked against the live session.
 
 1. Create a GitHub OAuth app with this callback URL:
 
@@ -37,7 +41,9 @@ Atlas uses Better Auth with GitHub as its only sign-in provider. Authentication 
 
 2. Copy `.env.example` to `.env.local` and configure `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `BETTER_AUTH_URL`, and a high-entropy `BETTER_AUTH_SECRET` of at least 32 characters.
 
-3. Keep repository ingestion separate from login. GitHub sign-in requests profile and email access only; a GitHub App will later provide explicit repository access.
+3. Keep repository ingestion separate from login. GitHub sign-in requests
+   profile and email access only; a separate GitHub App provides explicit
+   repository access from the Sources page.
 
 ## Quality checks
 
@@ -59,7 +65,9 @@ npm run build
 - `/app/architecture` — system architecture
 - `/app/search` — engineering search
 - `/app/sources` — GitHub and Notion sources
-- `/app/activity` — indexing activity
+- `/app/activity` — live repository synchronization jobs and progress
 - `/app/settings` — workspace settings
 
-Atlas is a new product. CodeMap remains independent; selected repository-intelligence services will be incorporated later as a one-time code fork.
+Atlas is a new product. CodeMap remains independent; selected
+repository-intelligence services have been incorporated as a documented,
+one-time backend code fork with no runtime dependency on CodeMap.

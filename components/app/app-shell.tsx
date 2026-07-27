@@ -1,13 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Activity, Bell, ChevronDown, Database, GitBranch, LayoutDashboard, LogOut, Menu, Network, PanelLeftClose, Search, Settings, Zap } from "lucide-react";
 import { AtlasMark } from "@/components/brand";
 import { authClient } from "@/lib/auth-client";
-import type { AtlasSession } from "@/lib/auth";
-import { workspace } from "@/lib/mock-data";
+import type { AtlasWorkspaceData } from "@/lib/api-types";
 import { StatusDot } from "./shared";
 
 const navItems = [
@@ -28,17 +27,43 @@ function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "U";
 }
 
-export function AppShell({ user, children }: { user: AtlasSession["user"]; children: React.ReactNode }) {
+export function AppShell({ workspaceData, children }: { workspaceData: AtlasWorkspaceData; children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { me } = workspaceData;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [switchingWorkspace, setSwitchingWorkspace] = useState(false);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState(workspaceData.activeWorkspace.id);
+  const activeWorkspace = me.workspaces.find((item) => item.id === activeWorkspaceId) ?? workspaceData.activeWorkspace;
 
   async function signOut() {
     setSigningOut(true);
     await authClient.signOut();
     window.location.assign("/sign-in");
+  }
+
+  async function selectWorkspace(workspaceId: string) {
+    if (workspaceId === activeWorkspace.id) {
+      setWorkspaceOpen(false);
+      return;
+    }
+
+    setSwitchingWorkspace(true);
+    const response = await fetch("/api/workspace-selection", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceId }),
+    });
+
+    if (response.ok) {
+      setActiveWorkspaceId(workspaceId);
+      setWorkspaceOpen(false);
+      router.refresh();
+    }
+    setSwitchingWorkspace(false);
   }
 
   return (
@@ -47,16 +72,16 @@ export function AppShell({ user, children }: { user: AtlasSession["user"]; child
       <aside className={`app-sidebar ${mobileOpen ? "is-open" : ""}`}>
         <div className="sidebar-top"><AtlasMark compact={collapsed} /><button onClick={() => setCollapsed((current) => !current)} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-pressed={collapsed}><PanelLeftClose size={17} /></button></div>
         <div className="workspace-control">
-          <button className="workspace-switcher" onClick={() => setWorkspaceOpen((current) => !current)} aria-expanded={workspaceOpen}><span>{workspace.initials}</span><div><b>{workspace.name}</b><small>12 repositories</small></div><ChevronDown size={14} /></button>
-          {workspaceOpen && <div className="workspace-menu"><b>Current workspace</b><span>{workspace.name}</span><Link href="/app/settings" onClick={() => setWorkspaceOpen(false)}>Workspace settings</Link></div>}
+          <button className="workspace-switcher" onClick={() => setWorkspaceOpen((current) => !current)} aria-expanded={workspaceOpen}><span>{initials(activeWorkspace.name)}</span><div><b>{activeWorkspace.name}</b><small>{activeWorkspace.repositoryCount} {activeWorkspace.repositoryCount === 1 ? "repository" : "repositories"}</small></div><ChevronDown size={14} /></button>
+          {workspaceOpen && <div className="workspace-menu"><b>Your workspaces</b>{me.workspaces.map((item) => <button className={item.id === activeWorkspace.id ? "active" : ""} disabled={switchingWorkspace} key={item.id} onClick={() => void selectWorkspace(item.id)}><span>{item.name}</span><small>{item.role} · {item.repositoryCount} repos</small></button>)}<Link href="/app/settings" onClick={() => setWorkspaceOpen(false)}>Workspace settings</Link></div>}
         </div>
         <nav aria-label="Workspace">{navItems.map((item) => { const Icon = item.icon; const active = item.href === "/app" ? pathname === "/app" : pathname.startsWith(item.href.replace("/new", "")); return <Link className={active ? "active" : ""} href={item.href} key={item.href} onClick={() => setMobileOpen(false)}><Icon size={17} /><span>{item.label}</span>{item.label === "Impact analysis" && <i>NEW</i>}</Link>; })}</nav>
         <nav className="sidebar-utility" aria-label="Workspace utilities">{utilityItems.map((item) => { const Icon = item.icon; return <Link className={pathname.startsWith(item.href) ? "active" : ""} href={item.href} key={item.href} onClick={() => setMobileOpen(false)}><Icon size={17} /><span>{item.label}</span></Link>; })}</nav>
-        <div className="index-card"><div><span>Index coverage</span><b>{workspace.coverage}%</b></div><div className="mini-progress"><i style={{ width: `${workspace.coverage}%` }} /></div><p><StatusDot /> Updated {workspace.indexedAt}</p></div>
-        <div className="sidebar-user"><i>{initials(user.name)}</i><div><b>{user.name}</b><span>{user.email}</span></div><button onClick={signOut} disabled={signingOut} aria-label="Sign out"><LogOut size={15} /></button></div>
+        <div className="index-card"><div><span>Index coverage</span><b>96%</b></div><div className="mini-progress"><i style={{ width: "96%" }} /></div><p><StatusDot /> Preview intelligence</p></div>
+        <div className="sidebar-user"><i>{initials(me.user.name)}</i><div><b>{me.user.name}</b><span>{me.user.email}</span></div><button onClick={signOut} disabled={signingOut} aria-label="Sign out"><LogOut size={15} /></button></div>
       </aside>
       {mobileOpen && <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
-      <main className="app-main"><div className="app-topbar"><Link href="/app/search" className="global-search"><Search size={15} /><span>Search {workspace.name}…</span><kbd>⌘ K</kbd></Link><div><Link href="/app/activity" className="topbar-icon" aria-label="Notifications"><Bell size={17} /><i /></Link><span className="freshness"><StatusDot /> Graph current</span></div></div><div className="page-content">{children}</div></main>
+      <main className="app-main"><div className="app-topbar"><Link href="/app/search" className="global-search"><Search size={15} /><span>Search {activeWorkspace.name}…</span><kbd>⌘ K</kbd></Link><div><Link href="/app/activity" className="topbar-icon" aria-label="Notifications"><Bell size={17} /><i /></Link><span className="freshness"><StatusDot /> Graph current</span></div></div><div className="page-content">{children}</div></main>
     </div>
   );
 }

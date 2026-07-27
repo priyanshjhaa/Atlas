@@ -606,6 +606,10 @@ body::before {
 .workspace-menu { position: absolute; z-index: 5; top: calc(100% + 7px); left: 0; right: 0; display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 11px; background: #f7edda; box-shadow: 0 16px 35px rgba(83, 62, 36, .14); }
 .workspace-menu b { font-size: 9px; }
 .workspace-menu span { color: var(--muted); font-size: 10px; }
+.workspace-menu > button { display: grid; gap: 3px; width: 100%; padding: 8px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--ink); text-align: left; }
+.workspace-menu > button:hover, .workspace-menu > button.active { border-color: var(--line); background: rgba(92, 119, 86, .08); }
+.workspace-menu > button span { color: var(--ink); font-weight: 650; }
+.workspace-menu > button small { color: var(--muted); font-size: 8px; text-transform: capitalize; }
 .workspace-menu a { margin-top: 4px; color: var(--orange); font-size: 9px; }
 .topbar-icon { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 9px; position: relative; }
 .topbar-icon i { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: var(--orange); top: 8px; right: 8px; }
