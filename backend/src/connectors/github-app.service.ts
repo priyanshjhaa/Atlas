@@ -1,6 +1,7 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { importPKCS8, SignJWT } from "jose";
+import { createPrivateKey } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { extract } from "tar";
@@ -143,7 +144,10 @@ export class GitHubAppService {
     const privateKey = Buffer.from(encodedPrivateKey, "base64").toString(
       "utf8",
     );
-    const key = await importPKCS8(privateKey, "RS256");
+    const pkcs8PrivateKey = createPrivateKey(privateKey)
+      .export({ format: "pem", type: "pkcs8" })
+      .toString();
+    const key = await importPKCS8(pkcs8PrivateKey, "RS256");
     const now = Math.floor(Date.now() / 1000);
 
     return new SignJWT({})
