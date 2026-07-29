@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  IMPACT_EXPLANATION_FAILURE_CODES,
   IMPACT_EXPLANATION_SCHEMA_VERSION,
   type ImpactExplanation,
   type ImpactExplanationState,
@@ -46,16 +47,55 @@ const stateBase = {
   schemaVersion: z.literal(IMPACT_EXPLANATION_SCHEMA_VERSION),
 };
 
+const generationMetadataSchema = z
+  .object({
+    provider: z.literal("openai").nullable(),
+    model: z.string().nullable(),
+    promptVersion: z.string().min(1),
+    outputSchemaVersion: z.literal(IMPACT_EXPLANATION_SCHEMA_VERSION),
+    evidencePacketHash: z.string().nullable(),
+    sourceRevision: z.string().min(1),
+    generatedAt: z.string().min(1),
+    latencyMs: z.number().nonnegative(),
+    usage: z
+      .object({
+        inputTokens: z.number().int().nonnegative(),
+        outputTokens: z.number().int().nonnegative(),
+        totalTokens: z.number().int().nonnegative(),
+      })
+      .strict(),
+    validationStatus: z.enum(["valid", "invalid", "not_run"]),
+    deterministicFallback: z.boolean(),
+  })
+  .strict();
+
 export const impactExplanationStateSchema: z.ZodType<ImpactExplanationState> =
   z.discriminatedUnion("status", [
-    z.object({ ...stateBase, status: z.literal("pending") }).strict(),
+    z
+      .object({
+        ...stateBase,
+        status: z.literal("pending"),
+        evidencePacketHash: z.string().optional(),
+        promptVersion: z.string().optional(),
+        sourceRevision: z.string().optional(),
+        startedAt: z.string().optional(),
+      })
+      .strict(),
     z
       .object({
         ...stateBase,
         status: z.literal("completed"),
         explanation: impactExplanationSchema,
+        metadata: generationMetadataSchema.optional(),
       })
       .strict(),
-    z.object({ ...stateBase, status: z.literal("failed") }).strict(),
+    z
+      .object({
+        ...stateBase,
+        status: z.literal("failed"),
+        failureCode: z.enum(IMPACT_EXPLANATION_FAILURE_CODES).optional(),
+        metadata: generationMetadataSchema.optional(),
+      })
+      .strict(),
     z.object({ ...stateBase, status: z.literal("disabled") }).strict(),
   ]);

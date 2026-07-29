@@ -50,6 +50,13 @@
       "when": 1785323062799,
       "tag": "20260729110422_impact_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785333675281,
+      "tag": "20260729140115_noisy_vision",
+      "breakpoints": true
     }
   ]
 }

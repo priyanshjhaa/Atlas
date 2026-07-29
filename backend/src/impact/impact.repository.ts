@@ -17,6 +17,7 @@ import {
   impactReports,
   repositories,
 } from "../database/schema";
+import type { ImpactExplanationState } from "./explanation.types";
 import type {
   ImpactReportInput,
   ImpactReportResult,
@@ -234,5 +235,26 @@ export class ImpactRepository {
       )
       .limit(1);
     return (report as unknown as StoredImpactReport | undefined) ?? null;
+  }
+
+  async updateExplanation(
+    workspaceId: string,
+    reportId: string,
+    explanation: ImpactExplanationState,
+  ): Promise<StoredImpactReport | null> {
+    const [updated] = await this.database.client
+      .update(impactReports)
+      .set({
+        explanation,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(impactReports.workspaceId, workspaceId),
+          eq(impactReports.id, reportId),
+        ),
+      )
+      .returning();
+    return (updated as unknown as StoredImpactReport | undefined) ?? null;
   }
 }

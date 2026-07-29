@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import type { AuthenticatedIdentity } from "../auth/auth.types";
+import { ExplanationGenerationService } from "./explanation-generation.service";
 import { ImpactAnalysisService } from "./impact-analysis.service";
 import { ImpactRepository } from "./impact.repository";
 import type { CreateImpactReportInput } from "./impact.types";
@@ -11,6 +12,7 @@ export class ImpactReportsService {
     private readonly analysis: ImpactAnalysisService,
     private readonly repository: ImpactRepository,
     private readonly pullRequests: PullRequestResolverService,
+    private readonly explanations: ExplanationGenerationService,
   ) {}
 
   async create(
@@ -34,7 +36,7 @@ export class ImpactReportsService {
             request.scope,
           );
     const result = await this.analysis.analyze(workspaceId, input);
-    return this.repository.create({
+    const report = await this.repository.create({
       workspaceId,
       repositoryId: input.repositoryId,
       requestedByUserId: identity.user.id,
@@ -42,11 +44,18 @@ export class ImpactReportsService {
       request: input,
       result,
     });
+    return this.explanations.generate(report);
   }
 
   async get(workspaceId: string, reportId: string) {
     const report = await this.repository.findById(workspaceId, reportId);
     if (!report) throw new NotFoundException("Impact report not found.");
     return report;
+  }
+
+  async retryExplanation(workspaceId: string, reportId: string) {
+    const report = await this.repository.findById(workspaceId, reportId);
+    if (!report) throw new NotFoundException("Impact report not found.");
+    return this.explanations.generate(report, { retryPending: true });
   }
 }

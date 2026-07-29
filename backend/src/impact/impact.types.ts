@@ -142,7 +142,7 @@ export interface StoredImpactReport {
    * Kept outside result so generated text cannot replace deterministic
    * findings. It is optional for reports created before explanations exist.
    */
-  explanation?: ImpactExplanationState;
+  explanation?: ImpactExplanationState | null;
   createdAt: Date;
   updatedAt: Date;
 }

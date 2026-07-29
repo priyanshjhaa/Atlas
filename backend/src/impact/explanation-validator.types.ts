@@ -1,6 +1,10 @@
-import type { ImpactExplanation } from "./explanation.types";
+import type {
+  ImpactExplanation,
+  ImpactExplanationFailureCode,
+} from "./explanation.types";
 
-export type ExplanationValidationFailureCode =
+export type ExplanationValidationFailureCode = Extract<
+  ImpactExplanationFailureCode,
   | "invalid_explanation_schema"
   | "explanation_too_large"
   | "unknown_evidence_id"
@@ -10,7 +14,8 @@ export type ExplanationValidationFailureCode =
   | "altered_risk"
   | "altered_confidence"
   | "altered_provenance"
-  | "missing_unknown_impact";
+  | "missing_unknown_impact"
+>;
 
 export type ExplanationValidationResult =
   | {

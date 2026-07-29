@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConnectorsModule } from "../connectors/connectors.module";
 import { IntelligenceModule } from "../intelligence/intelligence.module";
 import { EvidencePacketBuilder } from "./evidence-packet.builder";
+import { ExplanationGenerationService } from "./explanation-generation.service";
 import { ExplanationGroundingValidator } from "./explanation-grounding.validator";
 import { ImpactAnalysisService } from "./impact-analysis.service";
 import { ImpactRepository } from "./impact.repository";
@@ -15,6 +16,7 @@ import { PullRequestResolverService } from "./pull-request-resolver.service";
   controllers: [ImpactReportsController],
   providers: [
     EvidencePacketBuilder,
+    ExplanationGenerationService,
     ExplanationGroundingValidator,
     ImpactAnalysisService,
     ImpactRepository,

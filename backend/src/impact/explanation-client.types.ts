@@ -1,12 +1,14 @@
 import type { ImpactEvidencePacket } from "./evidence-packet.types";
 import type {
   ImpactExplanation,
+  ImpactExplanationFailureCode,
   ImpactExplanationSchemaVersion,
 } from "./explanation.types";
 
 export type ExplanationProvider = "openai";
 
-export type ExplanationFailureCode =
+export type ExplanationFailureCode = Extract<
+  ImpactExplanationFailureCode,
   | "configuration_error"
   | "provider_timeout"
   | "provider_authentication"
@@ -17,7 +19,8 @@ export type ExplanationFailureCode =
   | "provider_refusal"
   | "provider_incomplete"
   | "invalid_provider_response"
-  | "provider_error";
+  | "provider_error"
+>;
 
 export interface ExplanationGenerationMetadata {
   provider: ExplanationProvider;
