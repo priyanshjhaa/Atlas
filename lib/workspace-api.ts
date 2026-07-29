@@ -5,6 +5,7 @@ import { cache } from "react";
 import type {
   AtlasMe,
   AtlasGitHubConnector,
+  AtlasImpactReport,
   AtlasRepository,
   AtlasSyncJob,
   AtlasWorkspaceData,
@@ -82,4 +83,20 @@ export async function getAtlasSyncJobs(
     },
   );
   return readApiResponse<AtlasSyncJob[]>(response);
+}
+
+export async function getAtlasImpactReport(
+  workspaceId: string,
+  reportId: string,
+): Promise<AtlasImpactReport> {
+  const response = await fetchAtlasApi(
+    `/v1/workspaces/${workspaceId}/impact-reports/${reportId}`,
+    {
+      cache: "no-store",
+      headers: {
+        "X-Atlas-Workspace-Id": workspaceId,
+      },
+    },
+  );
+  return readApiResponse<AtlasImpactReport>(response);
 }

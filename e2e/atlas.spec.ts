@@ -3,7 +3,13 @@ import { expect, test } from "@playwright/test";
 test("moves from the landing page to GitHub sign-in", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Understand what changes/ })).toBeVisible();
-  await page.getByRole("link", { name: /Open workspace/ }).click();
+
+  const workspaceLink = page.locator("a:visible").filter({ hasText: "Open workspace" });
+  if (!(await workspaceLink.isVisible())) {
+    await page.getByRole("button", { name: /Open navigation/ }).click();
+  }
+  await workspaceLink.click();
+
   await expect(page).toHaveURL(/\/sign-in/);
   await expect(page.getByRole("button", { name: /Continue with GitHub/ })).toBeVisible();
 });

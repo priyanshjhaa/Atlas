@@ -10,6 +10,7 @@ import { HealthService } from "./health/health.service";
 import { WorkspacesModule } from "./workspaces/workspaces.module";
 import { SyncModule } from "./sync/sync.module";
 import { IntelligenceModule } from "./intelligence/intelligence.module";
+import { ImpactModule } from "./impact/impact.module";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { IntelligenceModule } from "./intelligence/intelligence.module";
     AuthModule,
     ConnectorsModule,
     IntelligenceModule,
+    ImpactModule,
     SyncModule,
     WorkspacesModule,
     LoggerModule.forRoot({

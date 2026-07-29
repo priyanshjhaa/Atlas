@@ -23,6 +23,29 @@ export interface GitHubRepository {
   owner: { login: string };
 }
 
+export interface GitHubPullRequest {
+  number: number;
+  title: string;
+  body: string | null;
+  html_url: string;
+  changed_files: number;
+  additions: number;
+  deletions: number;
+  user: { login: string };
+  base: { sha: string; ref: string };
+  head: { sha: string; ref: string };
+}
+
+export interface GitHubPullRequestFile {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
+  previous_filename?: string;
+}
+
 @Injectable()
 export class GitHubAppService {
   private readonly apiVersion = "2026-03-10";
@@ -68,6 +91,38 @@ export class GitHubAppService {
       token,
     );
     return commit.sha;
+  }
+
+  async getPullRequest(
+    installationId: string,
+    owner: string,
+    repository: string,
+    number: number,
+  ): Promise<{
+    pullRequest: GitHubPullRequest;
+    files: GitHubPullRequestFile[];
+    filesTruncated: boolean;
+  }> {
+    const token = await this.createInstallationToken(installationId);
+    const pullRequest = await this.request<GitHubPullRequest>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/pulls/${number}`,
+      token,
+    );
+    const files: GitHubPullRequestFile[] = [];
+    const githubFileLimit = 3_000;
+    for (let page = 1; files.length < githubFileLimit; page += 1) {
+      const batch = await this.request<GitHubPullRequestFile[]>(
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/pulls/${number}/files?per_page=100&page=${page}`,
+        token,
+      );
+      files.push(...batch);
+      if (batch.length < 100) break;
+    }
+    return {
+      pullRequest,
+      files,
+      filesTruncated: pullRequest.changed_files > files.length,
+    };
   }
 
   async downloadRepositoryArchive(input: {

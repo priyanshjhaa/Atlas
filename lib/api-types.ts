@@ -84,3 +84,117 @@ export interface AtlasWorkspaceData {
   activeWorkspace: AtlasWorkspace;
   repositories: AtlasRepository[];
 }
+
+export type AtlasImpactScope = "repository" | "workspace";
+
+export interface AtlasImpactCitation {
+  id: string;
+  repositoryId: string;
+  repository: string;
+  filePath: string;
+  lineStart?: number;
+  lineEnd?: number;
+  symbol?: string;
+  excerpt: string;
+  provenance: "indexed_source_chunk" | "typescript_static_import";
+  sourceRevision: string;
+}
+
+export interface AtlasImpactFinding {
+  id: string;
+  classification: "direct" | "downstream" | "unknown";
+  kind: "File" | "Symbol" | "Consumer" | "Unknown";
+  title: string;
+  detail: string;
+  repositoryId: string;
+  repository: string;
+  filePath?: string;
+  symbol?: string;
+  hop: number;
+  confidence: number;
+  provenance:
+    | "indexed_source_chunk"
+    | "typescript_static_import"
+    | "analysis_gap";
+  evidenceIds: string[];
+}
+
+export interface AtlasImpactReport {
+  id: string;
+  workspaceId: string;
+  repositoryId: string;
+  requestedByUserId: string | null;
+  sourceRevision: string;
+  input: {
+    mode: "planned" | "pull-request";
+    repositoryId: string;
+    description: string;
+    scope: AtlasImpactScope;
+    anchors: string[];
+    pullRequest?: {
+      number: number;
+      title: string;
+      url: string;
+      author: string;
+      baseRevision: string;
+      headRevision: string;
+      analysisBudget?: {
+        totalChangedFiles: number;
+        filesRetrieved: number;
+        filesWithPatchContext: number;
+        patchCharactersAnalyzed: number;
+        githubFileLimitReached: boolean;
+      };
+      changedFiles: Array<{
+        path: string;
+        status: string;
+        additions: number;
+        deletions: number;
+        patch?: string;
+      }>;
+    };
+  };
+  result: {
+    status?: "complete" | "insufficient_evidence";
+    title: string;
+    answer?: string;
+    executiveSummary: string;
+    risk: {
+      level: "insufficient" | "low" | "medium" | "high";
+      score: number | null;
+      reasons: string[];
+    };
+    repository: {
+      id: string;
+      owner: string;
+      name: string;
+      defaultBranch: string | null;
+    };
+    sourceRevision: string;
+    scope: AtlasImpactScope;
+    resolvedEntities: Array<{
+      id: string;
+      kind: "file" | "symbol";
+      name: string;
+      filePath: string;
+      lineStart?: number;
+      lineEnd?: number;
+      confidence: number;
+    }>;
+    directImpacts: AtlasImpactFinding[];
+    downstreamImpacts: AtlasImpactFinding[];
+    unknownImpacts: AtlasImpactFinding[];
+    evidence: AtlasImpactCitation[];
+    relationshipPath: Array<{
+      repository: string;
+      filePath: string;
+      hop: number;
+    }>;
+    recommendations?: string[];
+    verificationPlan: string[];
+    limitations: string[];
+    generatedAt: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}

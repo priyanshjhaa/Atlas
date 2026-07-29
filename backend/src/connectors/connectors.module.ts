@@ -15,5 +15,6 @@ import { GitHubWebhookVerifierService } from "./github-webhook-verifier.service"
     GitHubConnectorsService,
     GitHubWebhookVerifierService,
   ],
+  exports: [GitHubAppService],
 })
 export class ConnectorsModule {}

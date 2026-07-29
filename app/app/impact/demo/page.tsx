@@ -1,2 +1,5 @@
-import { ImpactReportPage } from "@/components/features/impact";
-export default function Page() { return <ImpactReportPage />; }
+import { redirect } from "next/navigation";
+
+export default function Page() {
+  redirect("/app/impact/new");
+}
