@@ -10,8 +10,10 @@ import type { ExplanationValidationResult } from "./explanation-validator.types"
 import { impactExplanationSchema } from "./explanation.schema";
 import type { ImpactExplanation } from "./explanation.types";
 
-const FILE_PATH_PATTERN =
-  /(?:^|[\s`"'(])((?:[A-Za-z0-9_@.-]+\/)+[A-Za-z0-9_@().-]+\.[A-Za-z0-9]+|[A-Za-z0-9_.-]+\.(?:ts|tsx|js|jsx|mjs|cjs|json|md|sql|py|go|rs|java|kt|rb|php|cs|css|scss|html|yaml|yml|toml|xml|sh)|README(?:\.[A-Za-z0-9]+)?|CHANGELOG(?:\.[A-Za-z0-9]+)?|Dockerfile|Makefile)(?=$|[\s`"',.;:!?)])/g;
+const SLASH_FILE_PATH_PATTERN =
+  /(?:^|[\s`"'(])((?:[A-Za-z0-9_@.-]+\/)+[A-Za-z0-9_@().-]+\.[A-Za-z0-9]+)(?=$|[\s`"',.;:!?)])/g;
+const STANDALONE_FILE_NAME_PATTERN =
+  /^(?:[A-Za-z0-9_.-]+\.(?:ts|tsx|js|jsx|mjs|cjs|json|md|sql|py|go|rs|java|kt|rb|php|cs|css|scss|html|yaml|yml|toml|xml|sh)|README(?:\.[A-Za-z0-9]+)?|CHANGELOG(?:\.[A-Za-z0-9]+)?|Dockerfile|Makefile)$/;
 const RELATIONSHIP_PATTERN =
   /\b(imports?|imported by|depends?\s+on|dependency|calls?|relationship)\b/i;
 const PROVENANCE_PATTERNS = [
@@ -160,16 +162,20 @@ export class ExplanationGroundingValidator {
 
   private extractFilePaths(text: string): string[] {
     const paths = new Set(
-      [...text.matchAll(new RegExp(FILE_PATH_PATTERN.source, "g"))].flatMap(
-        (match) => (match[1] ? [match[1]] : []),
-      ),
+      [
+        ...text.matchAll(
+          new RegExp(SLASH_FILE_PATH_PATTERN.source, "g"),
+        ),
+      ].flatMap((match) => (match[1] ? [match[1]] : [])),
     );
     for (const match of text.matchAll(/`([^`\n]+)`/g)) {
       const value = match[1];
       if (
-        value?.includes("/") &&
+        value &&
         !value.includes("://") &&
-        /^[A-Za-z0-9_@()./ -]+$/.test(value)
+        ((value.includes("/") &&
+          /^[A-Za-z0-9_@()./ -]+$/.test(value)) ||
+          STANDALONE_FILE_NAME_PATTERN.test(value))
       ) {
         paths.add(value);
       }

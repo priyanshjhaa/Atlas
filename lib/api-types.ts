@@ -146,7 +146,7 @@ export type AtlasImpactExplanationFailureCode =
   | "generation_failed";
 
 export interface AtlasImpactExplanationGenerationMetadata {
-  provider: "openai" | null;
+  provider: "openai" | "groq" | null;
   model: string | null;
   promptVersion: string;
   outputSchemaVersion: AtlasImpactExplanationSchemaVersion;

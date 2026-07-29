@@ -66,7 +66,7 @@ export type ImpactExplanationFailureCode =
   (typeof IMPACT_EXPLANATION_FAILURE_CODES)[number];
 
 export interface ImpactExplanationGenerationMetadata {
-  provider: "openai" | null;
+  provider: "openai" | "groq" | null;
   model: string | null;
   promptVersion: string;
   outputSchemaVersion: ImpactExplanationSchemaVersion;

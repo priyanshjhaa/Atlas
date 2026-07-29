@@ -9,39 +9,59 @@ import {
 const nonEmptyTextSchema = z.string().trim().min(1);
 const evidenceIdsSchema = z.array(nonEmptyTextSchema).min(1);
 
-const claimSchema = z
-  .object({
-    text: nonEmptyTextSchema,
-    evidenceIds: evidenceIdsSchema,
-  })
-  .strict();
+function buildImpactExplanationSchema(
+  evidenceIdSchema: z.ZodType<string>,
+): z.ZodType<ImpactExplanation> {
+  const citedEvidenceIdsSchema = z.array(evidenceIdSchema).min(1);
+  return z
+    .object({
+      schemaVersion: z.literal(IMPACT_EXPLANATION_SCHEMA_VERSION),
+      executiveSummary: nonEmptyTextSchema,
+      answer: nonEmptyTextSchema,
+      claims: z
+        .array(
+          z
+            .object({
+              text: nonEmptyTextSchema,
+              evidenceIds: citedEvidenceIdsSchema,
+            })
+            .strict(),
+        )
+        .min(1),
+      implementationSteps: z.array(
+        z
+          .object({
+            title: nonEmptyTextSchema,
+            detail: nonEmptyTextSchema,
+            evidenceIds: citedEvidenceIdsSchema,
+          })
+          .strict(),
+      ),
+      verificationSteps: z.array(
+        z
+          .object({
+            text: nonEmptyTextSchema,
+            evidenceIds: citedEvidenceIdsSchema,
+          })
+          .strict(),
+      ),
+      remainingQuestions: z.array(nonEmptyTextSchema),
+    })
+    .strict();
+}
 
-const implementationStepSchema = z
-  .object({
-    title: nonEmptyTextSchema,
-    detail: nonEmptyTextSchema,
-    evidenceIds: evidenceIdsSchema,
-  })
-  .strict();
+export const impactExplanationSchema = buildImpactExplanationSchema(
+  evidenceIdsSchema.element,
+);
 
-const verificationStepSchema = z
-  .object({
-    text: nonEmptyTextSchema,
-    evidenceIds: evidenceIdsSchema,
-  })
-  .strict();
-
-export const impactExplanationSchema: z.ZodType<ImpactExplanation> = z
-  .object({
-    schemaVersion: z.literal(IMPACT_EXPLANATION_SCHEMA_VERSION),
-    executiveSummary: nonEmptyTextSchema,
-    answer: nonEmptyTextSchema,
-    claims: z.array(claimSchema).min(1),
-    implementationSteps: z.array(implementationStepSchema),
-    verificationSteps: z.array(verificationStepSchema),
-    remainingQuestions: z.array(nonEmptyTextSchema),
-  })
-  .strict();
+export function impactExplanationProviderSchema(
+  evidenceIds: string[],
+): z.ZodType<ImpactExplanation> {
+  if (evidenceIds.length === 0) return impactExplanationSchema;
+  return buildImpactExplanationSchema(
+    z.enum(evidenceIds as [string, ...string[]]),
+  );
+}
 
 const stateBase = {
   schemaVersion: z.literal(IMPACT_EXPLANATION_SCHEMA_VERSION),
@@ -49,7 +69,7 @@ const stateBase = {
 
 const generationMetadataSchema = z
   .object({
-    provider: z.literal("openai").nullable(),
+    provider: z.enum(["openai", "groq"]).nullable(),
     model: z.string().nullable(),
     promptVersion: z.string().min(1),
     outputSchemaVersion: z.literal(IMPACT_EXPLANATION_SCHEMA_VERSION),

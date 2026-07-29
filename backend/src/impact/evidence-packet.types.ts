@@ -88,4 +88,10 @@ export interface ImpactEvidencePacketLimits {
   maxEvidenceCharacters: number;
   maxExcerptCharacters: number;
   maxQuestionCharacters: number;
+  maxPacketCharacters: number;
+  maxDirectImpacts: number;
+  maxDownstreamImpacts: number;
+  maxUnknownImpacts: number;
+  maxRelationshipPaths: number;
+  maxLimitations: number;
 }

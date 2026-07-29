@@ -150,6 +150,81 @@ describe("OpenAIExplanationClient", () => {
     expect(options.signal).toBeInstanceOf(AbortSignal);
   });
 
+  it("uses Groq metadata and omits unsupported response storage", async () => {
+    const parse = vi.fn().mockResolvedValue({
+      status: "completed",
+      output: [],
+      output_parsed: explanation,
+      usage: {
+        input_tokens: 120,
+        output_tokens: 45,
+        total_tokens: 165,
+      },
+    });
+    const client = new OpenAIExplanationClient(
+      config({
+        LLM_EXPLANATIONS_ENABLED: "true",
+        LLM_PROVIDER: "groq",
+        LLM_BASE_URL: "https://api.groq.com/openai/v1",
+        LLM_EXPLANATION_MODEL: "openai/gpt-oss-20b",
+        GROQ_API_KEY: "test-key",
+      }),
+      fakeClient(parse),
+    );
+
+    await expect(client.generate(packet)).resolves.toMatchObject({
+      status: "completed",
+      metadata: {
+        provider: "groq",
+        model: "openai/gpt-oss-20b",
+      },
+    });
+    const [request] = parse.mock.calls[0] as [Record<string, unknown>];
+    expect(request).not.toHaveProperty("store");
+    expect(request).toHaveProperty("text.format.type", "json_schema");
+    expect(request).toHaveProperty("max_output_tokens", 2_000);
+    expect(request).toHaveProperty("reasoning.effort", "low");
+    expect(request).toHaveProperty("temperature", 0.1);
+  });
+
+  it("retries one transient Groq structured-generation rejection", async () => {
+    const parse = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new APIError(
+          400,
+          { error: { type: "invalid_request_error" } },
+          "raw generated JSON rejection",
+          new Headers(),
+        ),
+      )
+      .mockResolvedValueOnce({
+        status: "completed",
+        output: [],
+        output_parsed: explanation,
+        usage: {
+          input_tokens: 120,
+          output_tokens: 45,
+          total_tokens: 165,
+        },
+      });
+    const client = new OpenAIExplanationClient(
+      config({
+        LLM_EXPLANATIONS_ENABLED: "true",
+        LLM_PROVIDER: "groq",
+        LLM_EXPLANATION_MODEL: "openai/gpt-oss-20b",
+        GROQ_API_KEY: "test-key",
+      }),
+      fakeClient(parse),
+    );
+
+    await expect(client.generate(packet)).resolves.toMatchObject({
+      status: "completed",
+      metadata: { provider: "groq" },
+    });
+    expect(parse).toHaveBeenCalledTimes(2);
+  });
+
   it("normalizes timeouts without exposing provider errors", async () => {
     const parse = vi
       .fn()
@@ -190,6 +265,27 @@ describe("OpenAIExplanationClient", () => {
       fakeClient(vi.fn().mockRejectedValue(rateLimit)),
     );
     await expect(rateLimitedClient.generate(packet)).resolves.toMatchObject({
+      status: "failed",
+      failureCode: "provider_rate_limited",
+    });
+
+    const oversizedClient = new OpenAIExplanationClient(
+      config({
+        LLM_EXPLANATIONS_ENABLED: "true",
+        LLM_PROVIDER: "groq",
+        LLM_EXPLANATION_MODEL: "openai/gpt-oss-20b",
+        GROQ_API_KEY: "test-key",
+      }),
+      fakeClient(
+        vi.fn().mockRejectedValue(
+          Object.assign(new Error("raw token limit"), {
+            status: 413,
+            code: "rate_limit_exceeded",
+          }),
+        ),
+      ),
+    );
+    await expect(oversizedClient.generate(packet)).resolves.toMatchObject({
       status: "failed",
       failureCode: "provider_rate_limited",
     });

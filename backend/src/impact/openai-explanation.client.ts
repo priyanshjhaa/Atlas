@@ -24,7 +24,7 @@ import {
   IMPACT_EXPLANATION_PROMPT_VERSION,
   IMPACT_EXPLANATION_SYSTEM_PROMPT,
 } from "./explanation.prompt";
-import { impactExplanationSchema } from "./explanation.schema";
+import { impactExplanationProviderSchema } from "./explanation.schema";
 import { IMPACT_EXPLANATION_SCHEMA_VERSION } from "./explanation.types";
 
 export const OPENAI_EXPLANATION_CLIENT = Symbol(
@@ -50,7 +50,11 @@ export class OpenAIExplanationClient implements ExplanationClient {
     }
 
     const model = this.config.get("LLM_EXPLANATION_MODEL", { infer: true });
-    const apiKey = this.config.get("OPENAI_API_KEY", { infer: true });
+    const provider = this.config.get("LLM_PROVIDER", { infer: true });
+    const apiKey = this.config.get(
+      provider === "groq" ? "GROQ_API_KEY" : "OPENAI_API_KEY",
+      { infer: true },
+    );
     if (!model || !apiKey) {
       return {
         status: "failed",
@@ -63,77 +67,119 @@ export class OpenAIExplanationClient implements ExplanationClient {
       infer: true,
     });
     const startedAt = performance.now();
-
-    try {
-      const response = await this.openai(apiKey, timeout).responses.parse(
+    const request = {
+      model,
+      instructions: IMPACT_EXPLANATION_SYSTEM_PROMPT,
+      input: [
         {
-          model,
-          instructions: IMPACT_EXPLANATION_SYSTEM_PROMPT,
-          input: [
+          role: "user" as const,
+          content: [
             {
-              role: "user",
-              content: [
-                {
-                  type: "input_text",
-                  text: this.packetInput(packet),
-                },
-              ],
+              type: "input_text" as const,
+              text: this.packetInput(packet),
             },
           ],
-          text: {
-            format: zodTextFormat(
-              impactExplanationSchema,
-              "atlas_impact_explanation_v1",
-            ),
-          },
-          tools: [],
-          store: false,
         },
-        {
+      ],
+      text: {
+        format: zodTextFormat(
+          impactExplanationProviderSchema(
+            packet.evidence.map((item) => item.id),
+          ),
+          "atlas_impact_explanation_v1",
+        ),
+      },
+      max_output_tokens: this.config.get("LLM_MAX_OUTPUT_TOKENS", {
+        infer: true,
+      }),
+      tools: [],
+      ...(provider === "groq"
+        ? {
+            temperature: 0.1,
+            reasoning: {
+              effort: this.config.get("LLM_REASONING_EFFORT", {
+                infer: true,
+              }),
+            },
+          }
+        : {}),
+      ...(provider === "openai" ? { store: false } : {}),
+    };
+    const maxAttempts = provider === "groq" ? 2 : 1;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        const response = await this.openai(
+          apiKey,
+          timeout,
+          provider,
+        ).responses.parse(request, {
           maxRetries: 0,
           timeout,
           signal: AbortSignal.timeout(timeout),
-        },
-      );
-      const latencyMs = this.elapsedMilliseconds(startedAt);
+        });
+        const latencyMs = this.elapsedMilliseconds(startedAt);
 
-      if (!response.output_parsed) {
+        if (!response.output_parsed) {
+          return {
+            status: "failed",
+            failureCode: this.responseFailureCode(response),
+            latencyMs,
+          };
+        }
+
+        return {
+          status: "completed",
+          explanation: response.output_parsed,
+          metadata: {
+            provider,
+            model,
+            promptVersion: IMPACT_EXPLANATION_PROMPT_VERSION,
+            outputSchemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
+            latencyMs,
+            usage: {
+              inputTokens: response.usage?.input_tokens ?? 0,
+              outputTokens: response.usage?.output_tokens ?? 0,
+              totalTokens: response.usage?.total_tokens ?? 0,
+            },
+          },
+        };
+      } catch (error: unknown) {
+        const failureCode = this.normalizeError(error);
+        if (
+          provider === "groq" &&
+          attempt === 0 &&
+          failureCode === "provider_request_rejected"
+        ) {
+          continue;
+        }
         return {
           status: "failed",
-          failureCode: this.responseFailureCode(response),
-          latencyMs,
+          failureCode,
+          latencyMs: this.elapsedMilliseconds(startedAt),
         };
       }
-
-      return {
-        status: "completed",
-        explanation: response.output_parsed,
-        metadata: {
-          provider: "openai",
-          model,
-          promptVersion: IMPACT_EXPLANATION_PROMPT_VERSION,
-          outputSchemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
-          latencyMs,
-          usage: {
-            inputTokens: response.usage?.input_tokens ?? 0,
-            outputTokens: response.usage?.output_tokens ?? 0,
-            totalTokens: response.usage?.total_tokens ?? 0,
-          },
-        },
-      };
-    } catch (error: unknown) {
-      return {
-        status: "failed",
-        failureCode: this.normalizeError(error),
-        latencyMs: this.elapsedMilliseconds(startedAt),
-      };
     }
+
+    return {
+      status: "failed",
+      failureCode: "provider_error",
+      latencyMs: this.elapsedMilliseconds(startedAt),
+    };
   }
 
-  private openai(apiKey: string, timeout: number): OpenAI {
+  private openai(
+    apiKey: string,
+    timeout: number,
+    provider: "openai" | "groq",
+  ): OpenAI {
     if (this.providedClient) return this.providedClient;
     this.client ??= new OpenAI({
       apiKey,
+      baseURL:
+        provider === "groq"
+          ? this.config.get("LLM_BASE_URL", { infer: true })
+          : undefined,
       maxRetries: 0,
       timeout,
     });
@@ -167,6 +213,16 @@ export class OpenAIExplanationClient implements ExplanationClient {
   }
 
   private normalizeError(error: unknown): ExplanationFailureCode {
+    if (error && typeof error === "object") {
+      const providerError = error as { status?: number; code?: string };
+      if (
+        providerError.status === 429 ||
+        (providerError.status === 413 &&
+          providerError.code === "rate_limit_exceeded")
+      ) {
+        return "provider_rate_limited";
+      }
+    }
     if (
       error instanceof APIConnectionTimeoutError ||
       error instanceof APIUserAbortError

@@ -5,7 +5,7 @@ import type {
   ImpactExplanationSchemaVersion,
 } from "./explanation.types";
 
-export type ExplanationProvider = "openai";
+export type ExplanationProvider = "openai" | "groq";
 
 export type ExplanationFailureCode = Extract<
   ImpactExplanationFailureCode,

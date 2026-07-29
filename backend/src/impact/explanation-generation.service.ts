@@ -51,6 +51,10 @@ export class ExplanationGenerationService {
           "LLM_MAX_EVIDENCE_CHARACTERS",
           { infer: true },
         ),
+        maxPacketCharacters: this.config.get(
+          "LLM_MAX_PACKET_CHARACTERS",
+          { infer: true },
+        ),
       });
     } catch {
       return this.persistFailure(
@@ -214,7 +218,10 @@ export class ExplanationGenerationService {
   ): ImpactExplanationGenerationMetadata {
     return {
       provider:
-        generation?.provider ?? (providerAttempted ? "openai" : null),
+        generation?.provider ??
+        (providerAttempted
+          ? this.config.get("LLM_PROVIDER", { infer: true })
+          : null),
       model:
         generation?.model ??
         (providerAttempted

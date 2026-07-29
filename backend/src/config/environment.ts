@@ -27,8 +27,10 @@ const environmentSchema = z.object({
   REPOSITORY_STORAGE_PATH: z.string().min(1).default("/tmp/atlas-repositories"),
   EMBEDDINGS_PROVIDER: z.enum(["local", "openai"]).default("local"),
   OPENAI_API_KEY: z.string().min(1).optional(),
+  GROQ_API_KEY: z.string().min(1).optional(),
   LLM_EXPLANATIONS_ENABLED: environmentBoolean.default(false),
-  LLM_PROVIDER: z.enum(["openai"]).default("openai"),
+  LLM_PROVIDER: z.enum(["openai", "groq"]).default("openai"),
+  LLM_BASE_URL: z.url().optional(),
   LLM_EXPLANATION_MODEL: z.string().trim().optional(),
   LLM_EXPLANATION_TIMEOUT_MS: z.coerce
     .number()
@@ -48,6 +50,19 @@ const environmentSchema = z.object({
     .positive()
     .max(200_000)
     .default(60_000),
+  LLM_MAX_PACKET_CHARACTERS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(200_000)
+    .default(60_000),
+  LLM_MAX_OUTPUT_TOKENS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(32_768)
+    .default(2_000),
+  LLM_REASONING_EFFORT: z.enum(["low", "medium", "high"]).default("low"),
   LLM_MAX_EXPLANATION_CHARACTERS: z.coerce
     .number()
     .int()
@@ -86,12 +101,19 @@ const environmentSchema = z.object({
         path: ["LLM_EXPLANATION_MODEL"],
       });
     }
-    if (!environment.OPENAI_API_KEY) {
+    const providerKey =
+      environment.LLM_PROVIDER === "groq"
+        ? environment.GROQ_API_KEY
+        : environment.OPENAI_API_KEY;
+    if (!providerKey) {
+      const keyName =
+        environment.LLM_PROVIDER === "groq"
+          ? "GROQ_API_KEY"
+          : "OPENAI_API_KEY";
       context.addIssue({
         code: "custom",
-        message:
-          "OPENAI_API_KEY is required when LLM explanations are enabled.",
-        path: ["OPENAI_API_KEY"],
+        message: `${keyName} is required when LLM explanations use ${environment.LLM_PROVIDER}.`,
+        path: [keyName],
       });
     }
   }

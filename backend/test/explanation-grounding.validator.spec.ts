@@ -215,6 +215,33 @@ describe("ExplanationGroundingValidator", () => {
       validator().validate(
         {
           ...validExplanation,
+          answer: "Keep the Next.js application behavior unchanged.",
+        },
+        packet,
+      ),
+    ).toEqual({
+      status: "valid",
+      explanation: {
+        ...validExplanation,
+        answer: "Keep the Next.js application behavior unchanged.",
+      },
+    });
+    expect(
+      validator().validate(
+        {
+          ...validExplanation,
+          answer: "Update `invented.ts`.",
+        },
+        packet,
+      ),
+    ).toEqual({
+      status: "invalid",
+      failureCode: "unknown_file_path",
+    });
+    expect(
+      validator().validate(
+        {
+          ...validExplanation,
           answer: "Call `inventedHandler` after the update.",
         },
         packet,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  impactExplanationProviderSchema,
   impactExplanationSchema,
   impactExplanationStateSchema,
 } from "../src/impact/explanation.schema";
@@ -45,6 +46,25 @@ describe("impact explanation contract", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("constrains provider citations to the packet allowlist", () => {
+    const providerSchema = impactExplanationProviderSchema([
+      "relationship:456",
+    ]);
+
+    expect(providerSchema.safeParse(validExplanation).success).toBe(false);
+    expect(
+      providerSchema.safeParse({
+        ...validExplanation,
+        implementationSteps: [
+          {
+            ...validExplanation.implementationSteps[0],
+            evidenceIds: ["relationship:456"],
+          },
+        ],
+      }).success,
+    ).toBe(true);
   });
 
   it("keeps recommendations structured and cited", () => {

@@ -11,6 +11,9 @@ describe("validateEnvironment", () => {
     expect(environment.REDIS_URL).toContain("redis://");
     expect(environment.LLM_EXPLANATIONS_ENABLED).toBe(false);
     expect(environment.LLM_EXPLANATION_TIMEOUT_MS).toBe(15_000);
+    expect(environment.LLM_MAX_PACKET_CHARACTERS).toBe(60_000);
+    expect(environment.LLM_MAX_OUTPUT_TOKENS).toBe(2_000);
+    expect(environment.LLM_REASONING_EFFORT).toBe("low");
     expect(environment.LLM_MAX_EXPLANATION_CHARACTERS).toBe(20_000);
   });
 
@@ -67,6 +70,27 @@ describe("validateEnvironment", () => {
       LLM_PROVIDER: "openai",
       LLM_EXPLANATION_MODEL: "configured-model",
     });
+
+    expect(() =>
+      validateEnvironment({
+        LLM_EXPLANATIONS_ENABLED: "true",
+        LLM_PROVIDER: "groq",
+        LLM_EXPLANATION_MODEL: "openai/gpt-oss-20b",
+      }),
+    ).toThrow("GROQ_API_KEY is required");
+    expect(
+      validateEnvironment({
+        LLM_EXPLANATIONS_ENABLED: "true",
+        LLM_PROVIDER: "groq",
+        LLM_BASE_URL: "https://api.groq.com/openai/v1",
+        LLM_EXPLANATION_MODEL: "openai/gpt-oss-20b",
+        GROQ_API_KEY: "test-key",
+      }),
+    ).toMatchObject({
+      LLM_EXPLANATIONS_ENABLED: true,
+      LLM_PROVIDER: "groq",
+      LLM_BASE_URL: "https://api.groq.com/openai/v1",
+    });
   });
 
   it("parses false explicitly and validates evidence limits", () => {
@@ -80,6 +104,12 @@ describe("validateEnvironment", () => {
     expect(() =>
       validateEnvironment({ LLM_MAX_EVIDENCE_CHARACTERS: "200001" }),
     ).toThrow("LLM_MAX_EVIDENCE_CHARACTERS");
+    expect(() =>
+      validateEnvironment({ LLM_MAX_PACKET_CHARACTERS: "200001" }),
+    ).toThrow("LLM_MAX_PACKET_CHARACTERS");
+    expect(() =>
+      validateEnvironment({ LLM_MAX_OUTPUT_TOKENS: "32769" }),
+    ).toThrow("LLM_MAX_OUTPUT_TOKENS");
     expect(() =>
       validateEnvironment({ LLM_MAX_EXPLANATION_CHARACTERS: "100001" }),
     ).toThrow("LLM_MAX_EXPLANATION_CHARACTERS");

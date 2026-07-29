@@ -215,6 +215,36 @@ describe("EvidencePacketBuilder", () => {
     expect(JSON.stringify(output.packet)).not.toContain("Old source");
   });
 
+  it("bounds the complete serialized packet, not only evidence excerpts", () => {
+    const { input, result } = fixture();
+    const repeatedDownstream = Array.from({ length: 40 }, (_, index) => ({
+      ...result.downstreamImpacts[0],
+      id: `downstream:${index}`,
+      filePath: `src/consumer-${index}.ts`,
+      title: `Consumer ${index} ${"x".repeat(300)}`,
+      detail: `Detailed impact ${index} ${"y".repeat(1_000)}`,
+    }));
+
+    const output = new EvidencePacketBuilder().build(
+      input,
+      {
+        ...result,
+        downstreamImpacts: repeatedDownstream,
+      },
+      {
+        maxEvidenceItems: 8,
+        maxEvidenceCharacters: 6_000,
+        maxPacketCharacters: 8_000,
+      },
+    );
+
+    expect(output.status).toBe("ready");
+    if (output.status !== "ready") return;
+    expect(JSON.stringify(output.packet).length).toBeLessThanOrEqual(8_000);
+    expect(output.packet.downstreamImpacts.length).toBeLessThan(40);
+    expect(output.packet.evidence.length).toBeGreaterThan(0);
+  });
+
   it("redacts credentials from the question and evidence", () => {
     const { input, result } = fixture();
     const output = new EvidencePacketBuilder().build(input, result);
