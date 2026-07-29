@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ImpactReportPage } from "@/components/features/impact";
 import type { AtlasImpactReport } from "@/lib/api-types";
 
@@ -110,9 +110,18 @@ const report: AtlasImpactReport = {
 };
 
 describe("ImpactReportPage", () => {
-  it("renders persisted findings, citations, and limitations", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("supports legacy reports with the deterministic fallback", () => {
     render(<ImpactReportPage report={report} />);
 
+    expect(
+      screen.getByRole("heading", {
+        name: "Enhanced explanation unavailable. Showing the verified Atlas analysis.",
+      }),
+    ).toBeVisible();
     expect(
       screen.getByRole("heading", { name: "Change session validation" }),
     ).toBeInTheDocument();
@@ -126,5 +135,130 @@ describe("ImpactReportPage", () => {
     expect(
       screen.getByText(/Preserve the authentication contract/i),
     ).toBeVisible();
+  });
+
+  it("separates a generated explanation from verified findings and links its citations", () => {
+    const explainedReport: AtlasImpactReport = {
+      ...report,
+      explanation: {
+        status: "completed",
+        schemaVersion: "1",
+        explanation: {
+          schemaVersion: "1",
+          executiveSummary:
+            "The session validation contract has one observed application consumer.",
+          answer: "Update the validator while preserving its import contract.",
+          claims: [
+            {
+              text: "The application layout imports the session validator.",
+              evidenceIds: ["relationship-1"],
+            },
+          ],
+          implementationSteps: [
+            {
+              title: "Preserve the exported contract",
+              detail: "Keep the imported validator compatible with its consumer.",
+              evidenceIds: ["relationship-1"],
+            },
+          ],
+          verificationSteps: [
+            {
+              text: "Exercise the application layout authentication path.",
+              evidenceIds: ["relationship-1"],
+            },
+          ],
+          remainingQuestions: [
+            "Are there runtime consumers outside static imports?",
+          ],
+        },
+        metadata: {
+          provider: "groq",
+          model: "test-model",
+          promptVersion: "1",
+          outputSchemaVersion: "1",
+          evidencePacketHash: "packet-hash",
+          sourceRevision: "abcdef1234567890",
+          generatedAt: "2026-07-29T12:00:01.000Z",
+          latencyMs: 250,
+          usage: {
+            inputTokens: 100,
+            outputTokens: 80,
+            totalTokens: 180,
+          },
+          validationStatus: "valid",
+          failureCode: null,
+          deterministicFallback: false,
+        },
+      },
+    };
+
+    render(<ImpactReportPage report={explainedReport} />);
+
+    expect(screen.getByText("AI explanation")).toBeVisible();
+    expect(
+      screen.getByText(/model did not scan the repository/i),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Implementation guidance" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Verification guidance" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Remaining questions" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Verified limitations" }),
+    ).toBeVisible();
+    expect(
+      screen.getAllByRole("link", {
+        name: "View evidence from app/layout.tsx line 4",
+      })[0],
+    ).toHaveAttribute("href", "#evidence-relationship-1");
+    expect(
+      screen.getByText(/change is anchored in lib\/auth\.ts/i),
+    ).toBeVisible();
+  });
+
+  it("retries a failed explanation without hiding the verified report", async () => {
+    const failedReport: AtlasImpactReport = {
+      ...report,
+      explanation: {
+        status: "failed",
+        schemaVersion: "1",
+        failureCode: "provider_unavailable",
+      },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ...failedReport,
+          explanation: {
+            status: "pending",
+            schemaVersion: "1",
+          },
+        }),
+      }),
+    );
+
+    render(<ImpactReportPage report={failedReport} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry explanation" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", {
+          name: "Enhanced explanation is being generated.",
+        }),
+      ).toBeVisible();
+    });
+    expect(screen.getByText("validateSession · lib/auth.ts")).toBeVisible();
+    expect(fetch).toHaveBeenCalledWith(
+      `/api/impact-reports/${report.id}/explanation/retry`,
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 });

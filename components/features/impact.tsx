@@ -25,6 +25,8 @@ import {
 import { PageHeader } from "@/components/app/shared";
 import { ConfidenceBadge } from "@/components/brand";
 import type {
+  AtlasImpactCitation,
+  AtlasImpactExplanationState,
   AtlasImpactFinding,
   AtlasImpactReport,
   AtlasRepository,
@@ -60,6 +62,244 @@ function ImpactFindingCard({ item }: { item: AtlasImpactFinding }) {
       </div>
       <ConfidenceBadge type={confidence} />
     </article>
+  );
+}
+
+const EXPLANATION_FALLBACK =
+  "Enhanced explanation unavailable. Showing the verified Atlas analysis.";
+
+function evidenceDomId(evidenceId: string) {
+  return `evidence-${evidenceId.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+}
+
+function CitationLinks({
+  evidenceIds,
+  evidenceById,
+}: {
+  evidenceIds: string[];
+  evidenceById: Map<string, AtlasImpactCitation>;
+}) {
+  const citations = evidenceIds
+    .map((id) => evidenceById.get(id))
+    .filter((citation): citation is AtlasImpactCitation => Boolean(citation));
+
+  if (!citations.length) return null;
+
+  return (
+    <span className="explanation-citations" aria-label="Supporting citations">
+      {citations.map((citation) => (
+        <a
+          href={`#${evidenceDomId(citation.id)}`}
+          key={citation.id}
+          aria-label={`View evidence from ${citation.filePath}${
+            citation.lineStart ? ` line ${citation.lineStart}` : ""
+          }`}
+        >
+          <Link2 size={12} />
+          {citation.filePath}
+          {citation.lineStart ? `:${citation.lineStart}` : ""}
+        </a>
+      ))}
+    </span>
+  );
+}
+
+function ExplanationFallback({
+  explanation,
+  retrying,
+  retryError,
+  onRetry,
+}: {
+  explanation: AtlasImpactExplanationState | null | undefined;
+  retrying: boolean;
+  retryError: string;
+  onRetry: () => void;
+}) {
+  const canRetry = !explanation || explanation.status === "failed";
+  const failure =
+    explanation?.status === "failed" && explanation.failureCode
+      ? explanation.failureCode.replaceAll("_", " ")
+      : null;
+
+  return (
+    <section className="explanation-fallback panel" aria-live="polite">
+      <div>
+        <span className="explanation-label">
+          <Sparkles size={14} /> AI explanation
+        </span>
+        <h2>{EXPLANATION_FALLBACK}</h2>
+        <p>
+          The deterministic findings, evidence, limitations, and verification
+          plan below remain available.
+          {failure ? ` Generation stopped because of ${failure}.` : ""}
+        </p>
+        {retryError && (
+          <p className="explanation-retry-error" role="alert">
+            {retryError}
+          </p>
+        )}
+      </div>
+      {canRetry && (
+        <button
+          className="button button--ghost"
+          type="button"
+          onClick={onRetry}
+          disabled={retrying}
+        >
+          <RefreshCw className={retrying ? "spin" : ""} size={14} />
+          {retrying ? "Retrying…" : "Retry explanation"}
+        </button>
+      )}
+    </section>
+  );
+}
+
+function AIExplanation({
+  state,
+  evidence,
+  limitations,
+  retrying,
+  retryError,
+  onRetry,
+}: {
+  state: AtlasImpactExplanationState | null | undefined;
+  evidence: AtlasImpactCitation[];
+  limitations: string[];
+  retrying: boolean;
+  retryError: string;
+  onRetry: () => void;
+}) {
+  if (state?.status === "pending") {
+    return (
+      <section className="explanation-fallback panel" aria-live="polite">
+        <div>
+          <span className="explanation-label">
+            <Sparkles size={14} /> AI explanation
+          </span>
+          <h2>Enhanced explanation is being generated.</h2>
+          <p>
+            The verified Atlas analysis is ready below while generation
+            completes.
+          </p>
+        </div>
+        <RefreshCw className="spin" size={18} aria-hidden="true" />
+      </section>
+    );
+  }
+
+  if (state?.status !== "completed") {
+    return (
+      <ExplanationFallback
+        explanation={state}
+        retrying={retrying}
+        retryError={retryError}
+        onRetry={onRetry}
+      />
+    );
+  }
+
+  const { explanation, metadata } = state;
+  const evidenceById = new Map(evidence.map((item) => [item.id, item]));
+
+  return (
+    <section className="ai-explanation panel" aria-labelledby="ai-explanation-title">
+      <header className="ai-explanation__header">
+        <div>
+          <span className="explanation-label">
+            <Sparkles size={14} /> AI explanation
+          </span>
+          <h2 id="ai-explanation-title">{explanation.answer}</h2>
+          <p>{explanation.executiveSummary}</p>
+        </div>
+        {metadata?.model && (
+          <span className="explanation-model">
+            {metadata.provider} · {metadata.model}
+          </span>
+        )}
+      </header>
+      <p className="explanation-boundary">
+        Generated from Atlas&apos;s verified evidence packet. The model did not
+        scan the repository.
+      </p>
+
+      <div className="ai-explanation__section">
+        <h3>Evidence-grounded claims</h3>
+        <div className="explanation-claims">
+          {explanation.claims.map((claim, index) => (
+            <article key={`${claim.text}:${index}`}>
+              <p>{claim.text}</p>
+              <CitationLinks
+                evidenceIds={claim.evidenceIds}
+                evidenceById={evidenceById}
+              />
+            </article>
+          ))}
+        </div>
+      </div>
+
+      <div className="explanation-guidance-grid">
+        <section className="ai-explanation__section">
+          <h3>Implementation guidance</h3>
+          <ol className="explanation-steps">
+            {explanation.implementationSteps.map((step, index) => (
+              <li key={`${step.title}:${index}`}>
+                <div>
+                  <b>{step.title}</b>
+                  <p>{step.detail}</p>
+                  <CitationLinks
+                    evidenceIds={step.evidenceIds}
+                    evidenceById={evidenceById}
+                  />
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+        <section className="ai-explanation__section">
+          <h3>Verification guidance</h3>
+          <ol className="explanation-steps">
+            {explanation.verificationSteps.map((step, index) => (
+              <li key={`${step.text}:${index}`}>
+                <div>
+                  <p>{step.text}</p>
+                  <CitationLinks
+                    evidenceIds={step.evidenceIds}
+                    evidenceById={evidenceById}
+                  />
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+      </div>
+
+      <div className="explanation-unknowns">
+        <section>
+          <h3>Remaining questions</h3>
+          {explanation.remainingQuestions.length ? (
+            <ul>
+              {explanation.remainingQuestions.map((question) => (
+                <li key={question}>{question}</li>
+              ))}
+            </ul>
+          ) : (
+            <p>No additional questions were generated.</p>
+          )}
+        </section>
+        <section>
+          <h3>Verified limitations</h3>
+          {limitations.length ? (
+            <ul>
+              {limitations.map((limitation) => (
+                <li key={limitation}>{limitation}</li>
+              ))}
+            </ul>
+          ) : (
+            <p>No deterministic limitations were recorded.</p>
+          )}
+        </section>
+      </div>
+    </section>
   );
 }
 
@@ -401,7 +641,10 @@ export function ImpactNewPage({
 
 export function ImpactReportPage({ report }: { report: AtlasImpactReport }) {
   const [feedback, setFeedback] = useState("");
-  const { result } = report;
+  const [currentReport, setCurrentReport] = useState(report);
+  const [retryingExplanation, setRetryingExplanation] = useState(false);
+  const [explanationRetryError, setExplanationRetryError] = useState("");
+  const { result } = currentReport;
   const downstreamAndUnknown = [
     ...result.downstreamImpacts,
     ...result.unknownImpacts,
@@ -410,6 +653,39 @@ export function ImpactReportPage({ report }: { report: AtlasImpactReport }) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(result.generatedAt));
+
+  async function retryExplanation() {
+    setRetryingExplanation(true);
+    setExplanationRetryError("");
+    try {
+      const response = await fetch(
+        `/api/impact-reports/${currentReport.id}/explanation/retry`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ workspaceId: currentReport.workspaceId }),
+        },
+      );
+      const nextReport = (await response.json()) as AtlasImpactReport & {
+        message?: string | string[];
+      };
+      if (!response.ok || !nextReport.result) {
+        const message = Array.isArray(nextReport.message)
+          ? nextReport.message.join(" ")
+          : nextReport.message;
+        throw new Error(message ?? "Atlas could not retry the explanation.");
+      }
+      setCurrentReport(nextReport);
+    } catch (reason) {
+      setExplanationRetryError(
+        reason instanceof Error
+          ? reason.message
+          : "Atlas could not retry the explanation.",
+      );
+    } finally {
+      setRetryingExplanation(false);
+    }
+  }
 
   return (
     <>
@@ -487,6 +763,14 @@ export function ImpactReportPage({ report }: { report: AtlasImpactReport }) {
           <p>{result.risk.reasons.join(" · ")}</p>
         </div>
       </section>
+      <AIExplanation
+        state={currentReport.explanation}
+        evidence={result.evidence}
+        limitations={result.limitations}
+        retrying={retryingExplanation}
+        retryError={explanationRetryError}
+        onRetry={retryExplanation}
+      />
       <section className="executive-summary panel">
         <div className="summary-icon">
           <AlertTriangle size={21} />
@@ -494,8 +778,8 @@ export function ImpactReportPage({ report }: { report: AtlasImpactReport }) {
         <div>
           <span>
             {result.status === "insufficient_evidence"
-              ? "Evidence status"
-              : "Answer"}
+              ? "Verified evidence status"
+              : "Verified Atlas analysis"}
           </span>
           <h2>{result.answer ?? result.executiveSummary}</h2>
           <p>{result.executiveSummary}</p>
@@ -619,6 +903,8 @@ export function ImpactReportPage({ report }: { report: AtlasImpactReport }) {
               {result.evidence.map((item) => (
                 <article
                   key={item.id}
+                  id={evidenceDomId(item.id)}
+                  tabIndex={-1}
                   className={`evidence-row ${
                     item.provenance === "typescript_static_import"
                       ? "evidence-row--orange"
