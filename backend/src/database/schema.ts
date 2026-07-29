@@ -402,6 +402,40 @@ export const architectureSnapshots = pgTable(
   ],
 );
 
+export const impactReports = pgTable(
+  "impact_reports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    repositoryId: uuid("repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    requestedByUserId: text("requested_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    sourceRevision: text("source_revision").notNull(),
+    input: jsonb("input")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    result: jsonb("result")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index("impact_reports_workspace_id_idx").on(table.workspaceId),
+    index("impact_reports_repository_id_idx").on(table.repositoryId),
+    index("impact_reports_requested_by_user_id_idx").on(
+      table.requestedByUserId,
+    ),
+    index("impact_reports_created_at_idx").on(table.createdAt),
+  ],
+);
+
 export const syncJobs = pgTable(
   "sync_jobs",
   {

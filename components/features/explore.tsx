@@ -82,7 +82,7 @@ export function GraphPage({ architecture = false }: { architecture?: boolean }) 
             <div><span>exports</span><b>12 endpoints</b></div>
             <div><span>documented by</span><b>ADR-024</b></div>
           </div>
-          <Link href="/app/impact/demo" className="button button--primary">Analyze a change here <ArrowRight size={15} /></Link>
+          <Link href="/app/impact/new" className="button button--primary">Analyze a change here <ArrowRight size={15} /></Link>
         </aside>
       </div>
     </>

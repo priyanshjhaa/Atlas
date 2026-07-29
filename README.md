@@ -60,7 +60,7 @@ npm run build
 - `/sign-in` — GitHub sign-in
 - `/app` — protected workspace overview
 - `/app/impact/new` — planned-change and pull-request input
-- `/app/impact/demo` — evidence-backed impact report
+- `/app/impact/:reportId` — persisted, evidence-backed impact report
 - `/app/graph` — engineering knowledge graph
 - `/app/architecture` — system architecture
 - `/app/search` — engineering search

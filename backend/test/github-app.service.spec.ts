@@ -21,7 +21,7 @@ describe("GitHubAppService", () => {
         type: "spki",
       },
     });
-    const fetchMock = vi.fn().mockResolvedValue(
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
           id: 456,
@@ -48,13 +48,83 @@ describe("GitHubAppService", () => {
     await expect(service.getInstallation("456")).resolves.toMatchObject({
       id: 456,
     });
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.github.com/app/installations/456",
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: expect.stringMatching(/^Bearer ey/),
-        }),
-      }),
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe("https://api.github.com/app/installations/456");
+    expect(new Headers(init?.headers).get("Authorization")).toMatch(
+      /^Bearer ey/,
     );
+  });
+
+  it("paginates pull-request files beyond the first 100", async () => {
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: {
+        format: "pem",
+        type: "pkcs1",
+      },
+      publicKeyEncoding: {
+        format: "pem",
+        type: "spki",
+      },
+    });
+    const files = Array.from({ length: 125 }, (_, index) => ({
+      filename: `src/file-${index}.ts`,
+      status: "modified",
+      additions: 1,
+      deletions: 1,
+      changes: 2,
+    }));
+    const fetchMock = vi.fn<typeof fetch>(async (request) => {
+      const url =
+        request instanceof Request ? request.url : request.toString();
+      if (url.endsWith("/app/installations/456/access_tokens")) {
+        return new Response(JSON.stringify({ token: "installation-token" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 201,
+        });
+      }
+      if (url.endsWith("/repos/atlas/web/pulls/42")) {
+        return new Response(
+          JSON.stringify({
+            number: 42,
+            title: "Large change",
+            body: null,
+            html_url: "https://github.com/atlas/web/pull/42",
+            changed_files: 125,
+            additions: 125,
+            deletions: 125,
+            user: { login: "engineer" },
+            base: { sha: "base", ref: "main" },
+            head: { sha: "head", ref: "feature" },
+          }),
+          { headers: { "Content-Type": "application/json" }, status: 200 },
+        );
+      }
+      const page = new URL(url).searchParams.get("page");
+      return new Response(
+        JSON.stringify(page === "1" ? files.slice(0, 100) : files.slice(100)),
+        { headers: { "Content-Type": "application/json" }, status: 200 },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const config = new ConfigService<Environment>({
+      GITHUB_APP_ID: "123",
+      GITHUB_APP_PRIVATE_KEY: Buffer.from(privateKey).toString("base64"),
+    });
+    const service = new GitHubAppService(
+      config as unknown as ConfigService<Environment, true>,
+    );
+
+    const result = await service.getPullRequest("456", "atlas", "web", 42);
+
+    expect(result.files).toHaveLength(125);
+    expect(result.filesTruncated).toBe(false);
+    expect(
+      fetchMock.mock.calls.some(([request]) => {
+        const url =
+          request instanceof Request ? request.url : request.toString();
+        return url.includes("per_page=100&page=2");
+      }),
+    ).toBe(true);
   });
 });

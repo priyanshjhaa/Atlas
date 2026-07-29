@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { DatabaseService } from "../database/database.service";
 import {
   architectureSnapshots,
@@ -188,7 +188,17 @@ export class IntelligenceRepository {
     return result.rows;
   }
 
-  async lexicalCandidates(workspaceId: string, repositoryId: string) {
+  async lexicalCandidates(
+    workspaceId: string,
+    repositoryId: string,
+    terms: string[],
+  ) {
+    const termFilters = terms.flatMap((term) => [
+      ilike(codeFiles.path, `%${term}%`),
+      ilike(codeChunks.summary, `%${term}%`),
+      ilike(codeChunks.content, `%${term}%`),
+    ]);
+    if (!termFilters.length) return [];
     return this.database.client
       .select({
         id: codeChunks.id,
@@ -204,9 +214,10 @@ export class IntelligenceRepository {
         and(
           eq(codeChunks.workspaceId, workspaceId),
           eq(codeChunks.repositoryId, repositoryId),
+          or(...termFilters),
         ),
       )
-      .limit(500);
+      .limit(240);
   }
 
   async repositoryExists(

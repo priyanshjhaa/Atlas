@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { EmbeddingsService } from "./embeddings.service";
 import { IntelligenceRepository } from "./intelligence.repository";
+import { expandedQueryTerms } from "./query-terms";
 
 interface RankedChunk {
   id: string;
@@ -24,12 +25,14 @@ export class RetrievalService {
       throw new NotFoundException("Repository not found.");
     }
 
-    const [embedding] = await this.embeddings.embedTexts([query]);
+    const terms = expandedQueryTerms(query);
+    const [embedding] = await this.embeddings.embedTexts([
+      [query, ...terms].join("\n"),
+    ]);
     const [vectorRows, lexicalRows] = await Promise.all([
       this.repository.vectorCandidates(workspaceId, repositoryId, embedding),
-      this.repository.lexicalCandidates(workspaceId, repositoryId),
+      this.repository.lexicalCandidates(workspaceId, repositoryId, terms),
     ]);
-    const terms = this.queryTerms(query);
     const ranked = new Map<string, RankedChunk>();
 
     for (const row of vectorRows) {
@@ -69,10 +72,11 @@ export class RetrievalService {
         ),
       }))
       .sort((left, right) => right.score - left.score)
-      .slice(0, 8)
+      .slice(0, 16)
       .map((chunk) => ({
         id: chunk.id,
         score: chunk.score,
+        lexicalMatches: chunk.lexicalMatches,
         reason: chunk.summary ?? "Code context matched the search.",
         excerpt: chunk.content.slice(0, 1_000),
         citation: {
@@ -97,19 +101,10 @@ export class RetrievalService {
     return {
       query,
       results,
-      lowConfidence: !results.length || (results[0]?.score ?? 0) < 0.34,
+      lowConfidence:
+        !results.length ||
+        ((results[0]?.score ?? 0) < 0.34 &&
+          (results[0]?.lexicalMatches ?? 0) === 0),
     };
-  }
-
-  private queryTerms(query: string) {
-    return [
-      ...new Set(
-        query
-          .toLowerCase()
-          .replace(/[^a-z0-9_./-]+/g, " ")
-          .split(/\s+/)
-          .filter((term) => term.length >= 3),
-      ),
-    ].slice(0, 12);
   }
 }

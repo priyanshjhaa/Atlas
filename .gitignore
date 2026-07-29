@@ -16,6 +16,8 @@ node_modules/
 
 # testing
 coverage/
+playwright-report/
+test-results/
 
 # backend build output
 backend/dist/

@@ -25,6 +25,6 @@ import { SourceDiscoveryService } from "./source-discovery.service";
     RetrievalService,
     SourceDiscoveryService,
   ],
-  exports: [IngestionService],
+  exports: [IngestionService, RetrievalService],
 })
 export class IntelligenceModule {}
