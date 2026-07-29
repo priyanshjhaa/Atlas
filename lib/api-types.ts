@@ -160,6 +160,7 @@ export interface AtlasImpactExplanationGenerationMetadata {
     totalTokens: number;
   };
   validationStatus: "valid" | "invalid" | "not_run";
+  failureCode: AtlasImpactExplanationFailureCode | null;
   deterministicFallback: boolean;
 }
 

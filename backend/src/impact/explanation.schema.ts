@@ -65,6 +65,7 @@ const generationMetadataSchema = z
       })
       .strict(),
     validationStatus: z.enum(["valid", "invalid", "not_run"]),
+    failureCode: z.enum(IMPACT_EXPLANATION_FAILURE_CODES).nullable(),
     deterministicFallback: z.boolean(),
   })
   .strict();

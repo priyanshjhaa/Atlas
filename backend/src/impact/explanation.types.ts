@@ -80,6 +80,7 @@ export interface ImpactExplanationGenerationMetadata {
     totalTokens: number;
   };
   validationStatus: "valid" | "invalid" | "not_run";
+  failureCode: ImpactExplanationFailureCode | null;
   deterministicFallback: boolean;
 }
 

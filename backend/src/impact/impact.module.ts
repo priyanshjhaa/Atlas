@@ -4,6 +4,7 @@ import { IntelligenceModule } from "../intelligence/intelligence.module";
 import { EvidencePacketBuilder } from "./evidence-packet.builder";
 import { ExplanationGenerationService } from "./explanation-generation.service";
 import { ExplanationGroundingValidator } from "./explanation-grounding.validator";
+import { ExplanationObservabilityService } from "./explanation-observability.service";
 import { ImpactAnalysisService } from "./impact-analysis.service";
 import { ImpactRepository } from "./impact.repository";
 import { ImpactReportsController } from "./impact-reports.controller";
@@ -18,6 +19,7 @@ import { PullRequestResolverService } from "./pull-request-resolver.service";
     EvidencePacketBuilder,
     ExplanationGenerationService,
     ExplanationGroundingValidator,
+    ExplanationObservabilityService,
     ImpactAnalysisService,
     ImpactRepository,
     ImpactReportsService,

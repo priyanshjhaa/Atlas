@@ -9,6 +9,7 @@ import type { ImpactEvidencePacket } from "../src/impact/evidence-packet.types";
 import { IMPACT_EVIDENCE_PACKET_VERSION } from "../src/impact/evidence-packet.types";
 import { ExplanationGenerationService } from "../src/impact/explanation-generation.service";
 import type { ExplanationGroundingValidator } from "../src/impact/explanation-grounding.validator";
+import type { ExplanationObservabilityService } from "../src/impact/explanation-observability.service";
 import { IMPACT_EXPLANATION_PROMPT_VERSION } from "../src/impact/explanation.prompt";
 import {
   IMPACT_EXPLANATION_SCHEMA_VERSION,
@@ -146,12 +147,19 @@ function setup(options: {
         ) => ({ ...storedReport, explanation: state }),
       ),
   };
+  const observability = {
+    recordAttempt: vi.fn(),
+    recordSuccess: vi.fn(),
+    recordFallback: vi.fn(),
+    recordDisabled: vi.fn(),
+  };
   const service = new ExplanationGenerationService(
     config(options.enabled ?? true),
     packets as unknown as EvidencePacketBuilder,
     client as unknown as OpenAIExplanationClient,
     validator as unknown as ExplanationGroundingValidator,
     repository as unknown as ImpactRepository,
+    observability as unknown as ExplanationObservabilityService,
   );
   return {
     service,
@@ -160,12 +168,20 @@ function setup(options: {
     client,
     validator,
     repository,
+    observability,
   };
 }
 
 describe("ExplanationGenerationService", () => {
   it("persists pending then a validated completed explanation", async () => {
-    const { service, report: stored, client, validator, repository } = setup();
+    const {
+      service,
+      report: stored,
+      client,
+      validator,
+      repository,
+      observability,
+    } = setup();
 
     const result = await service.generate(stored);
 
@@ -177,6 +193,17 @@ describe("ExplanationGenerationService", () => {
       evidencePacketHash: "packet-hash",
       promptVersion: IMPACT_EXPLANATION_PROMPT_VERSION,
     });
+    expect(repository.updateExplanation).toHaveBeenLastCalledWith(
+      "workspace-1",
+      "report-1",
+      expect.objectContaining({ status: "completed" }),
+      "user-1",
+    );
+    expect(observability.recordAttempt).toHaveBeenCalledWith(
+      stored,
+      "packet-hash",
+    );
+    expect(observability.recordSuccess).toHaveBeenCalledOnce();
     expect(result.explanation).toMatchObject({
       status: "completed",
       explanation,
@@ -184,6 +211,7 @@ describe("ExplanationGenerationService", () => {
         evidencePacketHash: "packet-hash",
         sourceRevision: "revision-1",
         validationStatus: "valid",
+        failureCode: null,
         deterministicFallback: false,
         usage: { totalTokens: 140 },
       },
@@ -221,6 +249,7 @@ describe("ExplanationGenerationService", () => {
         latencyMs: 25,
         usage: { inputTokens: 100, outputTokens: 40, totalTokens: 140 },
         validationStatus: "valid",
+        failureCode: null,
         deterministicFallback: false,
       },
     };
@@ -270,11 +299,16 @@ describe("ExplanationGenerationService", () => {
       metadata: {
         latencyMs: 15_000,
         validationStatus: "not_run",
+        failureCode: "provider_timeout",
         deterministicFallback: true,
       },
     });
     expect(providerResult.explanation).not.toHaveProperty("explanation");
     expect(providerResult.result).toBe(providerSetup.report.result);
+    expect(providerSetup.observability.recordFallback).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ failureCode: "provider_timeout" }),
+    );
 
     const validationSetup = setup({
       validationResult: {
@@ -290,6 +324,7 @@ describe("ExplanationGenerationService", () => {
       failureCode: "unknown_file_path",
       metadata: {
         validationStatus: "invalid",
+        failureCode: "unknown_file_path",
         deterministicFallback: true,
       },
     });
@@ -314,6 +349,7 @@ describe("ExplanationGenerationService", () => {
         evidencePacketHash: null,
         provider: null,
         model: null,
+        failureCode: "no_resolved_evidence",
         deterministicFallback: true,
       },
     });
@@ -334,6 +370,7 @@ describe("ExplanationGenerationService", () => {
       metadata: {
         provider: null,
         model: null,
+        failureCode: "generation_failed",
         deterministicFallback: true,
       },
     });

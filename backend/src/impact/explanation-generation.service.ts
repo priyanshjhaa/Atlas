@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import type { Environment } from "../config/environment";
 import { EvidencePacketBuilder } from "./evidence-packet.builder";
 import { ExplanationGroundingValidator } from "./explanation-grounding.validator";
+import { ExplanationObservabilityService } from "./explanation-observability.service";
 import type { ExplanationGenerationMetadata } from "./explanation-client.types";
 import { IMPACT_EXPLANATION_PROMPT_VERSION } from "./explanation.prompt";
 import {
@@ -23,6 +24,7 @@ export class ExplanationGenerationService {
     private readonly client: OpenAIExplanationClient,
     private readonly validator: ExplanationGroundingValidator,
     private readonly repository: ImpactRepository,
+    private readonly observability: ExplanationObservabilityService,
   ) {}
 
   async generate(
@@ -31,10 +33,12 @@ export class ExplanationGenerationService {
   ): Promise<StoredImpactReport> {
     if (!this.config.get("LLM_EXPLANATIONS_ENABLED", { infer: true })) {
       if (report.explanation?.status === "completed") return report;
-      return this.persist(report, {
+      const disabled = await this.persist(report, {
         status: "disabled",
         schemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
       });
+      this.observability.recordDisabled(disabled);
+      return disabled;
     }
 
     let packetResult;
@@ -93,6 +97,10 @@ export class ExplanationGenerationService {
       return report;
     }
 
+    this.observability.recordAttempt(
+      report,
+      packetResult.evidencePacketHash,
+    );
     const pending = await this.persist(report, {
       status: "pending",
       schemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
@@ -105,10 +113,12 @@ export class ExplanationGenerationService {
     try {
       const generated = await this.client.generate(packetResult.packet);
       if (generated.status === "disabled") {
-        return this.persist(pending, {
+        const disabled = await this.persist(pending, {
           status: "disabled",
           schemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
         });
+        this.observability.recordDisabled(disabled);
+        return disabled;
       }
       if (generated.status === "failed") {
         return this.persistFailure(
@@ -135,19 +145,23 @@ export class ExplanationGenerationService {
         );
       }
 
-      return this.persist(pending, {
+      const metadata = this.metadata(
+        pending,
+        packetResult.evidencePacketHash,
+        generated.metadata.latencyMs,
+        "valid",
+        false,
+        null,
+        generated.metadata,
+      );
+      const completed = await this.persist(pending, {
         status: "completed",
         schemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
         explanation: validation.explanation,
-        metadata: this.metadata(
-          pending,
-          packetResult.evidencePacketHash,
-          generated.metadata.latencyMs,
-          "valid",
-          false,
-          generated.metadata,
-        ),
+        metadata,
       });
+      this.observability.recordSuccess(completed, metadata);
+      return completed;
     } catch {
       return this.persistFailure(
         pending,
@@ -159,7 +173,7 @@ export class ExplanationGenerationService {
     }
   }
 
-  private persistFailure(
+  private async persistFailure(
     report: StoredImpactReport,
     failureCode: ImpactExplanationFailureCode,
     evidencePacketHash: string | null,
@@ -168,20 +182,24 @@ export class ExplanationGenerationService {
     generation?: ExplanationGenerationMetadata,
     providerAttempted = true,
   ): Promise<StoredImpactReport> {
-    return this.persist(report, {
+    const metadata = this.metadata(
+      report,
+      evidencePacketHash,
+      latencyMs,
+      validationStatus,
+      true,
+      failureCode,
+      generation,
+      providerAttempted,
+    );
+    const failed = await this.persist(report, {
       status: "failed",
       schemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
       failureCode,
-      metadata: this.metadata(
-        report,
-        evidencePacketHash,
-        latencyMs,
-        validationStatus,
-        true,
-        generation,
-        providerAttempted,
-      ),
+      metadata,
     });
+    this.observability.recordFallback(failed, metadata);
+    return failed;
   }
 
   private metadata(
@@ -190,6 +208,7 @@ export class ExplanationGenerationService {
     latencyMs: number,
     validationStatus: ImpactExplanationGenerationMetadata["validationStatus"],
     deterministicFallback: boolean,
+    failureCode: ImpactExplanationFailureCode | null,
     generation?: ExplanationGenerationMetadata,
     providerAttempted = true,
   ): ImpactExplanationGenerationMetadata {
@@ -217,6 +236,7 @@ export class ExplanationGenerationService {
         totalTokens: 0,
       },
       validationStatus,
+      failureCode,
       deterministicFallback,
     };
   }
@@ -231,6 +251,7 @@ export class ExplanationGenerationService {
           report.workspaceId,
           report.id,
           explanation,
+          report.requestedByUserId,
         )) ?? { ...report, explanation }
       );
     } catch {
