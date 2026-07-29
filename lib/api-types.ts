@@ -87,6 +87,56 @@ export interface AtlasWorkspaceData {
 
 export type AtlasImpactScope = "repository" | "workspace";
 
+export const ATLAS_IMPACT_EXPLANATION_SCHEMA_VERSION = "1" as const;
+
+export type AtlasImpactExplanationSchemaVersion =
+  typeof ATLAS_IMPACT_EXPLANATION_SCHEMA_VERSION;
+
+export interface AtlasImpactExplanationClaim {
+  text: string;
+  evidenceIds: string[];
+}
+
+export interface AtlasImpactExplanationImplementationStep {
+  title: string;
+  detail: string;
+  evidenceIds: string[];
+}
+
+export interface AtlasImpactExplanationVerificationStep {
+  text: string;
+  evidenceIds: string[];
+}
+
+export interface AtlasImpactExplanation {
+  schemaVersion: AtlasImpactExplanationSchemaVersion;
+  executiveSummary: string;
+  answer: string;
+  claims: AtlasImpactExplanationClaim[];
+  implementationSteps: AtlasImpactExplanationImplementationStep[];
+  verificationSteps: AtlasImpactExplanationVerificationStep[];
+  remainingQuestions: string[];
+}
+
+export type AtlasImpactExplanationState =
+  | {
+      status: "pending";
+      schemaVersion: AtlasImpactExplanationSchemaVersion;
+    }
+  | {
+      status: "completed";
+      schemaVersion: AtlasImpactExplanationSchemaVersion;
+      explanation: AtlasImpactExplanation;
+    }
+  | {
+      status: "failed";
+      schemaVersion: AtlasImpactExplanationSchemaVersion;
+    }
+  | {
+      status: "disabled";
+      schemaVersion: AtlasImpactExplanationSchemaVersion;
+    };
+
 export interface AtlasImpactCitation {
   id: string;
   repositoryId: string;
@@ -195,6 +245,11 @@ export interface AtlasImpactReport {
     limitations: string[];
     generatedAt: string;
   };
+  /**
+   * Generated explanation is a sibling of the deterministic result and is
+   * optional so reports created before schema version 1 remain readable.
+   */
+  explanation?: AtlasImpactExplanationState;
   createdAt: string;
   updatedAt: string;
 }
