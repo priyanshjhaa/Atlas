@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+const environmentBoolean = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  if (value.toLowerCase() === "true") return true;
+  if (value.toLowerCase() === "false") return false;
+  return value;
+}, z.boolean());
+
 const environmentSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   HOST: z.string().min(1).default("0.0.0.0"),
@@ -20,6 +27,27 @@ const environmentSchema = z.object({
   REPOSITORY_STORAGE_PATH: z.string().min(1).default("/tmp/atlas-repositories"),
   EMBEDDINGS_PROVIDER: z.enum(["local", "openai"]).default("local"),
   OPENAI_API_KEY: z.string().min(1).optional(),
+  LLM_EXPLANATIONS_ENABLED: environmentBoolean.default(false),
+  LLM_PROVIDER: z.enum(["openai"]).default("openai"),
+  LLM_EXPLANATION_MODEL: z.string().trim().optional(),
+  LLM_EXPLANATION_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(120_000)
+    .default(15_000),
+  LLM_MAX_EVIDENCE_ITEMS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(100)
+    .default(30),
+  LLM_MAX_EVIDENCE_CHARACTERS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(200_000)
+    .default(60_000),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 }).superRefine((environment, context) => {
   const githubValues = [
@@ -42,6 +70,24 @@ const environmentSchema = z.object({
       message: "OPENAI_API_KEY is required when EMBEDDINGS_PROVIDER is openai.",
       path: ["OPENAI_API_KEY"],
     });
+  }
+  if (environment.LLM_EXPLANATIONS_ENABLED) {
+    if (!environment.LLM_EXPLANATION_MODEL) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "LLM_EXPLANATION_MODEL is required when LLM explanations are enabled.",
+        path: ["LLM_EXPLANATION_MODEL"],
+      });
+    }
+    if (!environment.OPENAI_API_KEY) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "OPENAI_API_KEY is required when LLM explanations are enabled.",
+        path: ["OPENAI_API_KEY"],
+      });
+    }
   }
 });
 

@@ -6,6 +6,7 @@ import { ImpactAnalysisService } from "./impact-analysis.service";
 import { ImpactRepository } from "./impact.repository";
 import { ImpactReportsController } from "./impact-reports.controller";
 import { ImpactReportsService } from "./impact-reports.service";
+import { OpenAIExplanationClient } from "./openai-explanation.client";
 import { PullRequestResolverService } from "./pull-request-resolver.service";
 
 @Module({
@@ -16,6 +17,7 @@ import { PullRequestResolverService } from "./pull-request-resolver.service";
     ImpactAnalysisService,
     ImpactRepository,
     ImpactReportsService,
+    OpenAIExplanationClient,
     PullRequestResolverService,
   ],
 })
