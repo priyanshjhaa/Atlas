@@ -11,6 +11,7 @@ describe("validateEnvironment", () => {
     expect(environment.REDIS_URL).toContain("redis://");
     expect(environment.LLM_EXPLANATIONS_ENABLED).toBe(false);
     expect(environment.LLM_EXPLANATION_TIMEOUT_MS).toBe(15_000);
+    expect(environment.LLM_MAX_EXPLANATION_CHARACTERS).toBe(20_000);
   });
 
   it("rejects an invalid port", () => {
@@ -79,5 +80,8 @@ describe("validateEnvironment", () => {
     expect(() =>
       validateEnvironment({ LLM_MAX_EVIDENCE_CHARACTERS: "200001" }),
     ).toThrow("LLM_MAX_EVIDENCE_CHARACTERS");
+    expect(() =>
+      validateEnvironment({ LLM_MAX_EXPLANATION_CHARACTERS: "100001" }),
+    ).toThrow("LLM_MAX_EXPLANATION_CHARACTERS");
   });
 });

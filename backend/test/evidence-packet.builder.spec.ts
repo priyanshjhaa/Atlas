@@ -154,7 +154,7 @@ function fixture(): {
         },
       ],
       relationshipPath: [
-        { repository: "atlas/identity", filePath: "src/session.ts", hop: 0 },
+        { repository: "identity", filePath: "src/session.ts", hop: 0 },
         { repository: "atlas/identity", filePath: "src/api.ts", hop: 1 },
         { repository: "atlas/identity", filePath: "src/api.ts", hop: 1 },
         { repository: "other/private", filePath: "secrets.ts", hop: 1 },

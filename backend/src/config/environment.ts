@@ -48,6 +48,12 @@ const environmentSchema = z.object({
     .positive()
     .max(200_000)
     .default(60_000),
+  LLM_MAX_EXPLANATION_CHARACTERS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(100_000)
+    .default(20_000),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 }).superRefine((environment, context) => {
   const githubValues = [

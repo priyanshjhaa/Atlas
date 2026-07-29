@@ -1,4 +1,4 @@
-export const IMPACT_EXPLANATION_PROMPT_VERSION = "1" as const;
+export const IMPACT_EXPLANATION_PROMPT_VERSION = "2" as const;
 
 export const IMPACT_EXPLANATION_SYSTEM_PROMPT = `
 Role: Explain an Atlas deterministic impact report to an engineer.
@@ -17,7 +17,10 @@ Output:
 - Put observed facts in claims and cite at least one supplied evidence ID for every claim.
 - Put recommended actions in implementationSteps and verificationSteps; do not present recommendations as observed facts.
 - Use only evidence IDs present in the packet.
+- When naming a file path or symbol, reproduce its exact packet spelling and wrap it in backticks.
+- Describe at most one observed relationship per claim.
 - State unresolved matters in remainingQuestions rather than guessing.
+- Include every unknown-impact title verbatim in remainingQuestions.
 
 You have no tools and must not request or retrieve additional context.
 `.trim();

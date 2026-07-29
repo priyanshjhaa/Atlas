@@ -1,0 +1,371 @@
+import { ConfigService } from "@nestjs/config";
+import { describe, expect, it } from "vitest";
+import {
+  type Environment,
+  validateEnvironment,
+} from "../src/config/environment";
+import type { ImpactEvidencePacket } from "../src/impact/evidence-packet.types";
+import { IMPACT_EVIDENCE_PACKET_VERSION } from "../src/impact/evidence-packet.types";
+import { ExplanationGroundingValidator } from "../src/impact/explanation-grounding.validator";
+import { IMPACT_EXPLANATION_SCHEMA_VERSION } from "../src/impact/explanation.types";
+
+const packet: ImpactEvidencePacket = {
+  packetVersion: IMPACT_EVIDENCE_PACKET_VERSION,
+  question: "Rotate the session contract.",
+  analysisMode: "planned",
+  analysisStatus: "complete",
+  repository: {
+    id: "repository-1",
+    owner: "atlas",
+    name: "identity",
+  },
+  sourceRevision: "revision-1",
+  risk: {
+    level: "medium",
+    score: 55,
+    reasons: ["One observed downstream consumer."],
+  },
+  directImpacts: [
+    {
+      id: "direct:session",
+      classification: "direct",
+      kind: "Symbol",
+      title: "refreshSession",
+      detail: "The resolved session boundary.",
+      repositoryId: "repository-1",
+      repository: "atlas/identity",
+      filePath: "src/session.ts",
+      symbol: "refreshSession",
+      hop: 0,
+      confidence: 0.9,
+      provenance: "indexed_source_chunk",
+      evidenceIds: ["chunk:session"],
+    },
+  ],
+  downstreamImpacts: [
+    {
+      id: "downstream:api",
+      classification: "downstream",
+      kind: "Consumer",
+      title: "src/api.ts",
+      detail: "Imports src/session.ts.",
+      repositoryId: "repository-1",
+      repository: "atlas/identity",
+      filePath: "src/api.ts",
+      hop: 1,
+      confidence: 1,
+      provenance: "typescript_static_import",
+      evidenceIds: ["relationship:api-session"],
+    },
+  ],
+  unknownImpacts: [
+    {
+      id: "unknown:runtime",
+      classification: "unknown",
+      kind: "Unknown",
+      title: "Runtime consumers",
+      detail: "Dynamic consumers are not represented.",
+      repositoryId: "repository-1",
+      repository: "atlas/identity",
+      hop: 0,
+      confidence: 0,
+      provenance: "analysis_gap",
+      evidenceIds: [],
+    },
+  ],
+  relationshipPaths: [
+    { repository: "atlas/identity", filePath: "src/session.ts", hop: 0 },
+    { repository: "atlas/identity", filePath: "src/api.ts", hop: 1 },
+  ],
+  evidence: [
+    {
+      id: "chunk:session",
+      repositoryId: "repository-1",
+      repository: "atlas/identity",
+      filePath: "src/session.ts",
+      lineStart: 10,
+      lineEnd: 14,
+      symbol: "refreshSession",
+      excerpt: "export function refreshSession() {}",
+      provenance: "indexed_source_chunk",
+      sourceRevision: "revision-1",
+    },
+    {
+      id: "relationship:api-session",
+      repositoryId: "repository-1",
+      repository: "atlas/identity",
+      filePath: "src/api.ts",
+      lineStart: 3,
+      lineEnd: 3,
+      excerpt: "Imports ./session, resolving to src/session.ts.",
+      provenance: "typescript_static_import",
+      sourceRevision: "revision-1",
+    },
+  ],
+  limitations: ["Static relationships only."],
+};
+
+const validExplanation = {
+  schemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
+  executiveSummary: "The verified report has medium risk.",
+  answer: "Update src/session.ts and verify src/api.ts.",
+  claims: [
+    {
+      text: "`src/api.ts` imports `src/session.ts`.",
+      evidenceIds: ["relationship:api-session"],
+    },
+    {
+      text: "`refreshSession` is present in src/session.ts.",
+      evidenceIds: ["chunk:session"],
+    },
+  ],
+  implementationSteps: [
+    {
+      title: "Update `refreshSession`",
+      detail: "Preserve the indexed source chunk contract in src/session.ts.",
+      evidenceIds: ["chunk:session"],
+    },
+  ],
+  verificationSteps: [
+    {
+      text: "Exercise the static import observed in src/api.ts.",
+      evidenceIds: ["relationship:api-session"],
+    },
+  ],
+  remainingQuestions: [
+    "Runtime consumers: which dynamic consumers require verification?",
+  ],
+};
+
+function validator(maxCharacters = 20_000): ExplanationGroundingValidator {
+  const environment = validateEnvironment({
+    LLM_MAX_EXPLANATION_CHARACTERS: String(maxCharacters),
+  });
+  return new ExplanationGroundingValidator(
+    new ConfigService<Environment>(
+      environment,
+    ) as unknown as ConfigService<Environment, true>,
+  );
+}
+
+describe("ExplanationGroundingValidator", () => {
+  it("accepts a fully grounded explanation", () => {
+    expect(validator().validate(validExplanation, packet)).toEqual({
+      status: "valid",
+      explanation: validExplanation,
+    });
+  });
+
+  it("rejects malformed, empty, or oversized output", () => {
+    expect(
+      validator().validate(
+        {
+          ...validExplanation,
+          claims: [{ text: "", evidenceIds: [] }],
+        },
+        packet,
+      ),
+    ).toEqual({
+      status: "invalid",
+      failureCode: "invalid_explanation_schema",
+    });
+    expect(
+      validator().validate({ ...validExplanation, claims: [] }, packet),
+    ).toEqual({
+      status: "invalid",
+      failureCode: "invalid_explanation_schema",
+    });
+    expect(validator(10).validate(validExplanation, packet)).toEqual({
+      status: "invalid",
+      failureCode: "explanation_too_large",
+    });
+  });
+
+  it("rejects unknown evidence, files, and symbols", () => {
+    expect(
+      validator().validate(
+        {
+          ...validExplanation,
+          claims: [
+            {
+              text: "A claim.",
+              evidenceIds: ["chunk:invented"],
+            },
+          ],
+        },
+        packet,
+      ),
+    ).toEqual({
+      status: "invalid",
+      failureCode: "unknown_evidence_id",
+    });
+    expect(
+      validator().validate(
+        {
+          ...validExplanation,
+          answer: "Update src/invented.ts.",
+        },
+        packet,
+      ),
+    ).toEqual({
+      status: "invalid",
+      failureCode: "unknown_file_path",
+    });
+    expect(
+      validator().validate(
+        {
+          ...validExplanation,
+          answer: "Call `inventedHandler` after the update.",
+        },
+        packet,
+      ),
+    ).toEqual({
+      status: "invalid",
+      failureCode: "unknown_symbol",
+    });
+  });
+
+  it("rejects invented relationships", () => {
+    const expandedPacket: ImpactEvidencePacket = {
+      ...packet,
+      directImpacts: [
+        ...packet.directImpacts,
+        {
+          ...packet.directImpacts[0],
+          id: "direct:cache",
+          title: "src/cache.ts",
+          filePath: "src/cache.ts",
+          symbol: undefined,
+          evidenceIds: ["chunk:cache"],
+        },
+      ],
+      evidence: [
+        ...packet.evidence,
+        {
+          ...packet.evidence[0],
+          id: "chunk:cache",
+          filePath: "src/cache.ts",
+          symbol: undefined,
+        },
+      ],
+    };
+    expect(
+      validator().validate(
+        {
+          ...validExplanation,
+          claims: [
+            {
+              text: "`src/api.ts` imports `src/cache.ts`.",
+              evidenceIds: ["relationship:api-session"],
+            },
+          ],
+        },
+        expandedPacket,
+      ),
+    ).toEqual({
+      status: "invalid",
+      failureCode: "unsupported_relationship",
+    });
+    expect(
+      validator().validate(
+        {
+          ...validExplanation,
+          claims: [
+            {
+              text: "`src/api.ts` calls `refreshSession`.",
+              evidenceIds: ["relationship:api-session"],
+            },
+          ],
+        },
+        expandedPacket,
+      ),
+    ).toEqual({
+      status: "invalid",
+      failureCode: "unsupported_relationship",
+    });
+  });
+
+  it("rejects altered risk, confidence, and provenance", () => {
+    expect(
+      validator().validate(
+        { ...validExplanation, executiveSummary: "This is high risk." },
+        packet,
+      ),
+    ).toEqual({
+      status: "invalid",
+      failureCode: "altered_risk",
+    });
+    expect(
+      validator().validate(
+        { ...validExplanation, executiveSummary: "This has severe risk." },
+        packet,
+      ),
+    ).toEqual({
+      status: "invalid",
+      failureCode: "altered_risk",
+    });
+    expect(
+      validator().validate(
+        {
+          ...validExplanation,
+          claims: [
+            {
+              text: "`refreshSession` has confidence 0.4.",
+              evidenceIds: ["chunk:session"],
+            },
+          ],
+        },
+        packet,
+      ),
+    ).toEqual({
+      status: "invalid",
+      failureCode: "altered_confidence",
+    });
+    expect(
+      validator().validate(
+        {
+          ...validExplanation,
+          claims: [
+            {
+              text: "`refreshSession` came from a static import.",
+              evidenceIds: ["chunk:session"],
+            },
+          ],
+        },
+        packet,
+      ),
+    ).toEqual({
+      status: "invalid",
+      failureCode: "altered_provenance",
+    });
+    expect(
+      validator().validate(
+        {
+          ...validExplanation,
+          claims: [
+            {
+              text: "`refreshSession` was verified through runtime observation.",
+              evidenceIds: ["chunk:session"],
+            },
+          ],
+        },
+        packet,
+      ),
+    ).toEqual({
+      status: "invalid",
+      failureCode: "altered_provenance",
+    });
+  });
+
+  it("requires every deterministic unknown to remain visible", () => {
+    expect(
+      validator().validate(
+        { ...validExplanation, remainingQuestions: ["Anything else?"] },
+        packet,
+      ),
+    ).toEqual({
+      status: "invalid",
+      failureCode: "missing_unknown_impact",
+    });
+  });
+});

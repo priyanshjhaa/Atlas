@@ -296,7 +296,9 @@ export class EvidencePacketBuilder {
       ImpactEvidencePacket["relationshipPaths"][number]
     >();
     for (const path of result.relationshipPath.filter(
-      (item) => item.repository === canonicalRepository,
+      (item) =>
+        item.repository === canonicalRepository ||
+        item.repository === result.repository.name,
     )) {
       const sanitized = {
         repository: canonicalRepository,

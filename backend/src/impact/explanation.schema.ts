@@ -35,7 +35,7 @@ export const impactExplanationSchema: z.ZodType<ImpactExplanation> = z
     schemaVersion: z.literal(IMPACT_EXPLANATION_SCHEMA_VERSION),
     executiveSummary: nonEmptyTextSchema,
     answer: nonEmptyTextSchema,
-    claims: z.array(claimSchema),
+    claims: z.array(claimSchema).min(1),
     implementationSteps: z.array(implementationStepSchema),
     verificationSteps: z.array(verificationStepSchema),
     remainingQuestions: z.array(nonEmptyTextSchema),
