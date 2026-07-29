@@ -48,12 +48,11 @@ describe("impact explanation contract", () => {
     expect(result.success).toBe(false);
   });
 
-  it("constrains provider citations to the packet allowlist", () => {
+  it("keeps provider citations structured for canonical validation", () => {
     const providerSchema = impactExplanationProviderSchema([
       "relationship:456",
     ]);
 
-    expect(providerSchema.safeParse(validExplanation).success).toBe(false);
     expect(
       providerSchema.safeParse({
         ...validExplanation,
@@ -65,6 +64,27 @@ describe("impact explanation contract", () => {
         ],
       }).success,
     ).toBe(true);
+    expect(
+      providerSchema.safeParse({
+        ...validExplanation,
+        claims: [{ text: "Missing citation.", evidenceIds: [] }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("requires a remaining question when the packet has analysis gaps", () => {
+    const providerSchema = impactExplanationProviderSchema(
+      ["relationship:456", "chunk:123"],
+      true,
+    );
+
+    expect(
+      providerSchema.safeParse({
+        ...validExplanation,
+        remainingQuestions: [],
+      }).success,
+    ).toBe(false);
+    expect(providerSchema.safeParse(validExplanation).success).toBe(true);
   });
 
   it("keeps recommendations structured and cited", () => {

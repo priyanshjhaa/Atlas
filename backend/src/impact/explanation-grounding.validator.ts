@@ -31,6 +31,7 @@ const PROVENANCE_PATTERNS = [
 interface ExplanationTextUnit {
   text: string;
   evidenceIds: string[];
+  kind: "factual" | "recommendation" | "question";
 }
 
 @Injectable()
@@ -113,24 +114,41 @@ export class ExplanationGroundingValidator {
   }
 
   private textUnits(explanation: ImpactExplanation): ExplanationTextUnit[] {
+    const claimEvidenceIds = [
+      ...new Set(
+        explanation.claims.flatMap((claim) => claim.evidenceIds),
+      ),
+    ];
     return [
-      { text: explanation.executiveSummary, evidenceIds: [] },
-      { text: explanation.answer, evidenceIds: [] },
+      {
+        text: explanation.executiveSummary,
+        evidenceIds: claimEvidenceIds,
+        kind: "factual",
+      },
+      {
+        text: explanation.answer,
+        evidenceIds: claimEvidenceIds,
+        kind: "factual",
+      },
       ...explanation.claims.map((claim) => ({
         text: claim.text,
         evidenceIds: claim.evidenceIds,
+        kind: "factual" as const,
       })),
       ...explanation.implementationSteps.map((step) => ({
         text: `${step.title}\n${step.detail}`,
         evidenceIds: step.evidenceIds,
+        kind: "recommendation" as const,
       })),
       ...explanation.verificationSteps.map((step) => ({
         text: step.text,
         evidenceIds: step.evidenceIds,
+        kind: "recommendation" as const,
       })),
       ...explanation.remainingQuestions.map((text) => ({
         text,
         evidenceIds: [],
+        kind: "question" as const,
       })),
     ];
   }
@@ -156,8 +174,24 @@ export class ExplanationGroundingValidator {
         ...packet.directImpacts.map((item) => item.symbol),
         ...packet.downstreamImpacts.map((item) => item.symbol),
         ...packet.evidence.map((item) => item.symbol),
+        ...packet.evidence.flatMap((item) =>
+          this.observedSourceIdentifiers(item.excerpt),
+        ),
       ].filter((symbol): symbol is string => Boolean(symbol)),
     );
+  }
+
+  private observedSourceIdentifiers(excerpt: string): string[] {
+    return [
+      ...new Set([
+        ...[...excerpt.matchAll(
+          /\b([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/g,
+        )].flatMap((match) => (match[1] ? [match[1]] : [])),
+        ...[...excerpt.matchAll(
+          /\b([a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+)\b/g,
+        )].flatMap((match) => (match[1] ? [match[1]] : [])),
+      ]),
+    ];
   }
 
   private extractFilePaths(text: string): string[] {
@@ -216,6 +250,7 @@ export class ExplanationGroundingValidator {
     );
 
     return units.every((unit) => {
+      if (unit.kind !== "factual") return true;
       const mentionedPaths = this.extractFilePaths(unit.text);
       const usesMultipleFiles =
         mentionedPaths.length >= 2 && /\b(uses?|consumes?)\b/i.test(unit.text);
@@ -320,6 +355,7 @@ export class ExplanationGroundingValidator {
 
     return units.every((unit) => {
       if (
+        unit.kind === "factual" &&
         /\b(runtime observation|runtime trace|dynamic analysis|test execution)\b/i.test(
           unit.text,
         )

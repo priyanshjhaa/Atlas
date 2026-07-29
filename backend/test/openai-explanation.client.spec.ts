@@ -76,7 +76,19 @@ function config(
 function fakeClient(parse: ReturnType<typeof vi.fn>): OpenAI {
   return {
     responses: { parse },
+    chat: { completions: { parse } },
   } as unknown as OpenAI;
+}
+
+function groqCompletion(parsed = explanation) {
+  return {
+    choices: [{ message: { parsed, refusal: null } }],
+    usage: {
+      prompt_tokens: 120,
+      completion_tokens: 45,
+      total_tokens: 165,
+    },
+  };
 }
 
 describe("OpenAIExplanationClient", () => {
@@ -151,16 +163,7 @@ describe("OpenAIExplanationClient", () => {
   });
 
   it("uses Groq metadata and omits unsupported response storage", async () => {
-    const parse = vi.fn().mockResolvedValue({
-      status: "completed",
-      output: [],
-      output_parsed: explanation,
-      usage: {
-        input_tokens: 120,
-        output_tokens: 45,
-        total_tokens: 165,
-      },
-    });
+    const parse = vi.fn().mockResolvedValue(groqCompletion());
     const client = new OpenAIExplanationClient(
       config({
         LLM_EXPLANATIONS_ENABLED: "true",
@@ -181,33 +184,48 @@ describe("OpenAIExplanationClient", () => {
     });
     const [request] = parse.mock.calls[0] as [Record<string, unknown>];
     expect(request).not.toHaveProperty("store");
-    expect(request).toHaveProperty("text.format.type", "json_schema");
-    expect(request).toHaveProperty("max_output_tokens", 2_000);
-    expect(request).toHaveProperty("reasoning.effort", "low");
-    expect(request).toHaveProperty("temperature", 0.1);
+    expect(request).toHaveProperty("response_format.type", "json_schema");
+    expect(request).toHaveProperty("max_completion_tokens", 2_000);
+    expect(request).toHaveProperty("reasoning_effort", "low");
+    expect(request).toHaveProperty("temperature", 0.01);
+    expect(request).toHaveProperty("tools", []);
   });
 
-  it("retries one transient Groq structured-generation rejection", async () => {
+  it("uses short provider citation aliases and restores canonical evidence IDs", async () => {
+    const canonicalEvidenceId =
+      "relationship:ddede320-0ef8-40a3-9781-b9a459cf95cf";
+    const packetWithEvidence: ImpactEvidencePacket = {
+      ...packet,
+      evidence: [
+        {
+          id: canonicalEvidenceId,
+          repositoryId: "repository-1",
+          repository: "atlas/identity",
+          filePath: "src/session.ts",
+          excerpt: "src/api.ts imports src/session.ts.",
+          provenance: "typescript_static_import",
+          sourceRevision: "revision-1",
+        },
+      ],
+    };
+    const aliasedExplanation = {
+      ...explanation,
+      claims: explanation.claims.map((claim) => ({
+        ...claim,
+        evidenceIds: ["E1"],
+      })),
+      implementationSteps: explanation.implementationSteps.map((step) => ({
+        ...step,
+        evidenceIds: ["E1"],
+      })),
+      verificationSteps: explanation.verificationSteps.map((step) => ({
+        ...step,
+        evidenceIds: ["E1"],
+      })),
+    };
     const parse = vi
       .fn()
-      .mockRejectedValueOnce(
-        new APIError(
-          400,
-          { error: { type: "invalid_request_error" } },
-          "raw generated JSON rejection",
-          new Headers(),
-        ),
-      )
-      .mockResolvedValueOnce({
-        status: "completed",
-        output: [],
-        output_parsed: explanation,
-        usage: {
-          input_tokens: 120,
-          output_tokens: 45,
-          total_tokens: 165,
-        },
-      });
+      .mockResolvedValue(groqCompletion(aliasedExplanation));
     const client = new OpenAIExplanationClient(
       config({
         LLM_EXPLANATIONS_ENABLED: "true",
@@ -218,11 +236,51 @@ describe("OpenAIExplanationClient", () => {
       fakeClient(parse),
     );
 
-    await expect(client.generate(packet)).resolves.toMatchObject({
+    const result = await client.generate(packetWithEvidence);
+
+    expect(result).toMatchObject({
       status: "completed",
-      metadata: { provider: "groq" },
+      explanation: {
+        claims: [{ evidenceIds: [canonicalEvidenceId] }],
+        implementationSteps: [{ evidenceIds: [canonicalEvidenceId] }],
+        verificationSteps: [{ evidenceIds: [canonicalEvidenceId] }],
+      },
     });
-    expect(parse).toHaveBeenCalledTimes(2);
+    const [request] = parse.mock.calls[0] as [Record<string, unknown>];
+    const messages = request.messages as Array<{ content: string }>;
+    expect(messages[1]?.content).toContain('"id":"E1"');
+    expect(messages[1]?.content).toContain(
+      'ALLOWED_FILE_PATHS=["src/session.ts"]',
+    );
+    expect(JSON.stringify(request)).not.toContain(canonicalEvidenceId);
+  });
+
+  it("fails closed after one Groq structured-generation rejection", async () => {
+    const parse = vi.fn().mockRejectedValueOnce(
+      new APIError(
+        400,
+        { error: { type: "invalid_request_error" } },
+        "raw generated JSON rejection",
+        new Headers(),
+      ),
+    );
+    const client = new OpenAIExplanationClient(
+      config({
+        LLM_EXPLANATIONS_ENABLED: "true",
+        LLM_PROVIDER: "groq",
+        LLM_EXPLANATION_MODEL: "openai/gpt-oss-20b",
+        GROQ_API_KEY: "test-key",
+      }),
+      fakeClient(parse),
+    );
+
+    const result = await client.generate(packet);
+    expect(result).toMatchObject({
+      status: "failed",
+      failureCode: "provider_request_rejected",
+    });
+    expect(JSON.stringify(result)).not.toContain("raw generated JSON");
+    expect(parse).toHaveBeenCalledTimes(1);
   });
 
   it("normalizes timeouts without exposing provider errors", async () => {

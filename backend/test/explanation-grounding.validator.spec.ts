@@ -252,6 +252,47 @@ describe("ExplanationGroundingValidator", () => {
     });
   });
 
+  it("accepts identifiers observed verbatim in cited source evidence", () => {
+    const packetWithObservedIdentifiers: ImpactEvidencePacket = {
+      ...packet,
+      evidence: packet.evidence.map((item) =>
+        item.id === "chunk:session"
+          ? {
+              ...item,
+              excerpt:
+                'export const accounts = pgTable("accounts", {});',
+            }
+          : item.id === "relationship:api-session"
+            ? {
+                ...item,
+                excerpt:
+                  "Imports auth.repository, resolving to src/session.ts.",
+              }
+            : item,
+      ),
+    };
+
+    expect(
+      validator().validate(
+        {
+          ...validExplanation,
+          claims: [
+            ...validExplanation.claims,
+            {
+              text: "The excerpt uses `pgTable()`.",
+              evidenceIds: ["chunk:session"],
+            },
+            {
+              text: "The import excerpt names `auth.repository`.",
+              evidenceIds: ["relationship:api-session"],
+            },
+          ],
+        },
+        packetWithObservedIdentifiers,
+      ),
+    ).toMatchObject({ status: "valid" });
+  });
+
   it("rejects invented relationships", () => {
     const expandedPacket: ImpactEvidencePacket = {
       ...packet,
@@ -312,7 +353,49 @@ describe("ExplanationGroundingValidator", () => {
     });
   });
 
+  it("does not treat recommended future checks as observed provenance", () => {
+    expect(
+      validator().validate(
+        {
+          ...validExplanation,
+          implementationSteps: [
+            {
+              ...validExplanation.implementationSteps[0],
+              detail:
+                "Update the contract before exercising database calls.",
+            },
+          ],
+          verificationSteps: [
+            {
+              ...validExplanation.verificationSteps[0],
+              text:
+                "Perform test execution and collect a runtime trace.",
+            },
+          ],
+        },
+        packet,
+      ),
+    ).toMatchObject({ status: "valid" });
+  });
+
   it("rejects altered risk, confidence, and provenance", () => {
+    expect(
+      validator().validate(
+        {
+          ...validExplanation,
+          answer:
+            "The indexed `refreshSession` finding has confidence 0.9.",
+        },
+        packet,
+      ),
+    ).toEqual({
+      status: "valid",
+      explanation: {
+        ...validExplanation,
+        answer:
+          "The indexed `refreshSession` finding has confidence 0.9.",
+      },
+    });
     expect(
       validator().validate(
         { ...validExplanation, executiveSummary: "This is high risk." },
@@ -341,6 +424,19 @@ describe("ExplanationGroundingValidator", () => {
               evidenceIds: ["chunk:session"],
             },
           ],
+        },
+        packet,
+      ),
+    ).toEqual({
+      status: "invalid",
+      failureCode: "altered_confidence",
+    });
+    expect(
+      validator().validate(
+        {
+          ...validExplanation,
+          answer:
+            "The indexed `refreshSession` finding has confidence 0.4.",
         },
         packet,
       ),

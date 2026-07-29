@@ -26,6 +26,7 @@ import { PageHeader } from "@/components/app/shared";
 import { ConfidenceBadge } from "@/components/brand";
 import type {
   AtlasImpactCitation,
+  AtlasImpactExplanationFailureCode,
   AtlasImpactExplanationState,
   AtlasImpactFinding,
   AtlasImpactReport,
@@ -116,22 +117,46 @@ function ExplanationFallback({
   onRetry: () => void;
 }) {
   const canRetry = !explanation || explanation.status === "failed";
-  const failure =
-    explanation?.status === "failed" && explanation.failureCode
-      ? explanation.failureCode.replaceAll("_", " ")
+  const failureCode =
+    explanation?.status === "failed"
+      ? explanation.failureCode ?? explanation.metadata?.failureCode
       : null;
+  const failureMessages: Partial<
+    Record<AtlasImpactExplanationFailureCode, string>
+  > = {
+        provider_request_rejected:
+          "The provider could not produce a response that satisfied Atlas’s grounding contract.",
+        invalid_provider_response:
+          "The provider returned a response Atlas could not safely validate.",
+        provider_rate_limited:
+          "The provider’s current usage limit has been reached. Try again shortly.",
+        provider_timeout:
+          "The provider did not finish within the configured time limit.",
+        provider_authentication:
+          "Atlas could not authenticate with the configured provider.",
+        provider_permission_denied:
+          "The configured provider account cannot use this model.",
+        provider_unavailable:
+          "The explanation provider is temporarily unavailable.",
+      };
+  const failure = failureCode
+    ? failureMessages[failureCode] ??
+      "Atlas could not safely validate the generated explanation."
+    : null;
 
   return (
     <section className="explanation-fallback panel" aria-live="polite">
-      <div>
+      <div className="explanation-fallback__icon">
+        <Sparkles size={18} />
+      </div>
+      <div className="explanation-fallback__copy">
         <span className="explanation-label">
-          <Sparkles size={14} /> AI explanation
+          AI explanation · deterministic fallback
         </span>
         <h2>{EXPLANATION_FALLBACK}</h2>
         <p>
-          The deterministic findings, evidence, limitations, and verification
-          plan below remain available.
-          {failure ? ` Generation stopped because of ${failure}.` : ""}
+          {failure ??
+            "The verified findings, evidence, limitations, and verification plan remain available below."}
         </p>
         {retryError && (
           <p className="explanation-retry-error" role="alert">
@@ -172,9 +197,12 @@ function AIExplanation({
   if (state?.status === "pending") {
     return (
       <section className="explanation-fallback panel" aria-live="polite">
-        <div>
+        <div className="explanation-fallback__icon">
+          <Sparkles size={18} />
+        </div>
+        <div className="explanation-fallback__copy">
           <span className="explanation-label">
-            <Sparkles size={14} /> AI explanation
+            AI explanation · generating
           </span>
           <h2>Enhanced explanation is being generated.</h2>
           <p>
@@ -200,6 +228,11 @@ function AIExplanation({
 
   const { explanation, metadata } = state;
   const evidenceById = new Map(evidence.map((item) => [item.id, item]));
+  const summaryEvidenceIds = [
+    ...new Set(
+      explanation.claims.flatMap((claim) => claim.evidenceIds),
+    ),
+  ];
 
   return (
     <section className="ai-explanation panel" aria-labelledby="ai-explanation-title">
@@ -210,6 +243,10 @@ function AIExplanation({
           </span>
           <h2 id="ai-explanation-title">{explanation.answer}</h2>
           <p>{explanation.executiveSummary}</p>
+          <CitationLinks
+            evidenceIds={summaryEvidenceIds}
+            evidenceById={evidenceById}
+          />
         </div>
         {metadata?.model && (
           <span className="explanation-model">

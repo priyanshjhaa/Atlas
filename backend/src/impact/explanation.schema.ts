@@ -11,6 +11,7 @@ const evidenceIdsSchema = z.array(nonEmptyTextSchema).min(1);
 
 function buildImpactExplanationSchema(
   evidenceIdSchema: z.ZodType<string>,
+  requireRemainingQuestions = false,
 ): z.ZodType<ImpactExplanation> {
   const citedEvidenceIdsSchema = z.array(evidenceIdSchema).min(1);
   return z
@@ -45,7 +46,9 @@ function buildImpactExplanationSchema(
           })
           .strict(),
       ),
-      remainingQuestions: z.array(nonEmptyTextSchema),
+      remainingQuestions: requireRemainingQuestions
+        ? z.array(nonEmptyTextSchema).min(1)
+        : z.array(nonEmptyTextSchema),
     })
     .strict();
 }
@@ -55,11 +58,12 @@ export const impactExplanationSchema = buildImpactExplanationSchema(
 );
 
 export function impactExplanationProviderSchema(
-  evidenceIds: string[],
+  _evidenceIds: string[],
+  requireRemainingQuestions = false,
 ): z.ZodType<ImpactExplanation> {
-  if (evidenceIds.length === 0) return impactExplanationSchema;
   return buildImpactExplanationSchema(
-    z.enum(evidenceIds as [string, ...string[]]),
+    nonEmptyTextSchema,
+    requireRemainingQuestions,
   );
 }
 
