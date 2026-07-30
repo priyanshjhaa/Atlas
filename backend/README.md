@@ -123,6 +123,30 @@ GitHub installation access tokens are created only when needed and are not
 stored. Installation metadata is encrypted with AES-256-GCM, webhook signatures
 are verified against the raw request body, and delivery IDs are deduplicated.
 
+## Groq explanation budget
+
+Groq's published free-plan limit for `openai/gpt-oss-120b` is currently 8,000
+tokens per minute and 200,000 tokens per day. The exact organization limits in
+the Groq console remain authoritative. Use this Atlas profile to leave room for
+medium reasoning and the structured response while retaining the highest-ranked
+evidence:
+
+```text
+LLM_PROVIDER=groq
+LLM_EXPLANATION_MODEL=openai/gpt-oss-120b
+LLM_MAX_EVIDENCE_ITEMS=8
+LLM_MAX_EVIDENCE_CHARACTERS=6000
+LLM_MAX_PACKET_CHARACTERS=7000
+LLM_MAX_OUTPUT_TOKENS=3000
+LLM_REASONING_EFFORT=medium
+```
+
+Atlas removes repository metadata duplicated inside findings and citations
+before sending the provider request. A transient JSON-validation failure is
+retried only when Groq's `x-ratelimit-remaining-tokens` response header reports
+enough capacity for another complete request. See the
+[Groq rate-limit documentation](https://console.groq.com/docs/rate-limits).
+
 ## Synchronization jobs
 
 The API process produces `atlas-repository-sync` BullMQ jobs and the separate

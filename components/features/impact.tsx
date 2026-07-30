@@ -76,19 +76,24 @@ function evidenceDomId(evidenceId: string) {
 function CitationLinks({
   evidenceIds,
   evidenceById,
+  limit,
 }: {
   evidenceIds: string[];
   evidenceById: Map<string, AtlasImpactCitation>;
+  limit?: number;
 }) {
   const citations = evidenceIds
     .map((id) => evidenceById.get(id))
     .filter((citation): citation is AtlasImpactCitation => Boolean(citation));
+  const visibleCitations =
+    limit === undefined ? citations : citations.slice(0, limit);
+  const hiddenCitationCount = citations.length - visibleCitations.length;
 
   if (!citations.length) return null;
 
   return (
     <span className="explanation-citations" aria-label="Supporting citations">
-      {citations.map((citation) => (
+      {visibleCitations.map((citation) => (
         <a
           href={`#${evidenceDomId(citation.id)}`}
           key={citation.id}
@@ -101,6 +106,11 @@ function CitationLinks({
           {citation.lineStart ? `:${citation.lineStart}` : ""}
         </a>
       ))}
+      {hiddenCitationCount > 0 && (
+        <span className="explanation-citations__more">
+          +{hiddenCitationCount} more in evidence
+        </span>
+      )}
     </span>
   );
 }
@@ -183,6 +193,7 @@ function AIExplanation({
   state,
   evidence,
   limitations,
+  mode = "overview",
   retrying,
   retryError,
   onRetry,
@@ -190,11 +201,13 @@ function AIExplanation({
   state: AtlasImpactExplanationState | null | undefined;
   evidence: AtlasImpactCitation[];
   limitations: string[];
+  mode?: "overview" | "claims" | "plan";
   retrying: boolean;
   retryError: string;
   onRetry: () => void;
 }) {
   if (state?.status === "pending") {
+    if (mode !== "overview") return null;
     return (
       <section className="explanation-fallback panel" aria-live="polite">
         <div className="explanation-fallback__icon">
@@ -216,6 +229,7 @@ function AIExplanation({
   }
 
   if (state?.status !== "completed") {
+    if (mode !== "overview") return null;
     return (
       <ExplanationFallback
         explanation={state}
@@ -233,50 +247,109 @@ function AIExplanation({
       explanation.claims.flatMap((claim) => claim.evidenceIds),
     ),
   ];
+  const summaryParagraphs = explanation.executiveSummary
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
+  if (mode === "overview") {
+    return (
+      <section
+        className="ai-explanation ai-explanation--overview"
+        aria-labelledby="ai-explanation-title"
+      >
+        <div className="ai-explanation__overview panel">
+          <header className="ai-explanation__header">
+            <div className="ai-explanation__intro">
+              <span className="explanation-label">
+                <Sparkles size={14} /> AI briefing
+              </span>
+              <h2 id="ai-explanation-title">What this change means</h2>
+              <p className="ai-explanation__answer">{explanation.answer}</p>
+              <div className="ai-explanation__summary">
+                {summaryParagraphs.map((paragraph, index) => (
+                  <p key={`${paragraph}:${index}`}>{paragraph}</p>
+                ))}
+              </div>
+              <CitationLinks
+                evidenceIds={summaryEvidenceIds}
+                evidenceById={evidenceById}
+                limit={3}
+              />
+              {explanation.implementationSteps.length > 0 && (
+                <div className="ai-explanation__actions">
+                  <span>Recommended path</span>
+                  <ol>
+                    {explanation.implementationSteps
+                      .slice(0, 3)
+                      .map((step) => (
+                        <li key={step.title}>
+                          <b>{step.title}</b>
+                          <p>{step.detail}</p>
+                        </li>
+                      ))}
+                  </ol>
+                </div>
+              )}
+            </div>
+            {metadata?.model && (
+              <span className="explanation-model">
+                {metadata.provider} · {metadata.model}
+              </span>
+            )}
+          </header>
+          <p className="explanation-boundary">
+            Generated from Atlas&apos;s verified evidence packet. The model did
+            not scan the repository.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  if (mode === "claims") {
+    return (
+      <section className="ai-explanation ai-explanation--detail">
+        <section className="ai-explanation__section panel">
+          <div className="explanation-section-heading">
+            <span>AI</span>
+            <div>
+              <h3>Evidence-grounded claims</h3>
+              <p>What Atlas can support directly from the indexed evidence.</p>
+            </div>
+          </div>
+          <div className="explanation-claims">
+            {explanation.claims.map((claim, index) => (
+              <article key={`${claim.text}:${index}`}>
+                <span className="explanation-claim-index">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <div>
+                  <p>{claim.text}</p>
+                  <CitationLinks
+                    evidenceIds={claim.evidenceIds}
+                    evidenceById={evidenceById}
+                  />
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      </section>
+    );
+  }
 
   return (
-    <section className="ai-explanation panel" aria-labelledby="ai-explanation-title">
-      <header className="ai-explanation__header">
-        <div>
-          <span className="explanation-label">
-            <Sparkles size={14} /> AI explanation
-          </span>
-          <h2 id="ai-explanation-title">{explanation.answer}</h2>
-          <p>{explanation.executiveSummary}</p>
-          <CitationLinks
-            evidenceIds={summaryEvidenceIds}
-            evidenceById={evidenceById}
-          />
-        </div>
-        {metadata?.model && (
-          <span className="explanation-model">
-            {metadata.provider} · {metadata.model}
-          </span>
-        )}
-      </header>
-      <p className="explanation-boundary">
-        Generated from Atlas&apos;s verified evidence packet. The model did not
-        scan the repository.
-      </p>
-
-      <div className="ai-explanation__section">
-        <h3>Evidence-grounded claims</h3>
-        <div className="explanation-claims">
-          {explanation.claims.map((claim, index) => (
-            <article key={`${claim.text}:${index}`}>
-              <p>{claim.text}</p>
-              <CitationLinks
-                evidenceIds={claim.evidenceIds}
-                evidenceById={evidenceById}
-              />
-            </article>
-          ))}
-        </div>
-      </div>
-
+    <section className="ai-explanation ai-explanation--detail">
       <div className="explanation-guidance-grid">
-        <section className="ai-explanation__section">
-          <h3>Implementation guidance</h3>
+        <section className="ai-explanation__section panel">
+          <div className="explanation-section-heading">
+            <span>AI</span>
+            <div>
+              <h3>Implementation guidance</h3>
+              <p>A sequenced path that preserves the observed contracts.</p>
+            </div>
+          </div>
           <ol className="explanation-steps">
             {explanation.implementationSteps.map((step, index) => (
               <li key={`${step.title}:${index}`}>
@@ -292,8 +365,14 @@ function AIExplanation({
             ))}
           </ol>
         </section>
-        <section className="ai-explanation__section">
-          <h3>Verification guidance</h3>
+        <section className="ai-explanation__section panel">
+          <div className="explanation-section-heading">
+            <span>AI</span>
+            <div>
+              <h3>Verification guidance</h3>
+              <p>Checks that turn the remaining risk into observable signals.</p>
+            </div>
+          </div>
           <ol className="explanation-steps">
             {explanation.verificationSteps.map((step, index) => (
               <li key={`${step.text}:${index}`}>
@@ -311,7 +390,8 @@ function AIExplanation({
       </div>
 
       <div className="explanation-unknowns">
-        <section>
+        <section className="panel">
+          <span className="explanation-unknowns__label">Open before implementation</span>
           <h3>Remaining questions</h3>
           {explanation.remainingQuestions.length ? (
             <ul>
@@ -323,7 +403,8 @@ function AIExplanation({
             <p>No additional questions were generated.</p>
           )}
         </section>
-        <section>
+        <section className="panel">
+          <span className="explanation-unknowns__label">Atlas analysis boundary</span>
           <h3>Verified limitations</h3>
           {limitations.length ? (
             <ul>
@@ -676,8 +757,50 @@ export function ImpactNewPage({
   );
 }
 
-export function ImpactReportPage({ report }: { report: AtlasImpactReport }) {
-  const [feedback, setFeedback] = useState("");
+export type ImpactReportView = "overview" | "findings" | "plan" | "evidence";
+
+function ReportNavigation({
+  reportId,
+  activeView,
+}: {
+  reportId: string;
+  activeView: ImpactReportView;
+}) {
+  const basePath = `/app/impact/${reportId}`;
+  const items: Array<{
+    view: ImpactReportView;
+    label: string;
+    href: string;
+  }> = [
+    { view: "overview", label: "Overview", href: basePath },
+    { view: "findings", label: "Findings", href: `${basePath}/findings` },
+    { view: "plan", label: "Plan", href: `${basePath}/plan` },
+    { view: "evidence", label: "Evidence", href: `${basePath}/evidence` },
+  ];
+
+  return (
+    <nav className="report-navigation" aria-label="Impact report sections">
+      {items.map((item) => (
+        <Link
+          key={item.view}
+          href={item.href}
+          className={activeView === item.view ? "active" : ""}
+          aria-current={activeView === item.view ? "page" : undefined}
+        >
+          {item.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+export function ImpactReportPage({
+  report,
+  view = "overview",
+}: {
+  report: AtlasImpactReport;
+  view?: ImpactReportView;
+}) {
   const [currentReport, setCurrentReport] = useState(report);
   const [retryingExplanation, setRetryingExplanation] = useState(false);
   const [explanationRetryError, setExplanationRetryError] = useState("");
@@ -800,197 +923,258 @@ export function ImpactReportPage({ report }: { report: AtlasImpactReport }) {
           <p>{result.risk.reasons.join(" · ")}</p>
         </div>
       </section>
-      <AIExplanation
-        state={currentReport.explanation}
-        evidence={result.evidence}
-        limitations={result.limitations}
-        retrying={retryingExplanation}
-        retryError={explanationRetryError}
-        onRetry={retryExplanation}
-      />
-      <section className="executive-summary panel">
-        <div className="summary-icon">
-          <AlertTriangle size={21} />
-        </div>
-        <div>
-          <span>
-            {result.status === "insufficient_evidence"
-              ? "Verified evidence status"
-              : "Verified Atlas analysis"}
-          </span>
-          <h2>{result.answer ?? result.executiveSummary}</h2>
-          <p>{result.executiveSummary}</p>
-          <p>
-            This report is derived from indexed source at revision{" "}
-            <code>{result.sourceRevision.slice(0, 12)}</code>. Analysis gaps
-            remain visible instead of being filled with generated assumptions.
-          </p>
-        </div>
-      </section>
-      <div className="report-grid">
-        <main>
-          <section className="report-section">
-            <div className="report-section__heading">
-              <div>
-                <span>01</span>
-                <h2>Resolved direct impact</h2>
+      <ReportNavigation reportId={currentReport.id} activeView={view} />
+
+      {view === "overview" && (
+        <div className="report-overview">
+          <AIExplanation
+            state={currentReport.explanation}
+            evidence={result.evidence}
+            limitations={result.limitations}
+            mode="overview"
+            retrying={retryingExplanation}
+            retryError={explanationRetryError}
+            onRetry={retryExplanation}
+          />
+          <section
+            className="verified-report verified-report--overview"
+            aria-labelledby="verified-report-title"
+          >
+            <header className="verified-report__intro">
+              <span>Source-backed analysis</span>
+              <h2 id="verified-report-title">Verified Atlas report</h2>
+              <p>
+                The deterministic conclusion remains separate from the generated
+                explanation.
+              </p>
+            </header>
+            <section className="executive-summary panel">
+              <div className="summary-icon">
+                <AlertTriangle size={21} />
               </div>
-              <p>Indexed source matches</p>
-            </div>
-            <div className="impact-card-list">
-              {result.directImpacts.map((item) => (
-                <ImpactFindingCard key={item.id} item={item} />
-              ))}
-              {!result.directImpacts.length && (
-                <div className="empty-state">
-                  <AlertTriangle size={20} />
-                  <h2>No direct anchor resolved</h2>
-                  <p>Add an exact file path or symbol and rerun the analysis.</p>
+              <div>
+                <span>
+                  {result.status === "insufficient_evidence"
+                    ? "Verified evidence status"
+                    : "Verified Atlas analysis"}
+                </span>
+                <h2>{result.answer ?? result.executiveSummary}</h2>
+                <p>{result.executiveSummary}</p>
+                <p>
+                  Derived from indexed source at revision{" "}
+                  <code>{result.sourceRevision.slice(0, 12)}</code>. Atlas keeps
+                  analysis gaps visible instead of filling them with assumptions.
+                </p>
+              </div>
+            </section>
+          </section>
+        </div>
+      )}
+
+      {view === "findings" && (
+        <section className="report-detail-page" aria-labelledby="findings-title">
+          <header className="report-detail-intro">
+            <span>Impact map</span>
+            <h2 id="findings-title">Findings</h2>
+            <p>
+              Review what Atlas resolved directly, the observed consumers, and
+              the relationship path behind the blast radius.
+            </p>
+          </header>
+          <AIExplanation
+            state={currentReport.explanation}
+            evidence={result.evidence}
+            limitations={result.limitations}
+            mode="claims"
+            retrying={retryingExplanation}
+            retryError={explanationRetryError}
+            onRetry={retryExplanation}
+          />
+          <main className="report-detail-main">
+            <section className="report-section">
+              <div className="report-section__heading">
+                <div>
+                  <span>01</span>
+                  <h2>Resolved direct impact</h2>
                 </div>
-              )}
-            </div>
-          </section>
-          <section className="report-section">
-            <div className="report-section__heading">
-              <div>
-                <span>02</span>
-                <h2>Downstream and unknown</h2>
+                <p>Indexed source matches</p>
               </div>
-              <p>Observed relationships and explicit gaps</p>
-            </div>
-            <div className="impact-card-list">
-              {downstreamAndUnknown.map((item) => (
-                <ImpactFindingCard key={item.id} item={item} />
-              ))}
-            </div>
-          </section>
-          <section className="report-section">
-            <div className="report-section__heading">
-              <div>
-                <span>03</span>
-                <h2>Observed relationship path</h2>
+              <div className="impact-card-list">
+                {result.directImpacts.map((item) => (
+                  <ImpactFindingCard key={item.id} item={item} />
+                ))}
+                {!result.directImpacts.length && (
+                  <div className="empty-state">
+                    <AlertTriangle size={20} />
+                    <h2>No direct anchor resolved</h2>
+                    <p>Add an exact file path or symbol and rerun the analysis.</p>
+                  </div>
+                )}
               </div>
-              <Link href="/app/graph">
-                Explore graph <ArrowRight size={14} />
-              </Link>
-            </div>
-            {result.relationshipPath.length ? (
-              <div className="path-diagram">
-                {result.relationshipPath.map((node, index) => (
-                  <Fragment key={`${node.filePath}:${node.hop}:${index}`}>
-                    <div>
-                      {node.repository}
-                      <small>{node.filePath}</small>
-                    </div>
-                    {index < result.relationshipPath.length - 1 && (
-                      <ArrowRight size={17} />
-                    )}
-                  </Fragment>
+            </section>
+            <section className="report-section">
+              <div className="report-section__heading">
+                <div>
+                  <span>02</span>
+                  <h2>Downstream and unknown</h2>
+                </div>
+                <p>Observed relationships and explicit gaps</p>
+              </div>
+              <div className="impact-card-list">
+                {downstreamAndUnknown.map((item) => (
+                  <ImpactFindingCard key={item.id} item={item} />
                 ))}
               </div>
-            ) : (
-              <div className="empty-state">
-                <Network size={20} />
-                <h2>No observed path</h2>
-                <p>The report records this as an analysis gap.</p>
+            </section>
+            <section className="report-section">
+              <div className="report-section__heading">
+                <div>
+                  <span>03</span>
+                  <h2>Observed relationship path</h2>
+                </div>
+                <Link href="/app/graph">
+                  Explore graph <ArrowRight size={14} />
+                </Link>
               </div>
-            )}
-          </section>
-          <section className="report-section">
-            <div className="report-section__heading">
-              <div>
-                <span>04</span>
-                <h2>Recommended next steps</h2>
-              </div>
-            </div>
-            <div className="check-list">
-              {(result.recommendations ?? []).map((item) => (
-                <label key={item}>
-                  <input type="checkbox" /> <span>{item}</span>
-                </label>
-              ))}
-            </div>
-          </section>
-          <section className="report-section">
-            <div className="report-section__heading">
-              <div>
-                <span>05</span>
-                <h2>Verification plan</h2>
-              </div>
-            </div>
-            <div className="check-list">
-              {result.verificationPlan.map((item) => (
-                <label key={item}>
-                  <input type="checkbox" /> <span>{item}</span>
-                </label>
-              ))}
-            </div>
-          </section>
-        </main>
-        <aside className="report-aside">
-          <div className="panel sticky-panel">
-            <div className="panel-heading">
-              <div>
-                <span>Supporting context</span>
-                <h2>Evidence</h2>
-              </div>
-              <FileText size={17} />
-            </div>
-            <div className="evidence-list">
-              {result.evidence.map((item) => (
-                <article
-                  key={item.id}
-                  id={evidenceDomId(item.id)}
-                  tabIndex={-1}
-                  className={`evidence-row ${
-                    item.provenance === "typescript_static_import"
-                      ? "evidence-row--orange"
-                      : "evidence-row--cyan"
-                  }`}
-                >
-                  <span>{item.provenance.replaceAll("_", " ")}</span>
-                  <b>
-                    {item.filePath}
-                    {item.lineStart ? `:${item.lineStart}` : ""}
-                  </b>
-                  <p>{item.excerpt}</p>
-                  <ArrowRight size={14} />
-                </article>
-              ))}
-              {!result.evidence.length && (
+              {result.relationshipPath.length ? (
+                <div className="path-diagram">
+                  {result.relationshipPath.map((node, index) => (
+                    <Fragment key={`${node.filePath}:${node.hop}:${index}`}>
+                      <div>
+                        {node.repository}
+                        <small>{node.filePath}</small>
+                      </div>
+                      {index < result.relationshipPath.length - 1 && (
+                        <ArrowRight size={17} />
+                      )}
+                    </Fragment>
+                  ))}
+                </div>
+              ) : (
                 <div className="empty-state">
-                  <FileText size={18} />
-                  <p>No supporting citation was resolved.</p>
+                  <Network size={20} />
+                  <h2>No observed path</h2>
+                  <p>The report records this as an analysis gap.</p>
                 </div>
               )}
-            </div>
+            </section>
+          </main>
+        </section>
+      )}
+
+      {view === "plan" && (
+        <section className="report-detail-page" aria-labelledby="plan-title">
+          <header className="report-detail-intro">
+            <span>Execution workspace</span>
+            <h2 id="plan-title">Implementation and verification plan</h2>
+            <p>
+              Work through the generated guidance alongside Atlas&apos;s
+              deterministic recommendations and checks.
+            </p>
+          </header>
+          <AIExplanation
+            state={currentReport.explanation}
+            evidence={result.evidence}
+            limitations={result.limitations}
+            mode="plan"
+            retrying={retryingExplanation}
+            retryError={explanationRetryError}
+            onRetry={retryExplanation}
+          />
+          <div className="verified-plan-grid">
+            <section className="report-section panel">
+              <div className="report-section__heading">
+                <div>
+                  <span>Atlas</span>
+                  <h2>Recommended next steps</h2>
+                </div>
+              </div>
+              <div className="check-list">
+                {(result.recommendations ?? []).map((item) => (
+                  <label key={item}>
+                    <input type="checkbox" /> <span>{item}</span>
+                  </label>
+                ))}
+              </div>
+            </section>
+            <section className="report-section panel">
+              <div className="report-section__heading">
+                <div>
+                  <span>Atlas</span>
+                  <h2>Verification plan</h2>
+                </div>
+              </div>
+              <div className="check-list">
+                {result.verificationPlan.map((item) => (
+                  <label key={item}>
+                    <input type="checkbox" /> <span>{item}</span>
+                  </label>
+                ))}
+              </div>
+            </section>
           </div>
-          <div className="panel owner-panel">
-            <span>Analysis boundaries</span>
-            <b>{result.limitations.length} recorded limitations</b>
-            {result.limitations.map((limitation) => (
-              <p key={limitation}>{limitation}</p>
-            ))}
-          </div>
-          <div className="feedback-panel">
-            <span>Was this analysis useful?</span>
-            <div>
-              {["Correct", "Missing", "Uncertain"].map((item) => (
-                <button
-                  className={feedback === item ? "active" : ""}
-                  onClick={() => setFeedback(item)}
-                  key={item}
-                >
-                  {item}
-                </button>
+        </section>
+      )}
+
+      {view === "evidence" && (
+        <section className="report-detail-page" aria-labelledby="evidence-title">
+          <header className="report-detail-intro">
+            <span>Source records</span>
+            <h2 id="evidence-title">Evidence</h2>
+            <p>
+              Browse the indexed sources behind both the Atlas report and the AI
+              briefing. Open an item only when you need its excerpt.
+            </p>
+          </header>
+          <div className="evidence-workspace">
+            <section className="panel evidence-workspace__sources">
+              <div className="panel-heading">
+                <div>
+                  <span>{result.evidence.length} indexed records</span>
+                  <h2>Supporting sources</h2>
+                </div>
+                <FileText size={17} />
+              </div>
+              <div className="evidence-list evidence-list--workspace">
+                {result.evidence.map((item) => (
+                  <details
+                    key={item.id}
+                    id={evidenceDomId(item.id)}
+                    className={`evidence-row ${
+                      item.provenance === "typescript_static_import"
+                        ? "evidence-row--orange"
+                        : "evidence-row--cyan"
+                    }`}
+                  >
+                    <summary>
+                      <span>{item.provenance.replaceAll("_", " ")}</span>
+                      <b>
+                        {item.filePath}
+                        {item.lineStart ? `:${item.lineStart}` : ""}
+                      </b>
+                      <ArrowRight size={14} />
+                    </summary>
+                    <p>{item.excerpt}</p>
+                  </details>
+                ))}
+                {!result.evidence.length && (
+                  <div className="empty-state">
+                    <FileText size={18} />
+                    <p>No supporting citation was resolved.</p>
+                  </div>
+                )}
+              </div>
+            </section>
+            <aside className="panel evidence-workspace__boundaries">
+              <span>Analysis boundaries</span>
+              <h2>{result.limitations.length} recorded limitations</h2>
+              {result.limitations.map((limitation) => (
+                <p key={limitation}>{limitation}</p>
               ))}
-            </div>
-            {feedback && (
-              <p>Thanks—“{feedback}” feedback is saved locally.</p>
-            )}
+            </aside>
           </div>
-        </aside>
-      </div>
+        </section>
+      )}
     </>
   );
 }

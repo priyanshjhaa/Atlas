@@ -31,6 +31,22 @@ const validExplanation = {
   ],
   remainingQuestions: ["Runtime-only consumers remain unverified."],
 };
+const providerExplanation = {
+  ...validExplanation,
+  claims: Array.from({ length: 3 }, (_, index) => ({
+    text: `The layout imports the session validator (${index + 1}).`,
+    evidenceIds: ["relationship:456"],
+  })),
+  implementationSteps: Array.from({ length: 3 }, (_, index) => ({
+    title: `Preserve the validator contract ${index + 1}`,
+    detail: "Update the resolved validator before its observed consumer.",
+    evidenceIds: ["relationship:456"],
+  })),
+  verificationSteps: Array.from({ length: 3 }, (_, index) => ({
+    text: `Exercise the observed layout consumer (${index + 1}).`,
+    evidenceIds: ["relationship:456"],
+  })),
+};
 
 describe("impact explanation contract", () => {
   it("accepts a versioned, cited structured explanation", () => {
@@ -55,24 +71,24 @@ describe("impact explanation contract", () => {
 
     expect(
       providerSchema.safeParse({
-        ...validExplanation,
-        implementationSteps: [
-          {
-            ...validExplanation.implementationSteps[0],
-            evidenceIds: ["relationship:456"],
-          },
-        ],
+        ...providerExplanation,
       }).success,
     ).toBe(true);
     expect(
       providerSchema.safeParse({
-        ...validExplanation,
+        ...providerExplanation,
+        claims: [{ text: "Missing citation.", evidenceIds: [] }],
+      }).success,
+    ).toBe(false);
+    expect(
+      impactExplanationSchema.safeParse({
+        ...providerExplanation,
         claims: [{ text: "Missing citation.", evidenceIds: [] }],
       }).success,
     ).toBe(false);
   });
 
-  it("requires a remaining question when the packet has analysis gaps", () => {
+  it("lets the grounding validator enforce remaining questions from packet context", () => {
     const providerSchema = impactExplanationProviderSchema(
       ["relationship:456", "chunk:123"],
       true,
@@ -80,11 +96,11 @@ describe("impact explanation contract", () => {
 
     expect(
       providerSchema.safeParse({
-        ...validExplanation,
+        ...providerExplanation,
         remainingQuestions: [],
       }).success,
-    ).toBe(false);
-    expect(providerSchema.safeParse(validExplanation).success).toBe(true);
+    ).toBe(true);
+    expect(providerSchema.safeParse(providerExplanation).success).toBe(true);
   });
 
   it("keeps recommendations structured and cited", () => {

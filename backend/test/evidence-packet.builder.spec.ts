@@ -196,6 +196,13 @@ describe("EvidencePacketBuilder", () => {
     ).toBeLessThanOrEqual(80);
     expect(first.packet.evidence[0]?.id).toBe("chunk:direct");
     expect(first.packet.relationshipPaths).toHaveLength(2);
+    expect(first.packet.packetVersion).toBe("2");
+    expect(first.packet.atlasAssessment).toEqual({
+      answer: "Update the session boundary.",
+      executiveSummary: "One direct and one downstream impact.",
+      recommendations: [],
+      verificationPlan: [],
+    });
   });
 
   it("deduplicates locations and excludes unauthorized or stale citations", () => {
@@ -247,14 +254,69 @@ describe("EvidencePacketBuilder", () => {
 
   it("redacts credentials from the question and evidence", () => {
     const { input, result } = fixture();
-    const output = new EvidencePacketBuilder().build(input, result);
+    const output = new EvidencePacketBuilder().build(input, {
+      ...result,
+      answer: "Rotate api_key=assessment-secret.",
+      recommendations: ["Send Bearer assessment-token-value-now."],
+    });
 
     expect(output.status).toBe("ready");
     if (output.status !== "ready") return;
     const serialized = JSON.stringify(output.packet);
     expect(serialized).not.toContain("super secret value");
     expect(serialized).not.toContain("abcdefghijklmnopqrstuvwxyz");
+    expect(serialized).not.toContain("assessment-secret");
+    expect(serialized).not.toContain("assessment-token-value-now");
     expect(serialized).toContain("[REDACTED]");
+  });
+
+  it("preserves the bounded Atlas assessment before lower-priority evidence", () => {
+    const { input, result } = fixture();
+    const output = new EvidencePacketBuilder().build(
+      input,
+      {
+        ...result,
+        answer: `Assessment ${"a".repeat(2_000)}`,
+        executiveSummary: `Summary ${"b".repeat(2_000)}`,
+        recommendations: Array.from(
+          { length: 10 },
+          (_, index) => `Recommendation ${index} ${"r".repeat(700)}`,
+        ),
+        verificationPlan: Array.from(
+          { length: 10 },
+          (_, index) => `Verification ${index} ${"v".repeat(700)}`,
+        ),
+      },
+      {
+        maxEvidenceItems: 8,
+        maxEvidenceCharacters: 6_000,
+        maxPacketCharacters: 4_000,
+      },
+    );
+
+    expect(output.status).toBe("ready");
+    if (output.status !== "ready") return;
+    expect(JSON.stringify(output.packet).length).toBeLessThanOrEqual(4_000);
+    expect(output.packet.atlasAssessment.answer.length).toBeGreaterThanOrEqual(
+      160,
+    );
+    expect(
+      output.packet.atlasAssessment.executiveSummary.length,
+    ).toBeGreaterThanOrEqual(240);
+    expect(output.packet.atlasAssessment.recommendations.length).toBeGreaterThan(
+      0,
+    );
+    expect(
+      output.packet.atlasAssessment.verificationPlan.length,
+    ).toBeGreaterThan(0);
+    expect(
+      new Set(output.packet.evidence.map((item) => item.provenance)),
+    ).toEqual(
+      new Set(["indexed_source_chunk", "typescript_static_import"]),
+    );
+    expect(output.packet.downstreamImpacts.length).toBeLessThanOrEqual(
+      result.downstreamImpacts.length,
+    );
   });
 
   it("does not copy changed-file patches into the packet", () => {

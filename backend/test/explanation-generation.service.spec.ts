@@ -24,6 +24,12 @@ const packet: ImpactEvidencePacket = {
   question: "Rotate sessions.",
   analysisMode: "planned",
   analysisStatus: "complete",
+  atlasAssessment: {
+    answer: "Update the session boundary.",
+    executiveSummary: "One observed consumer is affected.",
+    recommendations: ["Preserve the consumer contract."],
+    verificationPlan: ["Exercise the observed consumer."],
+  },
   repository: { id: "repository-1", owner: "atlas", name: "identity" },
   sourceRevision: "revision-1",
   risk: { level: "medium", score: 50, reasons: ["Observed consumer."] },

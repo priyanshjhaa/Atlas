@@ -88,6 +88,19 @@ export class EvidencePacketBuilder {
       ),
       analysisMode: input.mode,
       analysisStatus: result.status,
+      atlasAssessment: {
+        answer: this.sanitize(result.answer).slice(0, 1_200),
+        executiveSummary: this.sanitize(result.executiveSummary).slice(
+          0,
+          1_600,
+        ),
+        recommendations: result.recommendations
+          .slice(0, 6)
+          .map((item) => this.sanitize(item).slice(0, 600)),
+        verificationPlan: result.verificationPlan
+          .slice(0, 6)
+          .map((item) => this.sanitize(item).slice(0, 600)),
+      },
       repository: {
         id: result.repository.id,
         owner: result.repository.owner,
@@ -373,6 +386,21 @@ export class EvidencePacketBuilder {
       items.pop();
       return true;
     };
+    const removeEvidenceAt = (index: number) => {
+      packet.evidence.splice(index, 1);
+      const validEvidenceIds = new Set(
+        packet.evidence.map((item) => item.id),
+      );
+      for (const finding of [
+        ...packet.directImpacts,
+        ...packet.downstreamImpacts,
+        ...packet.unknownImpacts,
+      ]) {
+        finding.evidenceIds = finding.evidenceIds.filter((id) =>
+          validEvidenceIds.has(id),
+        );
+      }
+    };
 
     while (size() > maxCharacters) {
       if (removeLast(packet.downstreamImpacts, 4)) continue;
@@ -380,7 +408,9 @@ export class EvidencePacketBuilder {
       if (removeLast(packet.limitations, 1)) continue;
       if (removeLast(packet.unknownImpacts, 1)) continue;
 
-      const citation = packet.evidence.at(-1);
+      const citation = [...packet.evidence].sort(
+        (left, right) => right.excerpt.length - left.excerpt.length,
+      )[0];
       if (citation && citation.excerpt.length > 240) {
         const overflow = size() - maxCharacters;
         citation.excerpt = citation.excerpt.slice(
@@ -389,19 +419,18 @@ export class EvidencePacketBuilder {
         );
         continue;
       }
-      if (removeLast(packet.evidence, 1)) {
-        const validEvidenceIds = new Set(
-          packet.evidence.map((item) => item.id),
-        );
-        for (const finding of [
-          ...packet.directImpacts,
-          ...packet.downstreamImpacts,
-          ...packet.unknownImpacts,
-        ]) {
-          finding.evidenceIds = finding.evidenceIds.filter((id) =>
-            validEvidenceIds.has(id),
-          );
-        }
+      const provenanceCounts = new Map<string, number>();
+      packet.evidence.forEach((item) =>
+        provenanceCounts.set(
+          item.provenance,
+          (provenanceCounts.get(item.provenance) ?? 0) + 1,
+        ),
+      );
+      const redundantEvidenceIndex = packet.evidence.findLastIndex(
+        (item) => (provenanceCounts.get(item.provenance) ?? 0) > 1,
+      );
+      if (redundantEvidenceIndex >= 0) {
+        removeEvidenceAt(redundantEvidenceIndex);
         continue;
       }
       if (removeLast(packet.directImpacts, 1)) continue;
@@ -410,6 +439,34 @@ export class EvidencePacketBuilder {
           0,
           Math.max(240, packet.question.length - (size() - maxCharacters)),
         );
+        continue;
+      }
+      if (removeLast(packet.atlasAssessment.verificationPlan, 1)) continue;
+      if (removeLast(packet.atlasAssessment.recommendations, 1)) continue;
+      if (packet.atlasAssessment.executiveSummary.length > 240) {
+        packet.atlasAssessment.executiveSummary =
+          packet.atlasAssessment.executiveSummary.slice(
+            0,
+            Math.max(
+              240,
+              packet.atlasAssessment.executiveSummary.length -
+                (size() - maxCharacters),
+            ),
+          );
+        continue;
+      }
+      if (packet.atlasAssessment.answer.length > 160) {
+        packet.atlasAssessment.answer = packet.atlasAssessment.answer.slice(
+          0,
+          Math.max(
+            160,
+            packet.atlasAssessment.answer.length - (size() - maxCharacters),
+          ),
+        );
+        continue;
+      }
+      if (packet.evidence.length > 1) {
+        removeEvidenceAt(packet.evidence.length - 1);
         continue;
       }
       break;

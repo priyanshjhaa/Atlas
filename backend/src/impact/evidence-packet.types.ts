@@ -5,7 +5,7 @@ import type {
   ImpactRiskLevel,
 } from "./impact.types";
 
-export const IMPACT_EVIDENCE_PACKET_VERSION = "1" as const;
+export const IMPACT_EVIDENCE_PACKET_VERSION = "2" as const;
 
 export interface ImpactEvidencePacketFinding {
   id: string;
@@ -44,6 +44,12 @@ export interface ImpactEvidencePacket {
   question: string;
   analysisMode: ImpactInputMode;
   analysisStatus: ImpactAnalysisStatus;
+  atlasAssessment: {
+    answer: string;
+    executiveSummary: string;
+    recommendations: string[];
+    verificationPlan: string[];
+  };
   repository: {
     id: string;
     owner: string;

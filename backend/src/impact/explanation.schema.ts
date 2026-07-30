@@ -14,38 +14,39 @@ function buildImpactExplanationSchema(
   requireRemainingQuestions = false,
 ): z.ZodType<ImpactExplanation> {
   const citedEvidenceIdsSchema = z.array(evidenceIdSchema).min(1);
+  const claimsSchema = z.array(
+    z
+      .object({
+        text: nonEmptyTextSchema,
+        evidenceIds: citedEvidenceIdsSchema,
+      })
+      .strict(),
+  );
+  const implementationStepsSchema = z.array(
+    z
+      .object({
+        title: nonEmptyTextSchema,
+        detail: nonEmptyTextSchema,
+        evidenceIds: citedEvidenceIdsSchema,
+      })
+      .strict(),
+  );
+  const verificationStepsSchema = z.array(
+    z
+      .object({
+        text: nonEmptyTextSchema,
+        evidenceIds: citedEvidenceIdsSchema,
+      })
+      .strict(),
+  );
   return z
     .object({
       schemaVersion: z.literal(IMPACT_EXPLANATION_SCHEMA_VERSION),
       executiveSummary: nonEmptyTextSchema,
       answer: nonEmptyTextSchema,
-      claims: z
-        .array(
-          z
-            .object({
-              text: nonEmptyTextSchema,
-              evidenceIds: citedEvidenceIdsSchema,
-            })
-            .strict(),
-        )
-        .min(1),
-      implementationSteps: z.array(
-        z
-          .object({
-            title: nonEmptyTextSchema,
-            detail: nonEmptyTextSchema,
-            evidenceIds: citedEvidenceIdsSchema,
-          })
-          .strict(),
-      ),
-      verificationSteps: z.array(
-        z
-          .object({
-            text: nonEmptyTextSchema,
-            evidenceIds: citedEvidenceIdsSchema,
-          })
-          .strict(),
-      ),
+      claims: claimsSchema.min(1),
+      implementationSteps: implementationStepsSchema,
+      verificationSteps: verificationStepsSchema,
       remainingQuestions: requireRemainingQuestions
         ? z.array(nonEmptyTextSchema).min(1)
         : z.array(nonEmptyTextSchema),
@@ -61,10 +62,43 @@ export function impactExplanationProviderSchema(
   _evidenceIds: string[],
   requireRemainingQuestions = false,
 ): z.ZodType<ImpactExplanation> {
-  return buildImpactExplanationSchema(
-    nonEmptyTextSchema,
-    requireRemainingQuestions,
-  );
+  void requireRemainingQuestions;
+  const providerTextSchema = z.string();
+  const providerEvidenceIdsSchema = z.array(providerTextSchema).min(1);
+
+  return z
+    .object({
+      schemaVersion: z.enum([IMPACT_EXPLANATION_SCHEMA_VERSION]),
+      executiveSummary: providerTextSchema,
+      answer: providerTextSchema,
+      claims: z.array(
+        z
+          .object({
+            text: providerTextSchema,
+            evidenceIds: providerEvidenceIdsSchema,
+          })
+          .strict(),
+      ),
+      implementationSteps: z.array(
+        z
+          .object({
+            title: providerTextSchema,
+            detail: providerTextSchema,
+            evidenceIds: providerEvidenceIdsSchema,
+          })
+          .strict(),
+      ),
+      verificationSteps: z.array(
+        z
+          .object({
+            text: providerTextSchema,
+            evidenceIds: providerEvidenceIdsSchema,
+          })
+          .strict(),
+      ),
+      remainingQuestions: z.array(providerTextSchema),
+    })
+    .strict();
 }
 
 const stateBase = {

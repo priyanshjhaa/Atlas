@@ -93,6 +93,12 @@ export class ExplanationGroundingValidator {
     ) {
       return { status: "invalid", failureCode: "unknown_symbol" };
     }
+    if (this.overviewTechnicalNameCount(explanation) > 3) {
+      return {
+        status: "invalid",
+        failureCode: "excessive_overview_technical_names",
+      };
+    }
 
     if (!this.relationshipsAreSupported(units, packet)) {
       return { status: "invalid", failureCode: "unsupported_relationship" };
@@ -108,6 +114,19 @@ export class ExplanationGroundingValidator {
     }
     if (!this.unknownsAreRepresented(explanation, packet)) {
       return { status: "invalid", failureCode: "missing_unknown_impact" };
+    }
+    if (
+      explanation.claims.length < 3 ||
+      explanation.claims.length > 6 ||
+      explanation.implementationSteps.length < 3 ||
+      explanation.implementationSteps.length > 5 ||
+      explanation.verificationSteps.length < 3 ||
+      explanation.verificationSteps.length > 4
+    ) {
+      return {
+        status: "invalid",
+        failureCode: "invalid_explanation_schema",
+      };
     }
 
     return { status: "valid", explanation };
@@ -240,6 +259,18 @@ export class ExplanationGroundingValidator {
     return [...symbols];
   }
 
+  private overviewTechnicalNameCount(
+    explanation: ImpactExplanation,
+  ): number {
+    const overview = `${explanation.answer}\n${explanation.executiveSummary}`;
+    return new Set([
+      ...this.extractFilePaths(overview).map((path) => `file:${path}`),
+      ...this.extractCodeSymbols(overview).map(
+        (symbol) => `symbol:${symbol}`,
+      ),
+    ]).size;
+  }
+
   private relationshipsAreSupported(
     units: ExplanationTextUnit[],
     packet: ImpactEvidencePacket,
@@ -354,8 +385,8 @@ export class ExplanationGroundingValidator {
     const findings = this.allFindings(packet);
 
     return units.every((unit) => {
+      if (unit.kind !== "factual") return true;
       if (
-        unit.kind === "factual" &&
         /\b(runtime observation|runtime trace|dynamic analysis|test execution)\b/i.test(
           unit.text,
         )
@@ -391,6 +422,12 @@ export class ExplanationGroundingValidator {
     explanation: ImpactExplanation,
     packet: ImpactEvidencePacket,
   ): boolean {
+    if (
+      (packet.limitations.length > 0 || packet.unknownImpacts.length > 0) &&
+      explanation.remainingQuestions.length === 0
+    ) {
+      return false;
+    }
     const questions = this.normalize(explanation.remainingQuestions.join("\n"));
     return packet.unknownImpacts.every((unknown) =>
       questions.includes(this.normalize(unknown.title)),

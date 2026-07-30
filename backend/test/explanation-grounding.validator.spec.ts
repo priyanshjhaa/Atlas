@@ -14,6 +14,12 @@ const packet: ImpactEvidencePacket = {
   question: "Rotate the session contract.",
   analysisMode: "planned",
   analysisStatus: "complete",
+  atlasAssessment: {
+    answer: "Update the session boundary.",
+    executiveSummary: "One observed consumer is affected.",
+    recommendations: ["Preserve the consumer contract."],
+    verificationPlan: ["Exercise the observed consumer."],
+  },
   repository: {
     id: "repository-1",
     owner: "atlas",
@@ -118,6 +124,10 @@ const validExplanation = {
       text: "`refreshSession` is present in src/session.ts.",
       evidenceIds: ["chunk:session"],
     },
+    {
+      text: "The session boundary is grounded in indexed source.",
+      evidenceIds: ["chunk:session"],
+    },
   ],
   implementationSteps: [
     {
@@ -125,10 +135,28 @@ const validExplanation = {
       detail: "Preserve the indexed source chunk contract in src/session.ts.",
       evidenceIds: ["chunk:session"],
     },
+    {
+      title: "Coordinate the observed consumer",
+      detail: "Keep the compatibility boundary deliberate.",
+      evidenceIds: ["relationship:api-session"],
+    },
+    {
+      title: "Resolve the runtime uncertainty",
+      detail: "Confirm unobserved runtime consumers before rollout.",
+      evidenceIds: ["chunk:session"],
+    },
   ],
   verificationSteps: [
     {
       text: "Exercise the static import observed in src/api.ts.",
+      evidenceIds: ["relationship:api-session"],
+    },
+    {
+      text: "Verify the indexed session behavior.",
+      evidenceIds: ["chunk:session"],
+    },
+    {
+      text: "Confirm the compatibility boundary remains intact.",
       evidenceIds: ["relationship:api-session"],
     },
   ],
@@ -293,6 +321,34 @@ describe("ExplanationGroundingValidator", () => {
     ).toMatchObject({ status: "valid" });
   });
 
+  it("allows no more than three verified technical names in the overview", () => {
+    const packetWithFourthLocation: ImpactEvidencePacket = {
+      ...packet,
+      relationshipPaths: [
+        ...packet.relationshipPaths,
+        {
+          repository: "atlas/identity",
+          filePath: "src/worker.ts",
+          hop: 2,
+        },
+      ],
+    };
+
+    expect(
+      validator().validate(
+        {
+          ...validExplanation,
+          answer:
+            "Coordinate `src/session.ts`, `src/api.ts`, and `src/worker.ts` around `refreshSession`.",
+        },
+        packetWithFourthLocation,
+      ),
+    ).toEqual({
+      status: "invalid",
+      failureCode: "excessive_overview_technical_names",
+    });
+  });
+
   it("rejects invented relationships", () => {
     const expandedPacket: ImpactEvidencePacket = {
       ...packet,
@@ -358,19 +414,28 @@ describe("ExplanationGroundingValidator", () => {
       validator().validate(
         {
           ...validExplanation,
-          implementationSteps: [
-            {
-              ...validExplanation.implementationSteps[0],
-              detail:
-                "Update the contract before exercising database calls.",
-            },
-          ],
-          verificationSteps: [
-            {
-              ...validExplanation.verificationSteps[0],
-              text:
-                "Perform test execution and collect a runtime trace.",
-            },
+          implementationSteps: validExplanation.implementationSteps.map(
+            (step, index) =>
+              index === 0
+                ? {
+                    ...step,
+                    detail:
+                      "Update the contract before exercising database calls.",
+                  }
+                : step,
+          ),
+          verificationSteps: validExplanation.verificationSteps.map(
+            (step, index) =>
+              index === 0
+                ? {
+                    ...step,
+                    text:
+                      "Perform test execution and collect a runtime trace.",
+                  }
+                : step,
+          ),
+          remainingQuestions: [
+            "Runtime consumers: which behavior falls outside the indexed source snapshot?",
           ],
         },
         packet,
@@ -485,6 +550,22 @@ describe("ExplanationGroundingValidator", () => {
       validator().validate(
         { ...validExplanation, remainingQuestions: ["Anything else?"] },
         packet,
+      ),
+    ).toEqual({
+      status: "invalid",
+      failureCode: "missing_unknown_impact",
+    });
+  });
+
+  it("requires a remaining question when Atlas reports a limitation", () => {
+    expect(
+      validator().validate(
+        { ...validExplanation, remainingQuestions: [] },
+        {
+          ...packet,
+          unknownImpacts: [],
+          limitations: ["Static analysis only."],
+        },
       ),
     ).toEqual({
       status: "invalid",

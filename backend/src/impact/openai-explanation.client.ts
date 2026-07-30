@@ -167,82 +167,100 @@ export class OpenAIExplanationClient implements ExplanationClient {
     timeout: number,
     startedAt: number,
   ): Promise<ExplanationGenerationResult> {
-    try {
-      const completion = await this.openai(
-        apiKey,
-        timeout,
-        "groq",
-      ).chat.completions.parse(
+    const request = {
+      model,
+      messages: [
         {
-          model,
-          messages: [
-            {
-              role: "system",
-              content: IMPACT_EXPLANATION_SYSTEM_PROMPT,
-            },
-            {
-              role: "user",
-              content: this.packetInput(providerPacket.packet),
-            },
-          ],
-          response_format: zodResponseFormat(
-            impactExplanationProviderSchema(
-              providerPacket.packet.evidence.map((item) => item.id),
-              providerPacket.packet.limitations.length > 0 ||
-                providerPacket.packet.unknownImpacts.length > 0,
-            ),
-            "atlas_impact_explanation_v1",
-          ),
-          max_completion_tokens: this.config.get(
-            "LLM_MAX_OUTPUT_TOKENS",
-            { infer: true },
-          ),
-          reasoning_effort: this.config.get("LLM_REASONING_EFFORT", {
-            infer: true,
-          }),
-          temperature: 0.01,
-          tools: [],
+          role: "system" as const,
+          content: IMPACT_EXPLANATION_SYSTEM_PROMPT,
         },
         {
+          role: "user" as const,
+          content: this.packetInput(providerPacket.packet),
+        },
+      ],
+      response_format: zodResponseFormat(
+        impactExplanationProviderSchema(
+          providerPacket.packet.evidence.map((item) => item.id),
+          providerPacket.packet.limitations.length > 0 ||
+            providerPacket.packet.unknownImpacts.length > 0,
+        ),
+        "atlas_impact_explanation_v1",
+      ),
+      max_completion_tokens: this.config.get("LLM_MAX_OUTPUT_TOKENS", {
+        infer: true,
+      }),
+      reasoning_effort: this.config.get("LLM_REASONING_EFFORT", {
+        infer: true,
+      }),
+      temperature: 0.2,
+      tools: [],
+    };
+    const retryTokenEstimate =
+      Math.ceil(JSON.stringify(request).length / 3) +
+      request.max_completion_tokens;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const completion = await this.openai(
+          apiKey,
+          timeout,
+          "groq",
+        ).chat.completions.parse(request, {
           maxRetries: 0,
           timeout,
           signal: AbortSignal.timeout(timeout),
-        },
-      );
-      const latencyMs = this.elapsedMilliseconds(startedAt);
-      const parsed = completion.choices[0]?.message.parsed;
-      if (!parsed) {
+        });
+        const latencyMs = this.elapsedMilliseconds(startedAt);
+        const parsed = completion.choices[0]?.message.parsed;
+        if (!parsed) {
+          return {
+            status: "failed",
+            failureCode:
+              completion.choices[0]?.message.refusal
+                ? "provider_refusal"
+                : "invalid_provider_response",
+            latencyMs,
+          };
+        }
         return {
-          status: "failed",
-          failureCode:
-            completion.choices[0]?.message.refusal
-              ? "provider_refusal"
-              : "invalid_provider_response",
-          latencyMs,
-        };
-      }
-      return {
-        status: "completed",
-        explanation: this.restoreEvidenceIds(
-          parsed,
-          providerPacket.aliasToEvidenceId,
-        ),
-        metadata: {
-          provider: "groq",
-          model,
-          promptVersion: IMPACT_EXPLANATION_PROMPT_VERSION,
-          outputSchemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
-          latencyMs,
-          usage: {
-            inputTokens: completion.usage?.prompt_tokens ?? 0,
-            outputTokens: completion.usage?.completion_tokens ?? 0,
-            totalTokens: completion.usage?.total_tokens ?? 0,
+          status: "completed",
+          explanation: this.restoreEvidenceIds(
+            parsed,
+            providerPacket.aliasToEvidenceId,
+          ),
+          metadata: {
+            provider: "groq",
+            model,
+            promptVersion: IMPACT_EXPLANATION_PROMPT_VERSION,
+            outputSchemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
+            latencyMs,
+            usage: {
+              inputTokens: completion.usage?.prompt_tokens ?? 0,
+              outputTokens: completion.usage?.completion_tokens ?? 0,
+              totalTokens: completion.usage?.total_tokens ?? 0,
+            },
           },
-        },
-      };
-    } catch (error: unknown) {
-      return this.providerFailure(error, "groq", model, startedAt);
+        };
+      } catch (error: unknown) {
+        if (
+          attempt === 0 &&
+          this.canRetryGroqJsonValidationFailure(
+            error,
+            retryTokenEstimate,
+          )
+        ) {
+          continue;
+        }
+        return this.providerFailure(error, "groq", model, startedAt);
+      }
     }
+
+    return {
+      status: "failed",
+      failureCode: "provider_request_rejected",
+      latencyMs: this.elapsedMilliseconds(startedAt),
+    };
   }
 
   private providerFailure(
@@ -310,16 +328,85 @@ export class OpenAIExplanationClient implements ExplanationClient {
         ),
       ]),
     ].sort();
+    const overviewTechnicalNames = [
+      ...new Set([
+        ...packet.directImpacts.flatMap((item) => [
+          ...(item.filePath ? [item.filePath] : []),
+          ...(item.symbol ? [item.symbol] : []),
+        ]),
+        ...packet.downstreamImpacts.flatMap((item) => [
+          ...(item.filePath ? [item.filePath] : []),
+          ...(item.symbol ? [item.symbol] : []),
+        ]),
+      ]),
+    ].slice(0, 3);
+    const remainingQuestionRequired =
+      packet.unknownImpacts.length > 0 || packet.limitations.length > 0;
     return [
       "The following JSON is the complete authorized evidence packet.",
       `ALLOWED_FILE_PATHS=${JSON.stringify(allowedFilePaths)}`,
       `ALLOWED_SYMBOLS=${JSON.stringify(allowedSymbols)}`,
+      `OVERVIEW_TECHNICAL_NAMES=${JSON.stringify(overviewTechnicalNames)}`,
+      `REMAINING_QUESTION_REQUIRED=${String(remainingQuestionRequired)}`,
+      `UNKNOWN_IMPACT_TITLES=${JSON.stringify(packet.unknownImpacts.map((item) => item.title))}`,
+      `LIMITATIONS_REQUIRING_QUESTIONS=${JSON.stringify(packet.limitations)}`,
       "Any file path or symbol in the response MUST be copied exactly from these allowlists.",
+      "The answer and executiveSummary may mention technical names only from OVERVIEW_TECHNICAL_NAMES and may use no more than three unique names total.",
       "If a migration artifact, test, configuration, or implementation location is absent, refer to it generically without a filename, extension, slash, or code-formatted identifier.",
       "BEGIN_ATLAS_EVIDENCE_PACKET",
-      JSON.stringify(packet),
+      JSON.stringify(this.providerInputPacket(packet)),
       "END_ATLAS_EVIDENCE_PACKET",
+      "FINAL_OUTPUT_CHECKLIST:",
+      `- answer plus executiveSummary may use only these technical names and no others: ${JSON.stringify(overviewTechnicalNames)}`,
+      "- answer plus executiveSummary use no more than three unique technical names total; do not list downstream files there.",
+      "- every claim, implementation step, and verification step has at least one supplied evidence ID.",
+      remainingQuestionRequired
+        ? "- remainingQuestions contains at least one specific question and is not empty."
+        : "- remainingQuestions may be empty when there is no unresolved matter.",
     ].join("\n");
+  }
+
+  private providerInputPacket(packet: ImpactEvidencePacket) {
+    const finding = (item: ImpactEvidencePacket["directImpacts"][number]) => ({
+      classification: item.classification,
+      kind: item.kind,
+      title: item.title,
+      detail: item.detail,
+      filePath: item.filePath,
+      symbol: item.symbol,
+      hop: item.hop,
+      confidence: item.confidence,
+      provenance: item.provenance,
+      evidenceIds: item.evidenceIds,
+    });
+
+    return {
+      packetVersion: packet.packetVersion,
+      question: packet.question,
+      analysisMode: packet.analysisMode,
+      analysisStatus: packet.analysisStatus,
+      atlasAssessment: packet.atlasAssessment,
+      repository: `${packet.repository.owner}/${packet.repository.name}`,
+      sourceRevision: packet.sourceRevision,
+      risk: packet.risk,
+      directImpacts: packet.directImpacts.map(finding),
+      downstreamImpacts: packet.downstreamImpacts.map(finding),
+      unknownImpacts: packet.unknownImpacts.map(finding),
+      relationshipPaths: packet.relationshipPaths.map((item) => ({
+        filePath: item.filePath,
+        hop: item.hop,
+      })),
+      evidence: packet.evidence.map((item) => ({
+        id: item.id,
+        filePath: item.filePath,
+        lineStart: item.lineStart,
+        lineEnd: item.lineEnd,
+        symbol: item.symbol,
+        excerpt: item.excerpt,
+        provenance: item.provenance,
+      })),
+      limitations: packet.limitations,
+    };
   }
 
   private providerPacket(packet: ImpactEvidencePacket): {
@@ -452,6 +539,29 @@ export class OpenAIExplanationClient implements ExplanationClient {
       return "provider_error";
     }
     return "provider_error";
+  }
+
+  private canRetryGroqJsonValidationFailure(
+    error: unknown,
+    requiredTokens: number,
+  ): boolean {
+    if (!error || typeof error !== "object") return false;
+    const providerError = error as {
+      status?: number;
+      code?: string;
+      error?: { code?: string };
+      headers?: Headers;
+    };
+    const isValidationFailure =
+      providerError.status === 400 &&
+      (providerError.code === "json_validate_failed" ||
+        providerError.error?.code === "json_validate_failed");
+    if (!isValidationFailure) return false;
+
+    const remainingTokens = Number(
+      providerError.headers?.get("x-ratelimit-remaining-tokens"),
+    );
+    return Number.isFinite(remainingTokens) && remainingTokens >= requiredTokens;
   }
 
   private safeErrorMetadata(error: unknown): {

@@ -46,6 +46,12 @@ const packet: ImpactEvidencePacket = {
   question: "Rotate the session contract.",
   analysisMode: "planned",
   analysisStatus: "complete",
+  atlasAssessment: {
+    answer: "Update the session boundary.",
+    executiveSummary: "One observed consumer is affected.",
+    recommendations: ["Preserve the consumer contract."],
+    verificationPlan: ["Exercise the observed consumer."],
+  },
   repository: {
     id: "repository-1",
     owner: "atlas",
@@ -155,6 +161,19 @@ describe("OpenAIExplanationClient", () => {
     });
     expect(request).toHaveProperty("text.format.type", "json_schema");
     expect(JSON.stringify(request)).toContain("BEGIN_ATLAS_EVIDENCE_PACKET");
+    expect(JSON.stringify(request)).toContain("friendly engineering copilot");
+    expect(JSON.stringify(request)).toContain("atlasAssessment");
+    expect(JSON.stringify(request)).toContain("OVERVIEW_TECHNICAL_NAMES");
+    expect(JSON.stringify(request)).toContain(
+      "REMAINING_QUESTION_REQUIRED=true",
+    );
+    expect(JSON.stringify(request)).toContain(
+      "LIMITATIONS_REQUIRING_QUESTIONS",
+    );
+    expect(JSON.stringify(request)).toContain("FINAL_OUTPUT_CHECKLIST");
+    expect(JSON.stringify(request)).toContain(
+      "The answer and executiveSummary must not contain import",
+    );
     expect(options).toMatchObject({
       maxRetries: 0,
       timeout: 3210,
@@ -187,7 +206,7 @@ describe("OpenAIExplanationClient", () => {
     expect(request).toHaveProperty("response_format.type", "json_schema");
     expect(request).toHaveProperty("max_completion_tokens", 2_000);
     expect(request).toHaveProperty("reasoning_effort", "low");
-    expect(request).toHaveProperty("temperature", 0.01);
+    expect(request).toHaveProperty("temperature", 0.2);
     expect(request).toHaveProperty("tools", []);
   });
 
@@ -249,8 +268,13 @@ describe("OpenAIExplanationClient", () => {
     const [request] = parse.mock.calls[0] as [Record<string, unknown>];
     const messages = request.messages as Array<{ content: string }>;
     expect(messages[1]?.content).toContain('"id":"E1"');
+    expect(messages[1]?.content).not.toContain('"repositoryId"');
+    expect(messages[1]?.content).not.toContain('"repository-1"');
     expect(messages[1]?.content).toContain(
       'ALLOWED_FILE_PATHS=["src/session.ts"]',
+    );
+    expect(messages[1]?.content).toContain(
+      'OVERVIEW_TECHNICAL_NAMES=[]',
     );
     expect(JSON.stringify(request)).not.toContain(canonicalEvidenceId);
   });
@@ -280,6 +304,63 @@ describe("OpenAIExplanationClient", () => {
       failureCode: "provider_request_rejected",
     });
     expect(JSON.stringify(result)).not.toContain("raw generated JSON");
+    expect(parse).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries one transient Groq JSON validation failure", async () => {
+    const parse = vi
+      .fn()
+      .mockRejectedValueOnce(
+        Object.assign(new Error("generated JSON did not match"), {
+          status: 400,
+          code: "json_validate_failed",
+          headers: new Headers({
+            "x-ratelimit-remaining-tokens": "50000",
+          }),
+        }),
+      )
+      .mockResolvedValueOnce(groqCompletion());
+    const client = new OpenAIExplanationClient(
+      config({
+        LLM_EXPLANATIONS_ENABLED: "true",
+        LLM_PROVIDER: "groq",
+        LLM_EXPLANATION_MODEL: "openai/gpt-oss-120b",
+        GROQ_API_KEY: "test-key",
+      }),
+      fakeClient(parse),
+    );
+
+    await expect(client.generate(packet)).resolves.toMatchObject({
+      status: "completed",
+      explanation,
+    });
+    expect(parse).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry when Groq reports too few remaining tokens", async () => {
+    const parse = vi.fn().mockRejectedValue(
+      Object.assign(new Error("generated JSON did not match"), {
+        status: 400,
+        code: "json_validate_failed",
+        headers: new Headers({
+          "x-ratelimit-remaining-tokens": "100",
+        }),
+      }),
+    );
+    const client = new OpenAIExplanationClient(
+      config({
+        LLM_EXPLANATIONS_ENABLED: "true",
+        LLM_PROVIDER: "groq",
+        LLM_EXPLANATION_MODEL: "openai/gpt-oss-120b",
+        GROQ_API_KEY: "test-key",
+      }),
+      fakeClient(parse),
+    );
+
+    await expect(client.generate(packet)).resolves.toMatchObject({
+      status: "failed",
+      failureCode: "provider_request_rejected",
+    });
     expect(parse).toHaveBeenCalledTimes(1);
   });
 

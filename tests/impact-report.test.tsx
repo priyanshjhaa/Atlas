@@ -115,7 +115,7 @@ describe("ImpactReportPage", () => {
   });
 
   it("supports legacy reports with the deterministic fallback", () => {
-    render(<ImpactReportPage report={report} />);
+    const { rerender } = render(<ImpactReportPage report={report} />);
 
     expect(
       screen.getByRole("heading", {
@@ -125,13 +125,22 @@ describe("ImpactReportPage", () => {
     expect(
       screen.getByRole("heading", { name: "Change session validation" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("validateSession · lib/auth.ts")).toBeVisible();
-    expect(screen.getByText("app/layout.tsx", { selector: "h3" })).toBeVisible();
-    expect(screen.getByText(/typescript static import/i)).toBeVisible();
-    expect(screen.getByText("Static imports only.")).toBeVisible();
     expect(
       screen.getByText(/change is anchored in lib\/auth\.ts/i),
     ).toBeVisible();
+
+    rerender(<ImpactReportPage report={report} view="findings" />);
+
+    expect(screen.getByText("validateSession · lib/auth.ts")).toBeVisible();
+    expect(screen.getByText("app/layout.tsx", { selector: "h3" })).toBeVisible();
+
+    rerender(<ImpactReportPage report={report} view="evidence" />);
+
+    expect(screen.getByText(/typescript static import/i)).toBeVisible();
+    expect(screen.getByText("Static imports only.")).toBeVisible();
+
+    rerender(<ImpactReportPage report={report} view="plan" />);
+
     expect(
       screen.getByText(/Preserve the authentication contract/i),
     ).toBeVisible();
@@ -146,7 +155,7 @@ describe("ImpactReportPage", () => {
         explanation: {
           schemaVersion: "1",
           executiveSummary:
-            "The session validation contract has one observed application consumer.",
+            "The session validation contract has one observed application consumer.\n\nPreserve that boundary before changing the underlying validation behavior.",
           answer: "Update the validator while preserving its import contract.",
           claims: [
             {
@@ -158,6 +167,21 @@ describe("ImpactReportPage", () => {
             {
               title: "Preserve the exported contract",
               detail: "Keep the imported validator compatible with its consumer.",
+              evidenceIds: ["relationship-1"],
+            },
+            {
+              title: "Update the validation behavior",
+              detail: "Apply the intended behavior behind the stable contract.",
+              evidenceIds: ["relationship-1"],
+            },
+            {
+              title: "Coordinate the consumer",
+              detail: "Carry any deliberate contract change into the observed consumer.",
+              evidenceIds: ["relationship-1"],
+            },
+            {
+              title: "Prepare the rollout",
+              detail: "Resolve the remaining runtime uncertainty before release.",
               evidenceIds: ["relationship-1"],
             },
           ],
@@ -192,11 +216,44 @@ describe("ImpactReportPage", () => {
       },
     };
 
-    render(<ImpactReportPage report={explainedReport} />);
+    const { container, rerender } = render(
+      <ImpactReportPage report={explainedReport} />,
+    );
 
-    expect(screen.getByText("AI explanation")).toBeVisible();
+    expect(screen.getByText("AI briefing")).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "What this change means" }),
+    ).toBeVisible();
     expect(
       screen.getByText(/model did not scan the repository/i),
+    ).toBeVisible();
+    expect(
+      container.querySelectorAll(".ai-explanation__summary p"),
+    ).toHaveLength(2);
+    expect(screen.getByText("Preserve the exported contract")).toBeVisible();
+    expect(screen.getByText("Update the validation behavior")).toBeVisible();
+    expect(screen.getByText("Coordinate the consumer")).toBeVisible();
+    expect(screen.queryByText("Prepare the rollout")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Verified Atlas report" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Implementation guidance" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Findings" }),
+    ).toHaveAttribute(
+      "href",
+      `/app/impact/${explainedReport.id}/findings`,
+    );
+    expect(
+      screen.getByText(/change is anchored in lib\/auth\.ts/i),
+    ).toBeVisible();
+
+    rerender(<ImpactReportPage report={explainedReport} view="plan" />);
+
+    expect(
+      screen.getByText(/sequenced path that preserves the observed contracts/i),
     ).toBeVisible();
     expect(
       screen.getByRole("heading", { name: "Implementation guidance" }),
@@ -210,13 +267,21 @@ describe("ImpactReportPage", () => {
     expect(
       screen.getByRole("heading", { name: "Verified limitations" }),
     ).toBeVisible();
+
+    rerender(<ImpactReportPage report={explainedReport} view="findings" />);
+
+    expect(
+      screen.getByRole("heading", { name: "Evidence-grounded claims" }),
+    ).toBeVisible();
     expect(
       screen.getAllByRole("link", {
         name: "View evidence from app/layout.tsx line 4",
       })[0],
     ).toHaveAttribute("href", "#evidence-relationship-1");
+    rerender(<ImpactReportPage report={explainedReport} view="evidence" />);
+
     expect(
-      screen.getByText(/change is anchored in lib\/auth\.ts/i),
+      screen.getByRole("heading", { name: "Supporting sources" }),
     ).toBeVisible();
   });
 
@@ -255,7 +320,9 @@ describe("ImpactReportPage", () => {
         }),
       ).toBeVisible();
     });
-    expect(screen.getByText("validateSession · lib/auth.ts")).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Verified Atlas report" }),
+    ).toBeVisible();
     expect(fetch).toHaveBeenCalledWith(
       `/api/impact-reports/${report.id}/explanation/retry`,
       expect.objectContaining({ method: "POST" }),

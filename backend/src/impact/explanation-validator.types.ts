@@ -10,6 +10,7 @@ export type ExplanationValidationFailureCode = Extract<
   | "unknown_evidence_id"
   | "unknown_file_path"
   | "unknown_symbol"
+  | "excessive_overview_technical_names"
   | "unsupported_relationship"
   | "altered_risk"
   | "altered_confidence"
