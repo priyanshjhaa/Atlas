@@ -48,6 +48,9 @@ services from the sibling CodeMap repository.
   both the package and symbol targets resolve uniquely.
 - Direct and namespace call usages are stored independently from import edges
   and linked back to the containing source symbol when one is available.
+- Local imports, package dependencies, public API imports, and calls are also
+  recorded in an append-only observation history keyed by workspace,
+  synchronizing repository, source revision, and stable relationship identity.
 - Temporary repository archives are deleted after every worker attempt.
 
 This directory is now maintained as Atlas code. Future CodeMap changes are not

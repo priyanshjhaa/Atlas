@@ -189,6 +189,8 @@ export class IngestionService {
             persistence.apiCallRelationshipsPersisted,
           ambiguousApiImports:
             persistence.ambiguousApiImports,
+          relationshipObservationsRecorded:
+            persistence.relationshipObservationsPersisted,
         },
       };
     } finally {

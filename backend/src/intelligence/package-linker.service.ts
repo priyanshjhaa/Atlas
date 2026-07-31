@@ -6,6 +6,7 @@ export interface PersistedCodePackage {
   workspaceId: string;
   repositoryId: string;
   name: string;
+  rootPath: string;
   sourceRevision: string;
   dependencies: WorkspacePackageDependency[];
 }

@@ -195,8 +195,11 @@ GitHub revision:
    public symbols across repositories, including symbols exposed by re-exports.
 9. Capture direct and namespace API calls, associate them with their containing
    source symbols, and persist revision-stamped call edges across repositories.
-10. Generate deterministic local embeddings or optional OpenAI embeddings.
-11. Atomically replace the repository index and create an architecture snapshot.
+10. Append a revision-scoped observation for every local import, package
+    dependency, public API import, and public API call so later graph analysis
+    can distinguish current structure from relationships seen historically.
+11. Generate deterministic local embeddings or optional OpenAI embeddings.
+12. Atomically replace the repository index and create an architecture snapshot.
 
 Workspace-scoped impact analysis consumes the indexed package, public API
 import, and public API call edges to report observed consumers in other active

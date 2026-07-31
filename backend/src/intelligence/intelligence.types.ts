@@ -189,5 +189,6 @@ export interface IngestionSummary {
     apiSymbolsLinked: number;
     apiCallsLinked: number;
     ambiguousApiImports: number;
+    relationshipObservationsRecorded: number;
   };
 }

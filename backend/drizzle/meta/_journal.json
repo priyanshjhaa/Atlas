@@ -78,6 +78,13 @@
       "when": 1785519060785,
       "tag": "20260731173100_worthless_silver_centurion",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785520377629,
+      "tag": "20260731175257_whole_manta",
+      "breakpoints": true
     }
   ]
 }

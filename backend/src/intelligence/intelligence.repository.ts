@@ -11,6 +11,7 @@ import {
   codeRelationships,
   codeSymbols,
   packageRelationships,
+  relationshipObservations,
   repositories,
   symbolRelationships,
 } from "../database/schema";
@@ -23,6 +24,7 @@ import type {
 } from "./intelligence.types";
 import { ApiSymbolLinkerService } from "./api-symbol-linker.service";
 import { PackageLinkerService } from "./package-linker.service";
+import { RelationshipObservationBuilder } from "./relationship-observation.builder";
 
 interface PersistInput {
   workspaceId: string;
@@ -43,6 +45,7 @@ interface PersistSummary {
   apiSymbolRelationshipsPersisted: number;
   apiCallRelationshipsPersisted: number;
   ambiguousApiImports: number;
+  relationshipObservationsPersisted: number;
 }
 
 interface RetrievedChunkRow extends Record<string, unknown> {
@@ -61,6 +64,7 @@ export class IntelligenceRepository {
     private readonly database: DatabaseService,
     private readonly packageLinker: PackageLinkerService,
     private readonly apiSymbolLinker: ApiSymbolLinkerService,
+    private readonly relationshipObservationBuilder: RelationshipObservationBuilder,
   ) {}
 
   async persist(input: PersistInput): Promise<PersistSummary> {
@@ -332,6 +336,7 @@ export class IntelligenceRepository {
           workspaceId: codePackages.workspaceId,
           repositoryId: codePackages.repositoryId,
           name: codePackages.name,
+          rootPath: codePackages.rootPath,
           sourceRevision: codePackages.sourceRevision,
           dependencies: codePackages.dependencies,
           entryPoints: codePackages.entryPoints,
@@ -410,6 +415,23 @@ export class IntelligenceRepository {
           .insert(symbolRelationships)
           .values(apiLinks.relationships);
       }
+      const observations = this.relationshipObservationBuilder.build({
+        workspaceId: input.workspaceId,
+        repositoryId: input.repositoryId,
+        sourceRevision: input.sourceRevision,
+        localRelationships: input.relationships,
+        packageRelationships: linked.relationships,
+        apiRelationships: apiLinks.relationships,
+        packages: workspacePackages,
+        symbols: workspaceSymbols,
+      });
+      const persistedObservations = observations.length
+        ? await transaction
+            .insert(relationshipObservations)
+            .values(observations)
+            .onConflictDoNothing()
+            .returning({ id: relationshipObservations.id })
+        : [];
       return {
         packagesPersisted: input.packages.length,
         packageRelationshipsPersisted: linked.relationships.length,
@@ -423,6 +445,7 @@ export class IntelligenceRepository {
         ambiguousApiImports:
           apiLinks.ambiguousPackageImports +
           apiLinks.ambiguousSymbolImports,
+        relationshipObservationsPersisted: persistedObservations.length,
       };
     });
   }

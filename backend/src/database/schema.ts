@@ -625,6 +625,63 @@ export const symbolRelationships = pgTable(
   ],
 );
 
+export const relationshipObservations = pgTable(
+  "relationship_observations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    observedByRepositoryId: uuid("observed_by_repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    observedRevision: text("observed_revision").notNull(),
+    sourceRepositoryId: uuid("source_repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    sourceEntityKind: text("source_entity_kind").notNull(),
+    sourceEntityKey: text("source_entity_key").notNull(),
+    targetRepositoryId: uuid("target_repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    targetEntityKind: text("target_entity_kind").notNull(),
+    targetEntityKey: text("target_entity_key").notNull(),
+    kind: text("kind").notNull(),
+    stableKey: text("stable_key").notNull(),
+    provenance: text("provenance").notNull(),
+    confidence: real("confidence").notNull(),
+    sourceRevision: text("source_revision").notNull(),
+    targetRevision: text("target_revision").notNull(),
+    evidence: jsonb("evidence")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("relationship_observations_revision_stable_key_unique").on(
+      table.workspaceId,
+      table.observedByRepositoryId,
+      table.observedRevision,
+      table.stableKey,
+    ),
+    index("relationship_observations_workspace_id_idx").on(table.workspaceId),
+    index("relationship_observations_observer_revision_idx").on(
+      table.observedByRepositoryId,
+      table.observedRevision,
+    ),
+    index("relationship_observations_source_repository_id_idx").on(
+      table.sourceRepositoryId,
+    ),
+    index("relationship_observations_target_repository_id_idx").on(
+      table.targetRepositoryId,
+    ),
+    index("relationship_observations_stable_key_idx").on(table.stableKey),
+  ],
+);
+
 export const architectureSnapshots = pgTable(
   "architecture_snapshots",
   {

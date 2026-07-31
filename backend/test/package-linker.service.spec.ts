@@ -10,6 +10,7 @@ function packageRecord(
 ): PersistedCodePackage {
   return {
     workspaceId: "workspace-1",
+    rootPath: "",
     sourceRevision: "revision-1",
     dependencies: [],
     ...input,
