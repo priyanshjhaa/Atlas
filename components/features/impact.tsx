@@ -915,13 +915,13 @@ export function ImpactReportPage({
               : "Current repository"}
           </p>
         </div>
-        <div className="risk-score">
-          <span>
+        <div className="risk-score" aria-label="Change risk">
+          <span>Change risk</span>
+          <strong>
             {result.risk.score === null
-              ? "Change risk · not scored"
-              : `Change risk · ${result.risk.score}/100`}
-          </span>
-          <strong>{result.risk.level}</strong>
+              ? "Not scored"
+              : `${result.risk.level.charAt(0).toUpperCase()}${result.risk.level.slice(1)}`}
+          </strong>
           <p>{result.risk.reasons.join(" · ")}</p>
         </div>
       </section>

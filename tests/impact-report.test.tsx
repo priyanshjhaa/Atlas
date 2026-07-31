@@ -128,6 +128,11 @@ describe("ImpactReportPage", () => {
     expect(
       screen.getByText(/change is anchored in lib\/auth\.ts/i),
     ).toBeVisible();
+    expect(screen.getByLabelText("Change risk")).toBeVisible();
+    expect(
+      screen.getByText("Medium", { selector: ".risk-score strong" }),
+    ).toBeVisible();
+    expect(screen.queryByText("42/100")).not.toBeInTheDocument();
 
     rerender(<ImpactReportPage report={report} view="findings" />);
 
