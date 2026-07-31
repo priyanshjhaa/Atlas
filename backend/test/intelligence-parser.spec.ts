@@ -519,6 +519,11 @@ describe("forked CodeMap intelligence services", () => {
     expect(before?.symbols.map((item) => item.stableKey)).toEqual(
       after?.symbols.map((item) => item.stableKey),
     );
+    expect(before?.calls).toContainEqual({
+      localName: "primary",
+      line: 5,
+      sourceSymbolStableKey: "src/public.ts:function:handler",
+    });
     expect(before?.symbols).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

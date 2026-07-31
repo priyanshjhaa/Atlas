@@ -19,6 +19,13 @@ export interface ParsedImportBinding {
   typeOnly: boolean;
 }
 
+export interface ParsedCall {
+  localName: string;
+  memberName?: string;
+  line: number;
+  sourceSymbolStableKey?: string;
+}
+
 export interface TypeCheckedImportSymbol {
   localName: string;
   exportedName: string;
@@ -120,6 +127,7 @@ export interface ParsedChunk {
 
 export interface ParsedFile extends RepositorySourceFile {
   imports: ParsedImport[];
+  calls: ParsedCall[];
   exports: string[];
   symbols: ParsedSymbol[];
   chunks: ParsedChunk[];
@@ -156,6 +164,7 @@ export interface IngestionSummary {
   filesIndexed: number;
   chunksCreated: number;
   symbolsExtracted: number;
+  callsDetected: number;
   relationshipsExtracted: number;
   languages: string[];
   embeddingProvider: "local" | "openai";
@@ -178,6 +187,7 @@ export interface IngestionSummary {
     relationshipsLinked: number;
     ambiguousDependencies: number;
     apiSymbolsLinked: number;
+    apiCallsLinked: number;
     ambiguousApiImports: number;
   };
 }

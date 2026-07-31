@@ -135,6 +135,10 @@ export class ArchitectureBuilderService {
             (count, file) => count + file.symbols.length,
             0,
           ),
+          callsDetected: files.reduce(
+            (count, file) => count + file.calls.length,
+            0,
+          ),
           relationshipsObserved: relationships.length,
           crossModuleEdges: edges.length,
           rootDirectories: [

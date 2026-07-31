@@ -193,8 +193,10 @@ GitHub revision:
 8. Persist line-independent symbol identities, import bindings, public export
    names, and package API ownership. Named package imports are linked to unique
    public symbols across repositories, including symbols exposed by re-exports.
-9. Generate deterministic local embeddings or optional OpenAI embeddings.
-10. Atomically replace the repository index and create an architecture snapshot.
+9. Capture direct and namespace API calls, associate them with their containing
+   source symbols, and persist revision-stamped call edges across repositories.
+10. Generate deterministic local embeddings or optional OpenAI embeddings.
+11. Atomically replace the repository index and create an architecture snapshot.
 
 The exact source commit, included concepts, exclusions, and Atlas adaptations
 are recorded in `src/intelligence/CODEMAP_FORK.md`. Atlas does not depend on the

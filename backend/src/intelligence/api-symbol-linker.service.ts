@@ -22,6 +22,20 @@ export interface PersistedApiPackage {
   exportMappings: Record<string, string[]>;
 }
 
+export interface PersistedCodeCall {
+  id: string;
+  workspaceId: string;
+  repositoryId: string;
+  fileId: string;
+  filePath: string;
+  sourceSymbolId: string | null;
+  sourceSymbolStableKey: string | null;
+  localName: string;
+  memberName: string | null;
+  line: number;
+  sourceRevision: string;
+}
+
 export interface PersistedPublicApiSymbol {
   id: string;
   workspaceId: string;
@@ -40,11 +54,14 @@ export interface LinkedApiSymbolRelationship {
   workspaceId: string;
   sourceRepositoryId: string;
   sourceFileId: string;
+  sourceSymbolId: string | null;
   targetRepositoryId: string;
   targetSymbolId: string;
-  kind: "imports_api";
+  kind: "imports_api" | "calls_api";
   stableKey: string;
-  provenance: "typescript_public_api_import";
+  provenance:
+    | "typescript_public_api_import"
+    | "typescript_public_api_call";
   confidence: number;
   sourceRevision: string;
   targetRevision: string;
@@ -56,7 +73,9 @@ export interface LinkedApiSymbolRelationship {
     importedName: string;
     localName: string;
     typeOnly: boolean;
-    line: number;
+    line?: number;
+    lines?: number[];
+    sourceSymbolStableKey?: string;
     scope: "repository" | "cross_repository";
   };
 }
@@ -107,6 +126,7 @@ function matchesApiSpecifier(pattern: string, specifier: string) {
 export class ApiSymbolLinkerService {
   link(
     imports: PersistedCodeImport[],
+    calls: PersistedCodeCall[],
     packages: PersistedApiPackage[],
     symbols: PersistedPublicApiSymbol[],
     currentRepositoryId: string,
@@ -153,65 +173,146 @@ export class ApiSymbolLinkerService {
       const targetPaths = new Set(exportedPaths(targetPackage, imported.specifier));
 
       for (const binding of imported.bindings) {
-        if (binding.kind === "namespace") continue;
-        const symbolCandidates = (
-          symbolsByPackage.get(targetPackage.id) ?? []
-        ).filter(
-          (symbol) =>
-            symbol.workspaceId === imported.workspaceId &&
-            symbol.exportNames.includes(binding.importedName) &&
-            (symbol.apiSpecifiers.some((pattern) =>
-              matchesApiSpecifier(pattern, imported.specifier),
-            ) ||
-              (!symbol.apiSpecifiers.length &&
-                (!targetPaths.size || targetPaths.has(symbol.filePath)))),
+        const matchingCalls = calls.filter(
+          (call) =>
+            call.workspaceId === imported.workspaceId &&
+            call.repositoryId === imported.repositoryId &&
+            call.fileId === imported.fileId &&
+            call.localName === binding.localName &&
+            (binding.kind === "namespace"
+              ? Boolean(call.memberName)
+              : !call.memberName),
         );
-        if (symbolCandidates.length > 1) {
-          ambiguousSymbolImports += 1;
-          continue;
-        }
-        const target = symbolCandidates[0];
-        if (!target?.sourceRevision) continue;
-        const touchesCurrentRepository =
-          imported.repositoryId === currentRepositoryId ||
-          target.repositoryId === currentRepositoryId;
-        if (!touchesCurrentRepository) continue;
-        const stableKey = [
-          imported.repositoryId,
-          imported.filePath,
-          "imports_api",
-          imported.specifier,
-          binding.importedName,
-          target.repositoryId,
-          target.stableKey,
-        ].join(":");
-        relationships.set(stableKey, {
-          workspaceId: imported.workspaceId,
-          sourceRepositoryId: imported.repositoryId,
-          sourceFileId: imported.fileId,
-          targetRepositoryId: target.repositoryId,
-          targetSymbolId: target.id,
-          kind: "imports_api",
-          stableKey,
-          provenance: "typescript_public_api_import",
-          confidence: 1,
-          sourceRevision: imported.sourceRevision,
-          targetRevision: target.sourceRevision,
-          evidence: {
+        const importedNames =
+          binding.kind === "namespace"
+            ? [
+                ...new Set(
+                  matchingCalls
+                    .map((call) => call.memberName)
+                    .filter((name): name is string => Boolean(name)),
+                ),
+              ]
+            : [binding.importedName];
+        for (const importedName of importedNames) {
+          const symbolCandidates = (
+            symbolsByPackage.get(targetPackage.id) ?? []
+          ).filter(
+            (symbol) =>
+              symbol.workspaceId === imported.workspaceId &&
+              symbol.exportNames.includes(importedName) &&
+              (symbol.apiSpecifiers.some((pattern) =>
+                matchesApiSpecifier(pattern, imported.specifier),
+              ) ||
+                (!symbol.apiSpecifiers.length &&
+                  (!targetPaths.size || targetPaths.has(symbol.filePath)))),
+          );
+          if (symbolCandidates.length > 1) {
+            ambiguousSymbolImports += 1;
+            continue;
+          }
+          const target = symbolCandidates[0];
+          if (!target?.sourceRevision) continue;
+          const touchesCurrentRepository =
+            imported.repositoryId === currentRepositoryId ||
+            target.repositoryId === currentRepositoryId;
+          if (!touchesCurrentRepository) continue;
+          const evidenceBase = {
             sourcePath: imported.filePath,
             targetPath: target.filePath,
             packageName,
             importSpecifier: imported.specifier,
-            importedName: binding.importedName,
+            importedName,
             localName: binding.localName,
             typeOnly: binding.typeOnly,
-            line: imported.line,
             scope:
               imported.repositoryId === target.repositoryId
-                ? "repository"
-                : "cross_repository",
-          },
-        });
+                ? ("repository" as const)
+                : ("cross_repository" as const),
+          };
+          if (binding.kind !== "namespace") {
+            const stableKey = [
+              imported.repositoryId,
+              imported.filePath,
+              "imports_api",
+              imported.specifier,
+              importedName,
+              target.repositoryId,
+              target.stableKey,
+            ].join(":");
+            relationships.set(stableKey, {
+              workspaceId: imported.workspaceId,
+              sourceRepositoryId: imported.repositoryId,
+              sourceFileId: imported.fileId,
+              sourceSymbolId: null,
+              targetRepositoryId: target.repositoryId,
+              targetSymbolId: target.id,
+              kind: "imports_api",
+              stableKey,
+              provenance: "typescript_public_api_import",
+              confidence: 1,
+              sourceRevision: imported.sourceRevision,
+              targetRevision: target.sourceRevision,
+              evidence: {
+                ...evidenceBase,
+                line: imported.line,
+              },
+            });
+          }
+          const callsForTarget = matchingCalls.filter(
+            (call) =>
+              binding.kind !== "namespace" ||
+              call.memberName === importedName,
+          );
+          const callsBySource = new Map<string, PersistedCodeCall[]>();
+          for (const call of callsForTarget) {
+            const sourceKey =
+              call.sourceSymbolId ?? call.sourceSymbolStableKey ?? "file";
+            callsBySource.set(sourceKey, [
+              ...(callsBySource.get(sourceKey) ?? []),
+              call,
+            ]);
+          }
+          for (const [sourceKey, groupedCalls] of callsBySource) {
+            const firstCall = groupedCalls[0];
+            if (!firstCall) continue;
+            const stableKey = [
+              imported.repositoryId,
+              imported.filePath,
+              sourceKey,
+              "calls_api",
+              imported.specifier,
+              importedName,
+              target.repositoryId,
+              target.stableKey,
+            ].join(":");
+            relationships.set(stableKey, {
+              workspaceId: imported.workspaceId,
+              sourceRepositoryId: imported.repositoryId,
+              sourceFileId: imported.fileId,
+              sourceSymbolId: firstCall.sourceSymbolId,
+              targetRepositoryId: target.repositoryId,
+              targetSymbolId: target.id,
+              kind: "calls_api",
+              stableKey,
+              provenance: "typescript_public_api_call",
+              confidence: 1,
+              sourceRevision: firstCall.sourceRevision,
+              targetRevision: target.sourceRevision,
+              evidence: {
+                ...evidenceBase,
+                lines: [
+                  ...new Set(groupedCalls.map((call) => call.line)),
+                ].sort((left, right) => left - right),
+                ...(firstCall.sourceSymbolStableKey
+                  ? {
+                      sourceSymbolStableKey:
+                        firstCall.sourceSymbolStableKey,
+                    }
+                  : {}),
+              },
+            });
+          }
+        }
       }
     }
 

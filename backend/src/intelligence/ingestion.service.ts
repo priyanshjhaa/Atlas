@@ -147,6 +147,10 @@ export class IngestionService {
           (count, file) => count + file.symbols.length,
           0,
         ),
+        callsDetected: parsedFiles.reduce(
+          (count, file) => count + file.calls.length,
+          0,
+        ),
         relationshipsExtracted: observedRelationships.length,
         languages: [...new Set(parsedFiles.map((file) => file.language))].sort(),
         embeddingProvider: this.embeddings.provider(),
@@ -181,6 +185,8 @@ export class IngestionService {
             persistence.ambiguousPackageDependencies,
           apiSymbolsLinked:
             persistence.apiSymbolRelationshipsPersisted,
+          apiCallsLinked:
+            persistence.apiCallRelationshipsPersisted,
           ambiguousApiImports:
             persistence.ambiguousApiImports,
         },

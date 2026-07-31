@@ -29,6 +29,7 @@ describe("IngestionService", () => {
         packageRelationshipsPersisted: 0,
         ambiguousPackageDependencies: 0,
         apiSymbolRelationshipsPersisted: 0,
+        apiCallRelationshipsPersisted: 0,
         ambiguousApiImports: 0,
       };
     });
@@ -105,6 +106,7 @@ describe("IngestionService", () => {
       expect(summary).toMatchObject({
         filesIndexed: 4,
         symbolsExtracted: 2,
+        callsDetected: 0,
         relationshipsExtracted: 1,
         embeddingProvider: "local",
         typeChecker: {
@@ -124,6 +126,7 @@ describe("IngestionService", () => {
           relationshipsLinked: 0,
           ambiguousDependencies: 0,
           apiSymbolsLinked: 0,
+          apiCallsLinked: 0,
           ambiguousApiImports: 0,
         },
       });

@@ -351,6 +351,43 @@ export const codeImports = pgTable(
   ],
 );
 
+export const codeCalls = pgTable(
+  "code_calls",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    repositoryId: uuid("repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    fileId: uuid("file_id")
+      .notNull()
+      .references(() => codeFiles.id, { onDelete: "cascade" }),
+    sourceSymbolId: uuid("source_symbol_id").references(() => codeSymbols.id, {
+      onDelete: "set null",
+    }),
+    stableKey: text("stable_key").notNull(),
+    localName: text("local_name").notNull(),
+    memberName: text("member_name"),
+    line: integer("line").notNull(),
+    sourceRevision: text("source_revision").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("code_calls_repository_stable_key_unique").on(
+      table.repositoryId,
+      table.stableKey,
+    ),
+    index("code_calls_workspace_id_idx").on(table.workspaceId),
+    index("code_calls_repository_id_idx").on(table.repositoryId),
+    index("code_calls_file_id_idx").on(table.fileId),
+    index("code_calls_source_symbol_id_idx").on(table.sourceSymbolId),
+  ],
+);
+
 export const codeChunks = pgTable(
   "code_chunks",
   {
@@ -543,6 +580,9 @@ export const symbolRelationships = pgTable(
     sourceFileId: uuid("source_file_id")
       .notNull()
       .references(() => codeFiles.id, { onDelete: "cascade" }),
+    sourceSymbolId: uuid("source_symbol_id").references(() => codeSymbols.id, {
+      onDelete: "set null",
+    }),
     targetRepositoryId: uuid("target_repository_id")
       .notNull()
       .references(() => repositories.id, { onDelete: "cascade" }),
@@ -576,6 +616,9 @@ export const symbolRelationships = pgTable(
       table.targetRepositoryId,
     ),
     index("symbol_relationships_source_file_id_idx").on(table.sourceFileId),
+    index("symbol_relationships_source_symbol_id_idx").on(
+      table.sourceSymbolId,
+    ),
     index("symbol_relationships_target_symbol_id_idx").on(
       table.targetSymbolId,
     ),

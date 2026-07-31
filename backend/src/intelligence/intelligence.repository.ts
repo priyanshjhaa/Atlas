@@ -3,6 +3,7 @@ import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { DatabaseService } from "../database/database.service";
 import {
   architectureSnapshots,
+  codeCalls,
   codeChunks,
   codeFiles,
   codeImports,
@@ -40,6 +41,7 @@ interface PersistSummary {
   packageRelationshipsPersisted: number;
   ambiguousPackageDependencies: number;
   apiSymbolRelationshipsPersisted: number;
+  apiCallRelationshipsPersisted: number;
   ambiguousApiImports: number;
 }
 
@@ -121,6 +123,7 @@ export class IntelligenceRepository {
         if (!createdFile) throw new Error("Code file was not persisted.");
         fileIds.set(file.path, createdFile.id);
 
+        const symbolIds = new Map<string, string>();
         if (file.symbols.length) {
           const packageItem = currentPackages
             .filter(
@@ -133,8 +136,10 @@ export class IntelligenceRepository {
               (left, right) =>
                 right.rootPath.length - left.rootPath.length,
             )[0];
-          await transaction.insert(codeSymbols).values(
-            file.symbols.map((symbol) => {
+          const createdSymbols = await transaction
+            .insert(codeSymbols)
+            .values(
+              file.symbols.map((symbol) => {
               const publicApi = input.typeChecker.publicApiSymbols.filter(
                 (item) =>
                   item.packageName === packageItem?.name &&
@@ -164,7 +169,7 @@ export class IntelligenceRepository {
                   }),
                 ),
               ];
-              return {
+                return {
                 workspaceId: input.workspaceId,
                 repositoryId: input.repositoryId,
                 fileId: createdFile.id,
@@ -183,9 +188,16 @@ export class IntelligenceRepository {
                 apiSpecifiers,
                 sourceRevision: input.sourceRevision,
                 metadata: symbol.metadata,
-              };
-            }),
-          );
+                };
+              }),
+            )
+            .returning({
+              id: codeSymbols.id,
+              stableKey: codeSymbols.stableKey,
+            });
+          for (const symbol of createdSymbols) {
+            symbolIds.set(symbol.stableKey, symbol.id);
+          }
         }
         if (file.imports.length) {
           const occurrences = new Map<string, number>();
@@ -211,6 +223,37 @@ export class IntelligenceRepository {
                 specifier: imported.specifier,
                 line: imported.line,
                 bindings: imported.bindings,
+                sourceRevision: input.sourceRevision,
+              };
+            }),
+          );
+        }
+        if (file.calls.length) {
+          const occurrences = new Map<string, number>();
+          await transaction.insert(codeCalls).values(
+            file.calls.map((call) => {
+              const stableBase = [
+                file.path,
+                call.sourceSymbolStableKey ?? "file",
+                call.localName,
+                call.memberName ?? "",
+              ].join(":");
+              const occurrence = (occurrences.get(stableBase) ?? 0) + 1;
+              occurrences.set(stableBase, occurrence);
+              return {
+                workspaceId: input.workspaceId,
+                repositoryId: input.repositoryId,
+                fileId: createdFile.id,
+                sourceSymbolId: call.sourceSymbolStableKey
+                  ? symbolIds.get(call.sourceSymbolStableKey)
+                  : undefined,
+                stableKey:
+                  occurrence === 1
+                    ? stableBase
+                    : `${stableBase}#${occurrence}`,
+                localName: call.localName,
+                memberName: call.memberName,
+                line: call.line,
                 sourceRevision: input.sourceRevision,
               };
             }),
@@ -337,8 +380,27 @@ export class IntelligenceRepository {
         .from(codeSymbols)
         .innerJoin(codeFiles, eq(codeFiles.id, codeSymbols.fileId))
         .where(eq(codeSymbols.workspaceId, input.workspaceId));
+      const workspaceCalls = await transaction
+        .select({
+          id: codeCalls.id,
+          workspaceId: codeCalls.workspaceId,
+          repositoryId: codeCalls.repositoryId,
+          fileId: codeCalls.fileId,
+          filePath: codeFiles.path,
+          sourceSymbolId: codeCalls.sourceSymbolId,
+          sourceSymbolStableKey: codeSymbols.stableKey,
+          localName: codeCalls.localName,
+          memberName: codeCalls.memberName,
+          line: codeCalls.line,
+          sourceRevision: codeCalls.sourceRevision,
+        })
+        .from(codeCalls)
+        .innerJoin(codeFiles, eq(codeFiles.id, codeCalls.fileId))
+        .leftJoin(codeSymbols, eq(codeSymbols.id, codeCalls.sourceSymbolId))
+        .where(eq(codeCalls.workspaceId, input.workspaceId));
       const apiLinks = this.apiSymbolLinker.link(
         workspaceImports,
+        workspaceCalls,
         workspacePackages,
         workspaceSymbols,
         input.repositoryId,
@@ -352,7 +414,12 @@ export class IntelligenceRepository {
         packagesPersisted: input.packages.length,
         packageRelationshipsPersisted: linked.relationships.length,
         ambiguousPackageDependencies: linked.ambiguousDependencies,
-        apiSymbolRelationshipsPersisted: apiLinks.relationships.length,
+        apiSymbolRelationshipsPersisted: apiLinks.relationships.filter(
+          (item) => item.kind === "imports_api",
+        ).length,
+        apiCallRelationshipsPersisted: apiLinks.relationships.filter(
+          (item) => item.kind === "calls_api",
+        ).length,
         ambiguousApiImports:
           apiLinks.ambiguousPackageImports +
           apiLinks.ambiguousSymbolImports,

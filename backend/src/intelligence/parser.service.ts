@@ -158,6 +158,7 @@ export class ParserService {
       return {
         ...file,
         imports: [],
+        calls: [],
         exports: [],
         symbols: [],
         chunks: lineChunks(file, [], []),
@@ -172,10 +173,12 @@ export class ParserService {
       scriptKind(file.path),
     );
     const imports: ParsedImport[] = [];
+    const calls: ParsedFile["calls"] = [];
     const exports: string[] = [];
     const symbols: ParsedSymbol[] = [];
     const chunks: ParsedChunk[] = [];
     const symbolOccurrences = new Map<string, number>();
+    const stableKeyByDeclaration = new Map<ts.Node, string>();
     const localExportNames = new Map<string, string[]>();
 
     source.forEachChild((node) => {
@@ -245,6 +248,7 @@ export class ParserService {
           ...lines,
           metadata: { filePath: file.path },
         });
+        stableKeyByDeclaration.set(declaration, stableKey);
         const content = declaration.getText(source);
         chunks.push({
           chunkIndex: chunks.length,
@@ -264,10 +268,44 @@ export class ParserService {
         });
       }
     });
+    const visitCalls = (node: ts.Node): void => {
+      if (ts.isCallExpression(node)) {
+        const expression = node.expression;
+        const localName = ts.isIdentifier(expression)
+          ? expression.text
+          : ts.isPropertyAccessExpression(expression) &&
+              ts.isIdentifier(expression.expression)
+            ? expression.expression.text
+            : null;
+        const memberName =
+          ts.isPropertyAccessExpression(expression) &&
+          ts.isIdentifier(expression.expression)
+            ? expression.name.text
+            : undefined;
+        if (localName) {
+          let parent: ts.Node | undefined = node.parent;
+          let sourceSymbolStableKey: string | undefined;
+          while (parent && parent !== source) {
+            sourceSymbolStableKey = stableKeyByDeclaration.get(parent);
+            if (sourceSymbolStableKey) break;
+            parent = parent.parent;
+          }
+          calls.push({
+            localName,
+            ...(memberName ? { memberName } : {}),
+            line: range(source, node).lineStart,
+            ...(sourceSymbolStableKey ? { sourceSymbolStableKey } : {}),
+          });
+        }
+      }
+      ts.forEachChild(node, visitCalls);
+    };
+    visitCalls(source);
 
     return {
       ...file,
       imports,
+      calls,
       exports: [...new Set(exports)],
       symbols,
       chunks: chunks.length ? chunks : lineChunks(file, imports, exports),

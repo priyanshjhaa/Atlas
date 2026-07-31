@@ -66,6 +66,7 @@ export interface AtlasSyncJob {
     filesIndexed?: number;
     chunksCreated?: number;
     symbolsExtracted?: number;
+    callsDetected?: number;
     relationshipsExtracted?: number;
     languages?: string[];
     typeChecker?: {
@@ -87,6 +88,7 @@ export interface AtlasSyncJob {
       relationshipsLinked: number;
       ambiguousDependencies: number;
       apiSymbolsLinked: number;
+      apiCallsLinked: number;
       ambiguousApiImports: number;
     };
     embeddingProvider?: "local" | "openai";

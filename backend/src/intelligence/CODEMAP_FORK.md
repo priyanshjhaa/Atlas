@@ -46,6 +46,8 @@ services from the sibling CodeMap repository.
 - Symbol identities do not depend on line numbers. Public API exports and named
   import bindings form revision-stamped symbol links across repositories when
   both the package and symbol targets resolve uniquely.
+- Direct and namespace call usages are stored independently from import edges
+  and linked back to the containing source symbol when one is available.
 - Temporary repository archives are deleted after every worker attempt.
 
 This directory is now maintained as Atlas code. Future CodeMap changes are not
