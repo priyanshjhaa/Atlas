@@ -132,6 +132,7 @@ export class IngestionService {
         files: parsedFiles,
         relationships: observedRelationships,
         packages: workspaceAnalysis.packages,
+        typeChecker: typeCheckerAnalysis,
         embeddings: embeddingMap,
         architecture: snapshot,
       });
@@ -156,6 +157,8 @@ export class IngestionService {
             typeCheckerAnalysis.pathAliasesResolved,
           workspaceImportsResolved:
             typeCheckerAnalysis.workspaceImportsResolved,
+          publicApiSymbols:
+            typeCheckerAnalysis.publicApiSymbols.length,
           diagnosticCount: typeCheckerAnalysis.diagnostics.length,
           configFilePath:
             typeCheckerAnalysis.configuration.configFilePath,
@@ -176,6 +179,10 @@ export class IngestionService {
             persistence.packageRelationshipsPersisted,
           ambiguousDependencies:
             persistence.ambiguousPackageDependencies,
+          apiSymbolsLinked:
+            persistence.apiSymbolRelationshipsPersisted,
+          ambiguousApiImports:
+            persistence.ambiguousApiImports,
         },
       };
     } finally {

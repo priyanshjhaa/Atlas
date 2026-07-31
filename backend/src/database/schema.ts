@@ -269,12 +269,20 @@ export const codeSymbols = pgTable(
     fileId: uuid("file_id")
       .notNull()
       .references(() => codeFiles.id, { onDelete: "cascade" }),
+    packageId: uuid("package_id").references(() => codePackages.id, {
+      onDelete: "set null",
+    }),
     stableKey: text("stable_key").notNull(),
     name: text("name").notNull(),
     kind: text("kind").notNull(),
+    qualifiedName: text("qualified_name"),
     lineStart: integer("line_start").notNull(),
     lineEnd: integer("line_end").notNull(),
     exported: boolean("exported").default(false).notNull(),
+    publicApi: boolean("public_api").default(false).notNull(),
+    exportNames: jsonb("export_names").$type<string[]>().default([]).notNull(),
+    apiSpecifiers: jsonb("api_specifiers").$type<string[]>().default([]).notNull(),
+    sourceRevision: text("source_revision"),
     metadata: jsonb("metadata")
       .$type<Record<string, unknown>>()
       .default({})
@@ -288,6 +296,58 @@ export const codeSymbols = pgTable(
     index("code_symbols_workspace_id_idx").on(table.workspaceId),
     index("code_symbols_repository_id_idx").on(table.repositoryId),
     index("code_symbols_file_id_idx").on(table.fileId),
+    index("code_symbols_package_id_idx").on(table.packageId),
+    index("code_symbols_workspace_public_api_idx").on(
+      table.workspaceId,
+      table.publicApi,
+    ),
+  ],
+);
+
+export const codeImports = pgTable(
+  "code_imports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    repositoryId: uuid("repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    fileId: uuid("file_id")
+      .notNull()
+      .references(() => codeFiles.id, { onDelete: "cascade" }),
+    stableKey: text("stable_key").notNull(),
+    specifier: text("specifier").notNull(),
+    line: integer("line").notNull(),
+    bindings: jsonb("bindings")
+      .$type<
+        Array<{
+          localName: string;
+          importedName: string;
+          kind: "default" | "named" | "namespace";
+          typeOnly: boolean;
+        }>
+      >()
+      .default([])
+      .notNull(),
+    sourceRevision: text("source_revision").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("code_imports_repository_stable_key_unique").on(
+      table.repositoryId,
+      table.stableKey,
+    ),
+    index("code_imports_workspace_id_idx").on(table.workspaceId),
+    index("code_imports_repository_id_idx").on(table.repositoryId),
+    index("code_imports_file_id_idx").on(table.fileId),
+    index("code_imports_workspace_specifier_idx").on(
+      table.workspaceId,
+      table.specifier,
+    ),
   ],
 );
 
@@ -387,6 +447,10 @@ export const codePackages = pgTable(
     rootPath: text("root_path").notNull(),
     manifestPath: text("manifest_path").notNull(),
     entryPoints: jsonb("entry_points").$type<string[]>().default([]).notNull(),
+    exportMappings: jsonb("export_mappings")
+      .$type<Record<string, string[]>>()
+      .default({})
+      .notNull(),
     dependencies: jsonb("dependencies")
       .$type<
         Array<{
@@ -462,6 +526,58 @@ export const packageRelationships = pgTable(
     ),
     index("package_relationships_target_package_id_idx").on(
       table.targetPackageId,
+    ),
+  ],
+);
+
+export const symbolRelationships = pgTable(
+  "symbol_relationships",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    sourceRepositoryId: uuid("source_repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    sourceFileId: uuid("source_file_id")
+      .notNull()
+      .references(() => codeFiles.id, { onDelete: "cascade" }),
+    targetRepositoryId: uuid("target_repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    targetSymbolId: uuid("target_symbol_id")
+      .notNull()
+      .references(() => codeSymbols.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    stableKey: text("stable_key").notNull(),
+    provenance: text("provenance").notNull(),
+    confidence: real("confidence").notNull(),
+    sourceRevision: text("source_revision").notNull(),
+    targetRevision: text("target_revision").notNull(),
+    evidence: jsonb("evidence")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("symbol_relationships_workspace_stable_key_unique").on(
+      table.workspaceId,
+      table.stableKey,
+    ),
+    index("symbol_relationships_workspace_id_idx").on(table.workspaceId),
+    index("symbol_relationships_source_repository_id_idx").on(
+      table.sourceRepositoryId,
+    ),
+    index("symbol_relationships_target_repository_id_idx").on(
+      table.targetRepositoryId,
+    ),
+    index("symbol_relationships_source_file_id_idx").on(table.sourceFileId),
+    index("symbol_relationships_target_symbol_id_idx").on(
+      table.targetSymbolId,
     ),
   ],
 );

@@ -43,6 +43,9 @@ services from the sibling CodeMap repository.
   symlinks inside downloaded repository archives.
 - Package identities and dependency links are persisted with source revision,
   manifest provenance, confidence, and strict workspace scoping.
+- Symbol identities do not depend on line numbers. Public API exports and named
+  import bindings form revision-stamped symbol links across repositories when
+  both the package and symbol targets resolve uniquely.
 - Temporary repository archives are deleted after every worker attempt.
 
 This directory is now maintained as Atlas code. Future CodeMap changes are not

@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { GitHubAppService } from "../connectors/github-app.service";
 import { ArchitectureBuilderService } from "./architecture-builder.service";
+import { ApiSymbolLinkerService } from "./api-symbol-linker.service";
 import { EmbeddingsService } from "./embeddings.service";
 import { IngestionService } from "./ingestion.service";
 import { IntelligenceController } from "./intelligence.controller";
@@ -18,6 +19,7 @@ import { WorkspaceAnalyzerService } from "./workspace-analyzer.service";
   controllers: [IntelligenceController],
   providers: [
     ArchitectureBuilderService,
+    ApiSymbolLinkerService,
     EmbeddingsService,
     GitHubAppService,
     IngestionService,

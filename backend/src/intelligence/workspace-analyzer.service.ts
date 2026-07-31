@@ -204,14 +204,27 @@ function packageAnalysis(
     dirname(manifestPath) === "." ? "" : dirname(manifestPath);
   const exports = new Map<string, string[]>();
   collectExportTargets(manifest.exports, ".", exports, packageRoot);
-  const entryPoints = [
+  const defaultEntryPoints = existingEntryPoints(
+    manifest,
+    packageRoot,
+    paths,
+  );
+  const rootEntryPoints = [
     ...new Set([
       ...(exports.get(".") ?? []).filter((path) => paths.has(path)),
-      ...existingEntryPoints(manifest, packageRoot, paths),
+      ...defaultEntryPoints,
+    ]),
+  ];
+  const entryPoints = [
+    ...new Set([
+      ...[...exports.values()]
+        .flat()
+        .filter((path) => !path.includes("*") && paths.has(path)),
+      ...defaultEntryPoints,
     ]),
   ];
   const mappings: Record<string, string[]> = {};
-  if (entryPoints.length) mappings[manifest.name] = entryPoints;
+  if (rootEntryPoints.length) mappings[manifest.name] = rootEntryPoints;
   for (const [subpath, targets] of exports) {
     if (subpath === ".") continue;
     const suffix = subpath.replace(/^\.\//, "");
@@ -242,6 +255,7 @@ function packageAnalysis(
       entryPoints,
       dependencyNames: packageDependencies.map((item) => item.name),
       dependencies: packageDependencies,
+      exportMappings: mappings,
     },
     mappings,
   };

@@ -9,6 +9,14 @@ export interface RepositorySourceFile {
 export interface ParsedImport {
   specifier: string;
   line: number;
+  bindings: ParsedImportBinding[];
+}
+
+export interface ParsedImportBinding {
+  localName: string;
+  importedName: string;
+  kind: "default" | "named" | "namespace";
+  typeOnly: boolean;
 }
 
 export interface TypeCheckedImportSymbol {
@@ -47,12 +55,22 @@ export interface TypeCheckerAnalysis {
   workspaceImportsResolved: number;
   diagnostics: TypeCheckDiagnostic[];
   resolvedImports: TypeCheckedImport[];
+  publicApiSymbols: PublicApiSymbol[];
   configuration: {
     configFilePath: string | null;
     configuredRootFiles: number;
     projectConfigPaths: string[];
     projectReferences: number;
   };
+}
+
+export interface PublicApiSymbol {
+  packageName: string;
+  entryPoint: string;
+  exportName: string;
+  targetPath: string;
+  targetName: string;
+  targetKind: string;
 }
 
 export interface WorkspacePackage {
@@ -63,6 +81,7 @@ export interface WorkspacePackage {
   entryPoints: string[];
   dependencyNames: string[];
   dependencies: WorkspacePackageDependency[];
+  exportMappings: Record<string, string[]>;
 }
 
 export interface WorkspacePackageDependency {
@@ -86,6 +105,7 @@ export interface ParsedSymbol {
   lineStart: number;
   lineEnd: number;
   exported: boolean;
+  exportNames: string[];
   metadata: Record<string, unknown>;
 }
 
@@ -144,6 +164,7 @@ export interface IngestionSummary {
     importsResolved: number;
     pathAliasesResolved: number;
     workspaceImportsResolved: number;
+    publicApiSymbols: number;
     diagnosticCount: number;
     configFilePath: string | null;
     configuredRootFiles: number;
@@ -156,5 +177,7 @@ export interface IngestionSummary {
     warningCount: number;
     relationshipsLinked: number;
     ambiguousDependencies: number;
+    apiSymbolsLinked: number;
+    ambiguousApiImports: number;
   };
 }

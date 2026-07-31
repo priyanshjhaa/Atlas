@@ -4,6 +4,7 @@ import type {
   ParsedChunk,
   ParsedFile,
   ParsedImport,
+  ParsedImportBinding,
   ParsedSymbol,
   RepositorySourceFile,
 } from "./intelligence.types";
@@ -46,6 +47,15 @@ function exported(node: ts.Node) {
   );
 }
 
+function defaultExported(node: ts.Node) {
+  return Boolean(
+    ts.canHaveModifiers(node) &&
+      ts
+        .getModifiers(node)
+        ?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword),
+  );
+}
+
 function symbolIdentity(node: ts.Node) {
   if (
     ts.isFunctionDeclaration(node) ||
@@ -55,12 +65,7 @@ function symbolIdentity(node: ts.Node) {
     ts.isEnumDeclaration(node) ||
     ts.isModuleDeclaration(node)
   ) {
-    return node.name?.getText() ?? null;
-  }
-  if (ts.isVariableStatement(node)) {
-    return node.declarationList.declarations
-      .map((declaration) => declaration.name.getText())
-      .join(", ");
+    return node.name?.getText() ?? (defaultExported(node) ? "default" : null);
   }
   return null;
 }
@@ -78,6 +83,39 @@ function symbolKind(node: ts.Node) {
 
 function estimateTokens(content: string) {
   return Math.max(1, Math.ceil(content.length / 4));
+}
+
+function importBindings(node: ts.ImportDeclaration): ParsedImportBinding[] {
+  const clause = node.importClause;
+  if (!clause) return [];
+  const bindings: ParsedImportBinding[] = [];
+  if (clause.name) {
+    bindings.push({
+      localName: clause.name.text,
+      importedName: "default",
+      kind: "default",
+      typeOnly: clause.isTypeOnly,
+    });
+  }
+  if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
+    bindings.push({
+      localName: clause.namedBindings.name.text,
+      importedName: "*",
+      kind: "namespace",
+      typeOnly: clause.isTypeOnly,
+    });
+  }
+  if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+    for (const element of clause.namedBindings.elements) {
+      bindings.push({
+        localName: element.name.text,
+        importedName: element.propertyName?.text ?? element.name.text,
+        kind: "named",
+        typeOnly: clause.isTypeOnly || element.isTypeOnly,
+      });
+    }
+  }
+  return bindings;
 }
 
 function lineChunks(
@@ -137,6 +175,26 @@ export class ParserService {
     const exports: string[] = [];
     const symbols: ParsedSymbol[] = [];
     const chunks: ParsedChunk[] = [];
+    const symbolOccurrences = new Map<string, number>();
+    const localExportNames = new Map<string, string[]>();
+
+    source.forEachChild((node) => {
+      if (
+        !ts.isExportDeclaration(node) ||
+        node.moduleSpecifier ||
+        !node.exportClause ||
+        !ts.isNamedExports(node.exportClause)
+      ) {
+        return;
+      }
+      for (const element of node.exportClause.elements) {
+        const localName = element.propertyName?.text ?? element.name.text;
+        localExportNames.set(localName, [
+          ...(localExportNames.get(localName) ?? []),
+          element.name.text,
+        ]);
+      }
+    });
 
     source.forEachChild((node) => {
       if (ts.isImportDeclaration(node)) {
@@ -145,6 +203,7 @@ export class ParserService {
             .getText(source)
             .replace(/^["']|["']$/g, ""),
           line: range(source, node).lineStart,
+          bindings: importBindings(node),
         });
       }
       if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
@@ -153,39 +212,57 @@ export class ParserService {
         );
       }
       if (!symbolKinds.has(node.kind)) return;
-      const name = symbolIdentity(node);
-      if (!name) return;
-
-      const lines = range(source, node);
       const kind = symbolKind(node);
-      const isExported = exported(node);
-      if (isExported) exports.push(name);
-      const stableKey = `${file.path}:${kind}:${name}:${lines.lineStart}`;
-      symbols.push({
-        stableKey,
-        name,
-        kind,
-        exported: isExported,
-        ...lines,
-        metadata: { filePath: file.path },
-      });
-      const content = node.getText(source);
-      chunks.push({
-        chunkIndex: chunks.length,
-        content,
-        summary: `${kind} ${name} in ${file.path}`,
-        language: file.language,
-        tokenCount: estimateTokens(content),
-        metadata: {
-          filePath: file.path,
-          chunkType: "symbol",
-          symbol: name,
-          symbolKind: kind,
+      const declarations = ts.isVariableStatement(node)
+        ? node.declarationList.declarations
+        : [node];
+      for (const declaration of declarations) {
+        const name = ts.isVariableDeclaration(declaration)
+          ? declaration.name.getText(source)
+          : symbolIdentity(declaration);
+        if (!name) continue;
+        const lines = range(source, declaration);
+        const directExport = exported(node);
+        const exportNames = [
+          ...(directExport
+            ? [defaultExported(node) ? "default" : name]
+            : []),
+          ...(localExportNames.get(name) ?? []),
+        ];
+        const isExported = exportNames.length > 0;
+        exports.push(...exportNames);
+        const stableBase = `${file.path}:${kind}:${name}`;
+        const occurrence = (symbolOccurrences.get(stableBase) ?? 0) + 1;
+        symbolOccurrences.set(stableBase, occurrence);
+        const stableKey =
+          occurrence === 1 ? stableBase : `${stableBase}#${occurrence}`;
+        symbols.push({
+          stableKey,
+          name,
+          kind,
+          exported: isExported,
+          exportNames: [...new Set(exportNames)],
           ...lines,
-          imports: imports.map((item) => item.specifier),
-          exports,
-        },
-      });
+          metadata: { filePath: file.path },
+        });
+        const content = declaration.getText(source);
+        chunks.push({
+          chunkIndex: chunks.length,
+          content,
+          summary: `${kind} ${name} in ${file.path}`,
+          language: file.language,
+          tokenCount: estimateTokens(content),
+          metadata: {
+            filePath: file.path,
+            chunkType: "symbol",
+            symbol: name,
+            symbolKind: kind,
+            ...lines,
+            imports: imports.map((item) => item.specifier),
+            exports,
+          },
+        });
+      }
     });
 
     return {

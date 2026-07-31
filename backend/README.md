@@ -190,8 +190,11 @@ GitHub revision:
 7. Persist stable package identities and exact manifest dependency links,
    including cross-repository links when a package name resolves uniquely
    inside the workspace. Ambiguous package names are not linked.
-8. Generate deterministic local embeddings or optional OpenAI embeddings.
-9. Atomically replace the repository index and create an architecture snapshot.
+8. Persist line-independent symbol identities, import bindings, public export
+   names, and package API ownership. Named package imports are linked to unique
+   public symbols across repositories, including symbols exposed by re-exports.
+9. Generate deterministic local embeddings or optional OpenAI embeddings.
+10. Atomically replace the repository index and create an architecture snapshot.
 
 The exact source commit, included concepts, exclusions, and Atlas adaptations
 are recorded in `src/intelligence/CODEMAP_FORK.md`. Atlas does not depend on the

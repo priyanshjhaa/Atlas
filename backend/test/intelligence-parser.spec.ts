@@ -378,8 +378,15 @@ describe("forked CodeMap intelligence services", () => {
       {
         path: "packages/core/src/index.ts",
         language: "typescript",
-        content: "export const loadUser = () => ({ id: 1 });\n",
+        content: 'export { loadUser } from "./users";\n',
         checksum: "r",
+        sizeBytes: 38,
+      },
+      {
+        path: "packages/core/src/users.ts",
+        language: "typescript",
+        content: "export const loadUser = () => ({ id: 1 });\n",
+        checksum: "r2",
         sizeBytes: 47,
       },
       {
@@ -445,6 +452,14 @@ describe("forked CodeMap intelligence services", () => {
       pathAliasesResolved: 0,
       workspaceImportsResolved: 1,
     });
+    expect(typeChecker.publicApiSymbols).toContainEqual({
+      packageName: "@atlas/core",
+      entryPoint: "packages/core/src/index.ts",
+      exportName: "loadUser",
+      targetPath: "packages/core/src/users.ts",
+      targetName: "loadUser",
+      targetKind: "variable",
+    });
     expect(relationships[0]).toMatchObject({
       sourcePath: "packages/api/src/index.ts",
       targetPath: "packages/core/src/index.ts",
@@ -454,5 +469,80 @@ describe("forked CodeMap intelligence services", () => {
         resolutionKind: "workspace_package",
       },
     });
+  });
+
+  it("keeps symbol identities stable across line movement and records bindings", () => {
+    const before = new ParserService().parseFiles([
+      {
+        path: "src/public.ts",
+        language: "typescript",
+        content:
+          'import primary, { value as localValue, type Contract } from "@atlas/core";\nconst internal = 1;\nexport { internal as publicValue };\nexport const first = 1, second = 2;\nexport default function handler() { return primary(localValue); }\n',
+        checksum: "w",
+        sizeBytes: 240,
+      },
+    ])[0];
+    const after = new ParserService().parseFiles([
+      {
+        path: "src/public.ts",
+        language: "typescript",
+        content:
+          '\n\nimport primary, { value as localValue, type Contract } from "@atlas/core";\nconst internal = 1;\nexport { internal as publicValue };\nexport const first = 1, second = 2;\nexport default function handler() { return primary(localValue); }\n',
+        checksum: "x",
+        sizeBytes: 242,
+      },
+    ])[0];
+
+    expect(before?.imports[0]).toMatchObject({
+      specifier: "@atlas/core",
+      bindings: [
+        {
+          localName: "primary",
+          importedName: "default",
+          kind: "default",
+          typeOnly: false,
+        },
+        {
+          localName: "localValue",
+          importedName: "value",
+          kind: "named",
+          typeOnly: false,
+        },
+        {
+          localName: "Contract",
+          importedName: "Contract",
+          kind: "named",
+          typeOnly: true,
+        },
+      ],
+    });
+    expect(before?.symbols.map((item) => item.stableKey)).toEqual(
+      after?.symbols.map((item) => item.stableKey),
+    );
+    expect(before?.symbols).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stableKey: "src/public.ts:variable:internal",
+          name: "internal",
+          exported: true,
+          exportNames: ["publicValue"],
+        }),
+        expect.objectContaining({
+          stableKey: "src/public.ts:variable:first",
+          name: "first",
+          exportNames: ["first"],
+        }),
+        expect.objectContaining({
+          stableKey: "src/public.ts:variable:second",
+          name: "second",
+          exportNames: ["second"],
+        }),
+        expect.objectContaining({
+          stableKey: "src/public.ts:function:handler",
+          name: "handler",
+          exportNames: ["default"],
+        }),
+      ]),
+    );
   });
 });

@@ -148,6 +148,8 @@ export class ArchitectureBuilderService {
                   typeChecker.pathAliasesResolved,
                 workspaceImportsResolved:
                   typeChecker.workspaceImportsResolved,
+                publicApiSymbols:
+                  typeChecker.publicApiSymbols.length,
                 diagnosticCount: typeChecker.diagnostics.length,
                 configFilePath:
                   typeChecker.configuration.configFilePath,

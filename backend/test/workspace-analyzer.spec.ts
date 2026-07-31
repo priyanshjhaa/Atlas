@@ -74,7 +74,10 @@ describe("WorkspaceAnalyzerService", () => {
           version: "2.1.0",
           rootPath: "packages/core",
           manifestPath: "packages/core/package.json",
-          entryPoints: ["packages/core/src/index.ts"],
+          entryPoints: [
+            "packages/core/src/index.ts",
+            "packages/core/src/users.ts",
+          ],
           dependencyNames: ["react", "zod"],
           dependencies: [
             {

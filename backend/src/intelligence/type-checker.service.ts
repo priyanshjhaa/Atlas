@@ -331,6 +331,7 @@ export class TypeCheckerService {
         workspaceImportsResolved: 0,
         diagnostics: [],
         resolvedImports: [],
+        publicApiSymbols: [],
         configuration: {
           configFilePath: null,
           configuredRootFiles: 0,
@@ -504,6 +505,10 @@ export class TypeCheckerService {
         ];
     const analyzedFilePaths = new Set<string>();
     const resolvedImportsByKey = new Map<string, TypeCheckedImport>();
+    const publicApiSymbolsByKey = new Map<
+      string,
+      TypeCheckerAnalysis["publicApiSymbols"][number]
+    >();
     const compilerDiagnostics: ts.Diagnostic[] = [];
 
     for (const input of programInputs) {
@@ -559,6 +564,41 @@ export class TypeCheckerService {
           );
         });
       }
+      for (const packageItem of workspace?.packages ?? []) {
+        for (const entryPoint of packageItem.entryPoints) {
+          const source = program.getSourceFile(
+            absoluteRepositoryPath(rootPath, entryPoint),
+          );
+          if (!source) continue;
+          const moduleSymbol = checker.getSymbolAtLocation(source);
+          if (!moduleSymbol) continue;
+          for (const exportedSymbol of checker.getExportsOfModule(moduleSymbol)) {
+            const target = targetForSymbol(
+              checker,
+              exportedSymbol,
+              rootPath,
+            );
+            if (!target) continue;
+            const item = {
+              packageName: packageItem.name,
+              entryPoint,
+              exportName: exportedSymbol.getName(),
+              targetPath: target.targetPath,
+              targetName: target.symbol.getName(),
+              targetKind: symbolKind(target.symbol),
+            };
+            publicApiSymbolsByKey.set(
+              [
+                item.packageName,
+                item.exportName,
+                item.targetPath,
+                item.targetName,
+              ].join(":"),
+              item,
+            );
+          }
+        }
+      }
     }
 
     const diagnosticKeys = new Set<string>();
@@ -610,6 +650,7 @@ export class TypeCheckerService {
       ).length,
       diagnostics,
       resolvedImports,
+      publicApiSymbols: [...publicApiSymbolsByKey.values()],
       configuration: {
         configFilePath: configFile?.path ?? null,
         configuredRootFiles: configuredRootNames.size,

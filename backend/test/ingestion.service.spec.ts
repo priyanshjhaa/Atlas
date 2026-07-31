@@ -28,6 +28,8 @@ describe("IngestionService", () => {
         packagesPersisted: 1,
         packageRelationshipsPersisted: 0,
         ambiguousPackageDependencies: 0,
+        apiSymbolRelationshipsPersisted: 0,
+        ambiguousApiImports: 0,
       };
     });
     const config = {
@@ -110,6 +112,7 @@ describe("IngestionService", () => {
           importsResolved: 1,
           pathAliasesResolved: 0,
           workspaceImportsResolved: 0,
+          publicApiSymbols: 1,
           diagnosticCount: 0,
           configFilePath: "tsconfig.json",
           configuredRootFiles: 2,
@@ -120,6 +123,8 @@ describe("IngestionService", () => {
           warningCount: 0,
           relationshipsLinked: 0,
           ambiguousDependencies: 0,
+          apiSymbolsLinked: 0,
+          ambiguousApiImports: 0,
         },
       });
       expect(persist).toHaveBeenCalledOnce();
