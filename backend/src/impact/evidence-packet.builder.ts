@@ -45,6 +45,14 @@ interface RankedCitation {
   rank: number;
 }
 
+const CROSS_REPOSITORY_PROVENANCES = new Set<
+  ImpactCitation["provenance"]
+>([
+  "package_manifest_dependency",
+  "typescript_public_api_import",
+  "typescript_public_api_call",
+]);
+
 @Injectable()
 export class EvidencePacketBuilder {
   build(
@@ -117,29 +125,29 @@ export class EvidencePacketBuilder {
       directImpacts: this.prepareFindings(
         result.directImpacts,
         selectedEvidenceIds,
-        result.repository.id,
+        result,
         canonicalRepository,
+        false,
       ).slice(0, limits.maxDirectImpacts),
       downstreamImpacts: this.prepareFindings(
         result.downstreamImpacts,
         selectedEvidenceIds,
-        result.repository.id,
+        result,
         canonicalRepository,
+        input.scope === "workspace",
       ).slice(0, limits.maxDownstreamImpacts),
       unknownImpacts: this.prepareFindings(
         result.unknownImpacts,
         selectedEvidenceIds,
-        result.repository.id,
+        result,
         canonicalRepository,
+        false,
       ).slice(0, limits.maxUnknownImpacts),
       relationshipPaths: this.relationshipPaths(
         result,
         canonicalRepository,
       ).slice(0, limits.maxRelationshipPaths),
-      evidence: evidence.map((item) => ({
-        ...item,
-        repository: canonicalRepository,
-      })),
+      evidence,
       limitations: result.limitations
         .slice(0, limits.maxLimitations)
         .map((item) => this.sanitize(item).slice(0, 500)),
@@ -225,9 +233,8 @@ export class EvidencePacketBuilder {
     const ranked: RankedCitation[] = result.evidence
       .filter(
         (citation) =>
-          citation.repositoryId === result.repository.id &&
-          citation.sourceRevision === result.sourceRevision &&
-          ranks.has(citation.id),
+          ranks.has(citation.id) &&
+          this.citationIsAuthorized(citation, result),
       )
       .map((citation) => ({
         citation,
@@ -294,12 +301,22 @@ export class EvidencePacketBuilder {
   private prepareFindings(
     findings: ImpactFinding[],
     selectedEvidenceIds: Set<string>,
-    repositoryId: string,
+    result: ImpactReportResult,
     canonicalRepository: string,
+    allowCrossRepository: boolean,
   ): ImpactEvidencePacketFinding[] {
     const unique = new Map<string, ImpactFinding>();
     for (const finding of findings
-      .filter((item) => item.repositoryId === repositoryId)
+      .filter(
+        (item) =>
+          item.repositoryId === result.repository.id ||
+          (allowCrossRepository &&
+            result.scope === "workspace" &&
+            CROSS_REPOSITORY_PROVENANCES.has(
+              item.provenance as ImpactCitation["provenance"],
+            ) &&
+            item.evidenceIds.some((id) => selectedEvidenceIds.has(id))),
+      )
       .sort((left, right) =>
         this.findingSortKey(left).localeCompare(this.findingSortKey(right)),
       )) {
@@ -323,7 +340,10 @@ export class EvidencePacketBuilder {
       title: this.sanitize(finding.title).slice(0, 240),
       detail: this.sanitize(finding.detail).slice(0, 600),
       repositoryId: finding.repositoryId,
-      repository: canonicalRepository,
+      repository:
+        finding.repositoryId === result.repository.id
+          ? canonicalRepository
+          : this.sanitize(finding.repository).slice(0, 240),
       filePath: finding.filePath,
       symbol: finding.symbol,
       hop: finding.hop,
@@ -345,13 +365,25 @@ export class EvidencePacketBuilder {
       string,
       ImpactEvidencePacket["relationshipPaths"][number]
     >();
-    for (const path of result.relationshipPath.filter(
-      (item) =>
-        item.repository === canonicalRepository ||
-        item.repository === result.repository.name,
-    )) {
+    const allowedLocations = new Set(
+      [...result.directImpacts, ...result.downstreamImpacts]
+        .filter((finding) => Boolean(finding.filePath))
+        .map((finding) => {
+          const repository =
+            finding.repositoryId === result.repository.id
+              ? canonicalRepository
+              : finding.repository;
+          return `${repository}:${finding.filePath}`;
+        }),
+    );
+    for (const path of result.relationshipPath) {
+      const repository =
+        path.repository === result.repository.name
+          ? canonicalRepository
+          : path.repository;
+      if (!allowedLocations.has(`${repository}:${path.filePath}`)) continue;
       const sanitized = {
-        repository: canonicalRepository,
+        repository: this.sanitize(repository).slice(0, 240),
         filePath: this.sanitize(path.filePath),
         hop: path.hop,
       };
@@ -363,6 +395,30 @@ export class EvidencePacketBuilder {
         left.hop - right.hop ||
         left.repository.localeCompare(right.repository) ||
         left.filePath.localeCompare(right.filePath),
+    );
+  }
+
+  private citationIsAuthorized(
+    citation: ImpactCitation,
+    result: ImpactReportResult,
+  ): boolean {
+    if (citation.repositoryId === result.repository.id) {
+      return citation.sourceRevision === result.sourceRevision;
+    }
+    if (
+      result.scope !== "workspace" ||
+      !citation.sourceRevision ||
+      !CROSS_REPOSITORY_PROVENANCES.has(citation.provenance)
+    ) {
+      return false;
+    }
+    return result.downstreamImpacts.some(
+      (finding) =>
+        finding.repositoryId === citation.repositoryId &&
+        finding.repository === citation.repository &&
+        finding.filePath === citation.filePath &&
+        finding.provenance === citation.provenance &&
+        finding.evidenceIds.includes(citation.id),
     );
   }
 

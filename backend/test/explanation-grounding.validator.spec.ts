@@ -415,6 +415,71 @@ describe("ExplanationGroundingValidator", () => {
     });
   });
 
+  it("accepts calls backed by an indexed public API call edge", () => {
+    const packetWithCall: ImpactEvidencePacket = {
+      ...packet,
+      downstreamImpacts: [
+        ...packet.downstreamImpacts,
+        {
+          id: "workspace-downstream:call",
+          classification: "downstream",
+          kind: "Consumer",
+          title: "atlas/web · src/session-client.ts",
+          detail: "Calls refreshSession across the repository boundary.",
+          repositoryId: "repository-web",
+          repository: "atlas/web",
+          filePath: "src/session-client.ts",
+          symbol: "refreshSession",
+          hop: 1,
+          confidence: 1,
+          provenance: "typescript_public_api_call",
+          evidenceIds: ["workspace-relationship:call"],
+        },
+      ],
+      relationshipPaths: [
+        ...packet.relationshipPaths,
+        {
+          repository: "atlas/web",
+          filePath: "src/session-client.ts",
+          hop: 1,
+        },
+      ],
+      evidence: [
+        ...packet.evidence,
+        {
+          id: "workspace-relationship:call",
+          repositoryId: "repository-web",
+          repository: "atlas/web",
+          filePath: "src/session-client.ts",
+          lineStart: 8,
+          lineEnd: 8,
+          symbol: "refreshSession",
+          excerpt: "Calls refreshSession from src/session.ts.",
+          provenance: "typescript_public_api_call",
+          sourceRevision: "web-revision-1",
+        },
+      ],
+    };
+    const explanationWithCall = {
+      ...validExplanation,
+      claims: validExplanation.claims.map((claim, index) =>
+        index === 0
+          ? {
+              text: "`src/session-client.ts` calls `refreshSession` from `src/session.ts`.",
+              evidenceIds: ["workspace-relationship:call"],
+            }
+          : claim,
+      ),
+    };
+
+    expect(
+      validator().validate(explanationWithCall, packetWithCall),
+    ).toEqual({
+      status: "valid",
+      explanation: explanationWithCall,
+    });
+  });
+
   it("does not treat recommended future checks as observed provenance", () => {
     expect(
       validator().validate(

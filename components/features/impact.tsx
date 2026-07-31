@@ -34,12 +34,16 @@ import type {
   AtlasWorkspace,
 } from "@/lib/api-types";
 
+function observedProvenance(provenance: AtlasImpactFinding["provenance"]) {
+  return provenance !== "analysis_gap";
+}
+
 function ImpactFindingCard({ item }: { item: AtlasImpactFinding }) {
   const evidence = item.filePath
     ? `${item.repository}/${item.filePath}`
     : item.repository;
   const confidence =
-    item.provenance === "typescript_static_import" ? "observed" : "inferred";
+    observedProvenance(item.provenance) ? "observed" : "inferred";
   return (
     <article className="impact-card">
       <div className="impact-card__icon">
@@ -1143,7 +1147,7 @@ export function ImpactReportPage({
                     key={item.id}
                     id={evidenceDomId(item.id)}
                     className={`evidence-row ${
-                      item.provenance === "typescript_static_import"
+                      item.provenance !== "indexed_source_chunk"
                         ? "evidence-row--orange"
                         : "evidence-row--cyan"
                     }`}

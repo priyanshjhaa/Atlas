@@ -8,6 +8,12 @@ export type ImpactFindingClassification =
   | "direct"
   | "downstream"
   | "unknown";
+export type ImpactObservedProvenance =
+  | "indexed_source_chunk"
+  | "typescript_static_import"
+  | "package_manifest_dependency"
+  | "typescript_public_api_import"
+  | "typescript_public_api_call";
 
 export type CreateImpactReportInput =
   | {
@@ -63,7 +69,7 @@ export interface ImpactCitation {
   lineEnd?: number;
   symbol?: string;
   excerpt: string;
-  provenance: "indexed_source_chunk" | "typescript_static_import";
+  provenance: ImpactObservedProvenance;
   sourceRevision: string;
 }
 
@@ -80,8 +86,7 @@ export interface ImpactFinding {
   hop: number;
   confidence: number;
   provenance:
-    | "indexed_source_chunk"
-    | "typescript_static_import"
+    | ImpactObservedProvenance
     | "analysis_gap";
   evidenceIds: string[];
 }

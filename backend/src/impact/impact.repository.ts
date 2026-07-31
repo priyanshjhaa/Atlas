@@ -5,6 +5,7 @@ import {
   eq,
   ilike,
   inArray,
+  ne,
   or,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -12,11 +13,14 @@ import { DatabaseService } from "../database/database.service";
 import {
   auditEvents,
   codeFiles,
+  codePackages,
   codeRelationships,
   codeSymbols,
   connectors,
   impactReports,
   repositories,
+  packageRelationships,
+  symbolRelationships,
 } from "../database/schema";
 import { explanationAuditEvent } from "./explanation-audit";
 import type { ImpactExplanationState } from "./explanation.types";
@@ -28,6 +32,28 @@ import type {
 
 const sourceFiles = alias(codeFiles, "impact_source_files");
 const targetFiles = alias(codeFiles, "impact_target_files");
+const workspaceSourceFiles = alias(codeFiles, "workspace_source_files");
+const workspaceTargetFiles = alias(codeFiles, "workspace_target_files");
+const workspaceTargetSymbols = alias(
+  codeSymbols,
+  "workspace_target_symbols",
+);
+const workspaceSourceRepositories = alias(
+  repositories,
+  "workspace_source_repositories",
+);
+const workspaceTargetRepositories = alias(
+  repositories,
+  "workspace_target_repositories",
+);
+const workspaceSourcePackages = alias(
+  codePackages,
+  "workspace_source_packages",
+);
+const workspaceTargetPackages = alias(
+  codePackages,
+  "workspace_target_packages",
+);
 
 export interface ImpactRepositoryDetails {
   id: string;
@@ -66,6 +92,27 @@ export interface ImpactRelationshipCandidate {
   provenance: string;
   confidence: number;
   sourceRevision: string;
+  evidence: Record<string, unknown>;
+}
+
+export interface ImpactWorkspaceRelationshipCandidate {
+  id: string;
+  sourceRepositoryId: string;
+  sourceRepository: string;
+  sourceFileId: string | null;
+  sourcePath: string;
+  targetRepositoryId: string;
+  targetRepository: string;
+  targetPath: string;
+  targetSymbol: string | null;
+  kind: string;
+  provenance:
+    | "package_manifest_dependency"
+    | "typescript_public_api_import"
+    | "typescript_public_api_call";
+  confidence: number;
+  sourceRevision: string;
+  targetRevision: string;
   evidence: Record<string, unknown>;
 }
 
@@ -197,6 +244,257 @@ export class ImpactRepository {
         ),
       )
       .limit(100);
+  }
+
+  async hasWorkspaceRelationshipIndex(workspaceId: string): Promise<boolean> {
+    const [symbolRelationship] = await this.database.client
+      .select({ id: symbolRelationships.id })
+      .from(symbolRelationships)
+      .innerJoin(
+        workspaceSourceRepositories,
+        eq(
+          workspaceSourceRepositories.id,
+          symbolRelationships.sourceRepositoryId,
+        ),
+      )
+      .innerJoin(
+        workspaceTargetRepositories,
+        eq(
+          workspaceTargetRepositories.id,
+          symbolRelationships.targetRepositoryId,
+        ),
+      )
+      .where(
+        and(
+          eq(symbolRelationships.workspaceId, workspaceId),
+          eq(workspaceSourceRepositories.isActive, true),
+          eq(workspaceTargetRepositories.isActive, true),
+        ),
+      )
+      .limit(1);
+    if (symbolRelationship) return true;
+    const [packageRelationship] = await this.database.client
+      .select({ id: packageRelationships.id })
+      .from(packageRelationships)
+      .innerJoin(
+        workspaceSourceRepositories,
+        eq(
+          workspaceSourceRepositories.id,
+          packageRelationships.sourceRepositoryId,
+        ),
+      )
+      .innerJoin(
+        workspaceTargetRepositories,
+        eq(
+          workspaceTargetRepositories.id,
+          packageRelationships.targetRepositoryId,
+        ),
+      )
+      .where(
+        and(
+          eq(packageRelationships.workspaceId, workspaceId),
+          eq(workspaceSourceRepositories.isActive, true),
+          eq(workspaceTargetRepositories.isActive, true),
+        ),
+      )
+      .limit(1);
+    return Boolean(packageRelationship);
+  }
+
+  async incomingWorkspaceRelationships(
+    workspaceId: string,
+    repositoryId: string,
+    targetSymbolIds: string[],
+    targetFileIds: string[],
+  ): Promise<ImpactWorkspaceRelationshipCandidate[]> {
+    if (!targetSymbolIds.length && !targetFileIds.length) return [];
+    const symbolRows = targetSymbolIds.length
+      ? await this.database.client
+          .select({
+            id: symbolRelationships.id,
+            sourceRepositoryId: symbolRelationships.sourceRepositoryId,
+            sourceRepositoryOwner: workspaceSourceRepositories.owner,
+            sourceRepositoryName: workspaceSourceRepositories.name,
+            sourceFileId: symbolRelationships.sourceFileId,
+            sourcePath: workspaceSourceFiles.path,
+            targetRepositoryId: symbolRelationships.targetRepositoryId,
+            targetRepositoryOwner: workspaceTargetRepositories.owner,
+            targetRepositoryName: workspaceTargetRepositories.name,
+            targetPath: workspaceTargetFiles.path,
+            targetSymbol: workspaceTargetSymbols.name,
+            kind: symbolRelationships.kind,
+            provenance: symbolRelationships.provenance,
+            confidence: symbolRelationships.confidence,
+            sourceRevision: symbolRelationships.sourceRevision,
+            targetRevision: symbolRelationships.targetRevision,
+            evidence: symbolRelationships.evidence,
+          })
+          .from(symbolRelationships)
+          .innerJoin(
+            workspaceSourceRepositories,
+            eq(
+              workspaceSourceRepositories.id,
+              symbolRelationships.sourceRepositoryId,
+            ),
+          )
+          .innerJoin(
+            workspaceTargetRepositories,
+            eq(
+              workspaceTargetRepositories.id,
+              symbolRelationships.targetRepositoryId,
+            ),
+          )
+          .innerJoin(
+            workspaceSourceFiles,
+            eq(workspaceSourceFiles.id, symbolRelationships.sourceFileId),
+          )
+          .innerJoin(
+            workspaceTargetSymbols,
+            eq(workspaceTargetSymbols.id, symbolRelationships.targetSymbolId),
+          )
+          .innerJoin(
+            workspaceTargetFiles,
+            eq(workspaceTargetFiles.id, workspaceTargetSymbols.fileId),
+          )
+          .where(
+            and(
+              eq(symbolRelationships.workspaceId, workspaceId),
+              eq(symbolRelationships.targetRepositoryId, repositoryId),
+              ne(symbolRelationships.sourceRepositoryId, repositoryId),
+              inArray(symbolRelationships.targetSymbolId, targetSymbolIds),
+              eq(workspaceSourceRepositories.isActive, true),
+              eq(workspaceTargetRepositories.isActive, true),
+            ),
+          )
+          .limit(100)
+      : [];
+    const packageSymbolFilter =
+      targetSymbolIds.length && targetFileIds.length
+        ? or(
+            inArray(codeSymbols.id, targetSymbolIds),
+            inArray(codeSymbols.fileId, targetFileIds),
+          )
+        : targetSymbolIds.length
+          ? inArray(codeSymbols.id, targetSymbolIds)
+          : inArray(codeSymbols.fileId, targetFileIds);
+    const packageIds = [
+      ...new Set(
+        (
+          await this.database.client
+            .select({ packageId: codeSymbols.packageId })
+            .from(codeSymbols)
+            .where(
+              and(
+                eq(codeSymbols.workspaceId, workspaceId),
+                eq(codeSymbols.repositoryId, repositoryId),
+                packageSymbolFilter,
+              ),
+            )
+        )
+          .map((item) => item.packageId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const packageRows = packageIds.length
+      ? await this.database.client
+          .select({
+            id: packageRelationships.id,
+            sourceRepositoryId: packageRelationships.sourceRepositoryId,
+            sourceRepositoryOwner: workspaceSourceRepositories.owner,
+            sourceRepositoryName: workspaceSourceRepositories.name,
+            sourcePath: workspaceSourcePackages.manifestPath,
+            targetRepositoryId: packageRelationships.targetRepositoryId,
+            targetRepositoryOwner: workspaceTargetRepositories.owner,
+            targetRepositoryName: workspaceTargetRepositories.name,
+            targetPath: workspaceTargetPackages.manifestPath,
+            targetSymbol: workspaceTargetPackages.name,
+            kind: packageRelationships.kind,
+            provenance: packageRelationships.provenance,
+            confidence: packageRelationships.confidence,
+            sourceRevision: packageRelationships.sourceRevision,
+            targetRevision: workspaceTargetPackages.sourceRevision,
+            evidence: packageRelationships.evidence,
+          })
+          .from(packageRelationships)
+          .innerJoin(
+            workspaceSourceRepositories,
+            eq(
+              workspaceSourceRepositories.id,
+              packageRelationships.sourceRepositoryId,
+            ),
+          )
+          .innerJoin(
+            workspaceTargetRepositories,
+            eq(
+              workspaceTargetRepositories.id,
+              packageRelationships.targetRepositoryId,
+            ),
+          )
+          .innerJoin(
+            workspaceSourcePackages,
+            eq(
+              workspaceSourcePackages.id,
+              packageRelationships.sourcePackageId,
+            ),
+          )
+          .innerJoin(
+            workspaceTargetPackages,
+            eq(
+              workspaceTargetPackages.id,
+              packageRelationships.targetPackageId,
+            ),
+          )
+          .where(
+            and(
+              eq(packageRelationships.workspaceId, workspaceId),
+              eq(packageRelationships.targetRepositoryId, repositoryId),
+              ne(packageRelationships.sourceRepositoryId, repositoryId),
+              inArray(packageRelationships.targetPackageId, packageIds),
+              eq(workspaceSourceRepositories.isActive, true),
+              eq(workspaceTargetRepositories.isActive, true),
+            ),
+          )
+          .limit(100)
+      : [];
+    const mappedSymbolRows: ImpactWorkspaceRelationshipCandidate[] =
+      symbolRows.map((row) => ({
+        id: row.id,
+        sourceRepositoryId: row.sourceRepositoryId,
+        sourceRepository: `${row.sourceRepositoryOwner}/${row.sourceRepositoryName}`,
+        sourceFileId: row.sourceFileId,
+        sourcePath: row.sourcePath,
+        targetRepositoryId: row.targetRepositoryId,
+        targetRepository: `${row.targetRepositoryOwner}/${row.targetRepositoryName}`,
+        targetPath: row.targetPath,
+        targetSymbol: row.targetSymbol,
+        kind: row.kind,
+        provenance:
+          row.provenance as ImpactWorkspaceRelationshipCandidate["provenance"],
+        confidence: row.confidence,
+        sourceRevision: row.sourceRevision,
+        targetRevision: row.targetRevision,
+        evidence: row.evidence,
+      }));
+    const mappedPackageRows: ImpactWorkspaceRelationshipCandidate[] =
+      packageRows.map((row) => ({
+        id: row.id,
+        sourceRepositoryId: row.sourceRepositoryId,
+        sourceRepository: `${row.sourceRepositoryOwner}/${row.sourceRepositoryName}`,
+        sourceFileId: null,
+        sourcePath: row.sourcePath,
+        targetRepositoryId: row.targetRepositoryId,
+        targetRepository: `${row.targetRepositoryOwner}/${row.targetRepositoryName}`,
+        targetPath: row.targetPath,
+        targetSymbol: row.targetSymbol,
+        kind: row.kind,
+        provenance:
+          row.provenance as ImpactWorkspaceRelationshipCandidate["provenance"],
+        confidence: row.confidence,
+        sourceRevision: row.sourceRevision,
+        targetRevision: row.targetRevision,
+        evidence: row.evidence,
+      }));
+    return [...mappedSymbolRows, ...mappedPackageRows];
   }
 
   async create(input: {

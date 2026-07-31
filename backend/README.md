@@ -198,6 +198,12 @@ GitHub revision:
 10. Generate deterministic local embeddings or optional OpenAI embeddings.
 11. Atomically replace the repository index and create an architecture snapshot.
 
+Workspace-scoped impact analysis consumes the indexed package, public API
+import, and public API call edges to report observed consumers in other active
+repositories. Each cross-repository finding keeps the consumer repository,
+source revision, provenance, confidence, and evidence location; runtime,
+event-driven, and external consumers remain explicit limitations.
+
 The exact source commit, included concepts, exclusions, and Atlas adaptations
 are recorded in `src/intelligence/CODEMAP_FORK.md`. Atlas does not depend on the
 CodeMap repository at runtime and does not automatically merge later CodeMap

@@ -11,6 +11,7 @@ import {
   type ImpactRelationshipCandidate,
   type ImpactRepositoryDetails,
   type ImpactSymbolCandidate,
+  type ImpactWorkspaceRelationshipCandidate,
 } from "./impact.repository";
 import type {
   ImpactCitation,
@@ -152,21 +153,50 @@ export class ImpactAnalysisService {
       relationships,
     );
     evidence.push(...relationshipOutput.evidence);
+    let workspaceGraphAvailable = false;
+    let workspaceOutput: {
+      findings: ImpactFinding[];
+      evidence: ImpactCitation[];
+    } = { findings: [], evidence: [] };
+    if (input.scope === "workspace") {
+      const [available, workspaceRelationships] = await Promise.all([
+        this.repository.hasWorkspaceRelationshipIndex(workspaceId),
+        this.repository.incomingWorkspaceRelationships(
+          workspaceId,
+          input.repositoryId,
+          resolvedEntities
+            .filter((entity) => entity.kind === "symbol")
+            .map((entity) => entity.id),
+          seedFileIds,
+        ),
+      ]);
+      workspaceGraphAvailable = available;
+      workspaceOutput = this.workspaceRelationshipFindings(
+        workspaceRelationships,
+      );
+      evidence.push(...workspaceOutput.evidence);
+    }
+    const downstreamFindings = [
+      ...relationshipOutput.findings,
+      ...workspaceOutput.findings,
+    ];
 
     const limitations = this.limitations(
       input,
       retrieval.lowConfidence,
       resolvedEntities.length,
+      workspaceGraphAvailable,
     );
     const unknownImpacts = this.unknownFindings(
       sourceRepository,
       input,
       resolvedEntities.length,
-      relationshipOutput.findings.length,
+      downstreamFindings.length,
+      workspaceGraphAvailable,
     );
     const risk = this.risk(
       directImpacts,
-      relationshipOutput.findings,
+      downstreamFindings,
       unknownImpacts,
       retrieval.lowConfidence,
     );
@@ -180,12 +210,12 @@ export class ImpactAnalysisService {
         sourceRepository,
         input.description,
         directImpacts,
-        relationshipOutput.findings,
+        downstreamFindings,
       ),
       executiveSummary: this.summary(
         sourceRepository,
         directImpacts.length,
-        relationshipOutput.findings.length,
+        downstreamFindings.length,
         unknownImpacts.length,
       ),
       risk,
@@ -199,23 +229,23 @@ export class ImpactAnalysisService {
       scope: input.scope,
       resolvedEntities,
       directImpacts,
-      downstreamImpacts: relationshipOutput.findings,
+      downstreamImpacts: downstreamFindings,
       unknownImpacts,
       evidence,
       relationshipPath: this.relationshipPath(
         sourceRepository,
         resolvedEntities,
-        relationshipOutput.findings,
+        downstreamFindings,
       ),
       recommendations: this.recommendations(
         input.description,
         directImpacts,
-        relationshipOutput.findings,
+        downstreamFindings,
         unknownImpacts,
       ),
       verificationPlan: this.verificationPlan(
         directImpacts,
-        relationshipOutput.findings,
+        downstreamFindings,
         input.scope,
       ),
       limitations,
@@ -417,11 +447,108 @@ export class ImpactAnalysisService {
     return { findings, evidence };
   }
 
+  private workspaceRelationshipFindings(
+    relationships: ImpactWorkspaceRelationshipCandidate[],
+  ): { findings: ImpactFinding[]; evidence: ImpactCitation[] } {
+    const ranked = [...relationships].sort((left, right) => {
+      const rank = (item: ImpactWorkspaceRelationshipCandidate) =>
+        item.provenance === "typescript_public_api_call"
+          ? 3
+          : item.provenance === "typescript_public_api_import"
+            ? 2
+            : 1;
+      return rank(right) - rank(left);
+    });
+    const callKeys = new Set(
+      ranked
+        .filter(
+          (item) => item.provenance === "typescript_public_api_call",
+        )
+        .map(
+          (item) =>
+            `${item.sourceRepositoryId}:${item.sourcePath}:${item.targetPath}:${item.targetSymbol ?? ""}`,
+        ),
+    );
+    const repositoriesWithSymbolEvidence = new Set(
+      ranked
+        .filter(
+          (item) => item.provenance !== "package_manifest_dependency",
+        )
+        .map((item) => item.sourceRepositoryId),
+    );
+    const findings: ImpactFinding[] = [];
+    const evidence: ImpactCitation[] = [];
+
+    for (const relationship of ranked) {
+      const relationshipKey = `${relationship.sourceRepositoryId}:${relationship.sourcePath}:${relationship.targetPath}:${relationship.targetSymbol ?? ""}`;
+      if (
+        relationship.provenance === "typescript_public_api_import" &&
+        callKeys.has(relationshipKey)
+      ) {
+        continue;
+      }
+      if (
+        relationship.provenance === "package_manifest_dependency" &&
+        repositoriesWithSymbolEvidence.has(relationship.sourceRepositoryId)
+      ) {
+        continue;
+      }
+      const evidenceId = `workspace-relationship:${relationship.id}`;
+      const line =
+        typeof relationship.evidence.line === "number"
+          ? relationship.evidence.line
+          : Array.isArray(relationship.evidence.lines) &&
+              typeof relationship.evidence.lines[0] === "number"
+            ? relationship.evidence.lines[0]
+            : undefined;
+      const excerpt =
+        relationship.provenance === "typescript_public_api_call"
+          ? `Calls ${relationship.targetSymbol ?? "a public API"} from ${relationship.targetPath}.`
+          : relationship.provenance === "typescript_public_api_import"
+            ? `Imports ${relationship.targetSymbol ?? "a public API"} from ${relationship.targetPath}.`
+            : `Declares a package dependency on ${relationship.targetSymbol ?? relationship.targetPath}.`;
+      evidence.push({
+        id: evidenceId,
+        repositoryId: relationship.sourceRepositoryId,
+        repository: relationship.sourceRepository,
+        filePath: relationship.sourcePath,
+        lineStart: line,
+        lineEnd: line,
+        symbol: relationship.targetSymbol ?? undefined,
+        excerpt,
+        provenance: relationship.provenance,
+        sourceRevision: relationship.sourceRevision,
+      });
+      findings.push({
+        id: `workspace-downstream:${relationship.id}`,
+        classification: "downstream",
+        kind: "Consumer",
+        title: `${relationship.sourceRepository} · ${relationship.sourcePath}`,
+        detail:
+          relationship.provenance === "typescript_public_api_call"
+            ? `${relationship.sourcePath} calls ${relationship.targetSymbol ?? relationship.targetPath} across the repository boundary.`
+            : relationship.provenance === "typescript_public_api_import"
+              ? `${relationship.sourcePath} imports the public API ${relationship.targetSymbol ?? relationship.targetPath} across the repository boundary.`
+              : `${relationship.sourceRepository} declares a manifest dependency on the affected package.`,
+        repositoryId: relationship.sourceRepositoryId,
+        repository: relationship.sourceRepository,
+        filePath: relationship.sourcePath,
+        symbol: relationship.targetSymbol ?? undefined,
+        hop: 1,
+        confidence: relationship.confidence,
+        provenance: relationship.provenance,
+        evidenceIds: [evidenceId],
+      });
+    }
+    return { findings, evidence };
+  }
+
   private unknownFindings(
     repository: ImpactRepositoryDetails,
     input: ImpactReportInput,
     resolvedCount: number,
     downstreamCount: number,
+    workspaceGraphAvailable: boolean,
   ): ImpactFinding[] {
     const unknowns: ImpactFinding[] = [];
     if (!resolvedCount) {
@@ -447,7 +574,7 @@ export class ImpactAnalysisService {
         kind: "Unknown",
         title: "No observed downstream consumers",
         detail:
-          "The indexed static-import graph contains no incoming consumer path for the resolved anchors. Runtime and external consumers remain unverified.",
+          "The indexed relationship graph contains no incoming consumer path for the resolved anchors. Runtime and external consumers remain unverified.",
         repositoryId: repository.id,
         repository: `${repository.owner}/${repository.name}`,
         hop: 1,
@@ -456,7 +583,7 @@ export class ImpactAnalysisService {
         evidenceIds: [],
       });
     }
-    if (input.scope === "workspace") {
+    if (input.scope === "workspace" && !workspaceGraphAvailable) {
       unknowns.push({
         id: "unknown:cross-repository-links",
         classification: "unknown",
@@ -540,8 +667,8 @@ export class ImpactAnalysisService {
       }
     }
     return downstream.length
-      ? `The change is most strongly anchored in ${anchors.slice(0, 3).join(", ")}. The indexed import graph shows ${downstream.length} downstream consumer${downstream.length === 1 ? "" : "s"}, including ${consumers.slice(0, 3).join(", ")}, whose contracts should be preserved or migrated with the change.`
-      : `The change is most strongly anchored in ${anchors.slice(0, 3).join(", ")}. Atlas found no incoming consumer in the indexed static-import graph, so runtime, configuration, and external integrations still require manual verification.`;
+      ? `The change is most strongly anchored in ${anchors.slice(0, 3).join(", ")}. The indexed relationship graph shows ${downstream.length} downstream consumer${downstream.length === 1 ? "" : "s"}, including ${consumers.slice(0, 3).join(", ")}, whose contracts should be preserved or migrated with the change.`
+      : `The change is most strongly anchored in ${anchors.slice(0, 3).join(", ")}. Atlas found no incoming consumer in the indexed relationship graph, so runtime, configuration, and external integrations still require manual verification.`;
   }
 
   private recommendations(
@@ -624,7 +751,7 @@ export class ImpactAnalysisService {
     const first = entities[0];
     if (first) {
       path.push({
-        repository: repository.name,
+        repository: `${repository.owner}/${repository.name}`,
         filePath: first.filePath,
         hop: 0,
       });
@@ -632,7 +759,7 @@ export class ImpactAnalysisService {
     for (const finding of downstream.slice(0, 4)) {
       if (!finding.filePath) continue;
       path.push({
-        repository: repository.name,
+        repository: finding.repository,
         filePath: finding.filePath,
         hop: finding.hop,
       });
@@ -651,12 +778,12 @@ export class ImpactAnalysisService {
     ];
     if (downstream.length) {
       plan.push(
-        `Exercise the ${downstream.length} observed import consumer${downstream.length === 1 ? "" : "s"} before rollout.`,
+        `Exercise the ${downstream.length} observed consumer${downstream.length === 1 ? "" : "s"} before rollout.`,
       );
     }
     if (scope === "workspace") {
       plan.push(
-        "Confirm package, API, event, and runtime consumers outside the selected repository manually.",
+        "Confirm runtime, event-driven, and external consumers that are not represented by indexed static relationships.",
       );
     }
     return plan;
@@ -666,14 +793,19 @@ export class ImpactAnalysisService {
     input: ImpactReportInput,
     lowConfidence: boolean,
     resolvedCount: number,
+    workspaceGraphAvailable: boolean,
   ): string[] {
     const limitations = [
       "Results describe indexed source at the recorded revision, not uncommitted working-tree changes.",
-      "Observed relationships currently come from statically resolved TypeScript and JavaScript imports.",
+      "Observed relationships come from package manifests and statically resolved TypeScript and JavaScript imports and calls.",
     ];
-    if (input.scope === "workspace") {
+    if (input.scope === "workspace" && !workspaceGraphAvailable) {
       limitations.push(
         "Workspace-wide cross-repository package and API traversal is not available until stable cross-repository links are indexed.",
+      );
+    } else if (input.scope === "workspace") {
+      limitations.push(
+        "Cross-repository traversal covers indexed package manifests and statically observed public API imports and calls; runtime dispatch and external systems remain unverified.",
       );
     }
     if (input.mode === "pull-request") {
@@ -706,7 +838,7 @@ export class ImpactAnalysisService {
     downstreamCount: number,
     unknownCount: number,
   ) {
-    return `Atlas resolved ${directCount} candidate change anchor${directCount === 1 ? "" : "s"} in ${repository.owner}/${repository.name} and followed ${downstreamCount} observed downstream import relationship${downstreamCount === 1 ? "" : "s"}. ${unknownCount} gap${unknownCount === 1 ? "" : "s"} remain explicitly unverified.`;
+    return `Atlas resolved ${directCount} candidate change anchor${directCount === 1 ? "" : "s"} in ${repository.owner}/${repository.name} and followed ${downstreamCount} observed downstream relationship${downstreamCount === 1 ? "" : "s"}. ${unknownCount} gap${unknownCount === 1 ? "" : "s"} remain explicitly unverified.`;
   }
 
   private title(description: string) {
