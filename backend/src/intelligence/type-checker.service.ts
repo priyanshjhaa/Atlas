@@ -198,6 +198,120 @@ function importedSymbols(
   });
 }
 
+function projectReferenceConfigPath(
+  referencePath: string,
+  sourceByPath: Map<string, ParsedFile>,
+) {
+  const normalized = normalize(referencePath);
+  const candidates = [
+    normalized,
+    `${normalized}.json`,
+    join(normalized, "tsconfig.json"),
+  ];
+  return candidates.find((candidate) => sourceByPath.has(candidate)) ?? null;
+}
+
+function createRepositoryCompilerHost(
+  options: ts.CompilerOptions,
+  rootPath: string,
+  sourceByPath: Map<string, ParsedFile>,
+) {
+  const baseHost = ts.createCompilerHost(options, true);
+  const repositoryDirectories = new Set<string>([rootPath]);
+  for (const path of sourceByPath.keys()) {
+    let directory = dirname(path);
+    while (
+      directory === rootPath ||
+      directory.startsWith(`${rootPath}/`)
+    ) {
+      repositoryDirectories.add(directory);
+      if (directory === rootPath) break;
+      directory = dirname(directory);
+    }
+  }
+  const compilerLibraryRoot = dirname(ts.getDefaultLibFilePath(options));
+  const isCompilerLibraryPath = (path: string) => {
+    const normalized = normalize(path);
+    return (
+      normalized === compilerLibraryRoot ||
+      normalized.startsWith(`${compilerLibraryRoot}/`)
+    );
+  };
+
+  const host: ts.CompilerHost = {
+    ...baseHost,
+    directoryExists: (path) => {
+      const normalized = normalize(path);
+      if (repositoryDirectories.has(normalized)) return true;
+      return (
+        isCompilerLibraryPath(normalized) &&
+        Boolean(baseHost.directoryExists?.(path))
+      );
+    },
+    fileExists: (path) => {
+      const normalized = normalize(path);
+      return (
+        sourceByPath.has(normalized) ||
+        (isCompilerLibraryPath(normalized) && baseHost.fileExists(path))
+      );
+    },
+    getCurrentDirectory: () => rootPath,
+    getDirectories: (path) => {
+      const normalized = normalize(path);
+      if (isCompilerLibraryPath(normalized)) {
+        return baseHost.getDirectories?.(path) ?? [];
+      }
+      const prefix = `${normalized}/`;
+      return [
+        ...new Set(
+          [...repositoryDirectories]
+            .filter((item) => item.startsWith(prefix))
+            .map((item) => item.slice(prefix.length).split("/")[0])
+            .filter((item): item is string => Boolean(item)),
+        ),
+      ];
+    },
+    getSourceFile: (path, languageVersion, onError, shouldCreateNew) => {
+      const normalized = normalize(path);
+      const file = sourceByPath.get(normalized);
+      if (file) {
+        return ts.createSourceFile(
+          normalized,
+          file.content,
+          languageVersion,
+          true,
+          scriptKind(normalized),
+        );
+      }
+      if (!isCompilerLibraryPath(normalized)) return undefined;
+      return baseHost.getSourceFile(
+        path,
+        languageVersion,
+        onError,
+        shouldCreateNew,
+      );
+    },
+    readFile: (path) => {
+      const normalized = normalize(path);
+      const source = sourceByPath.get(normalized)?.content;
+      if (source !== undefined) return source;
+      return isCompilerLibraryPath(normalized)
+        ? baseHost.readFile(path)
+        : undefined;
+    },
+    realpath: (path) => {
+      const normalized = normalize(path);
+      return sourceByPath.has(normalized)
+        ? normalized
+        : isCompilerLibraryPath(normalized)
+          ? (baseHost.realpath?.(path) ?? path)
+          : normalized;
+    },
+    writeFile: () => undefined,
+  };
+  return host;
+}
+
 @Injectable()
 export class TypeCheckerService {
   analyze(
@@ -217,6 +331,8 @@ export class TypeCheckerService {
         configuration: {
           configFilePath: null,
           configuredRootFiles: 0,
+          projectConfigPaths: [],
+          projectReferences: 0,
         },
       };
     }
@@ -271,145 +387,140 @@ export class TypeCheckerService {
       },
       getCurrentDirectory: () => rootPath,
     };
-    const parsedConfiguration = configFile
-      ? ts.getParsedCommandLineOfConfigFile(
-          absoluteRepositoryPath(rootPath, configFile.path),
-          undefined,
-          parseHost,
-        )
-      : undefined;
-    if (parsedConfiguration) {
-      configDiagnostics.push(...parsedConfiguration.errors);
-    }
-    const options: ts.CompilerOptions = {
-      ...defaultOptions,
-      ...parsedConfiguration?.options,
-      incremental: false,
-      noEmit: true,
-      skipLibCheck: true,
+    const parsedProjects: Array<{
+      configPath: string;
+      repositoryConfigPath: string;
+      commandLine: ts.ParsedCommandLine;
+    }> = [];
+    const visitedConfigs = new Set<string>();
+    const parseProject = (absoluteConfigPath: string): void => {
+      const normalizedConfigPath = normalize(absoluteConfigPath);
+      if (visitedConfigs.has(normalizedConfigPath)) return;
+      visitedConfigs.add(normalizedConfigPath);
+      const repositoryConfigPath = repositoryPath(
+        rootPath,
+        normalizedConfigPath,
+      );
+      if (!repositoryConfigPath) return;
+      const commandLine = ts.getParsedCommandLineOfConfigFile(
+        normalizedConfigPath,
+        undefined,
+        parseHost,
+      );
+      if (!commandLine) return;
+      configDiagnostics.push(...commandLine.errors);
+      parsedProjects.push({
+        configPath: normalizedConfigPath,
+        repositoryConfigPath,
+        commandLine,
+      });
+      for (const reference of commandLine.projectReferences ?? []) {
+        const referencedConfig = projectReferenceConfigPath(
+          reference.path,
+          sourceByPath,
+        );
+        if (referencedConfig) parseProject(referencedConfig);
+      }
     };
-    const configuredRootNames =
-      parsedConfiguration?.fileNames.filter((path) =>
-        sourceByPath.has(normalize(path)),
-      ) ?? [];
-    const rootNames = configuredRootNames.length
-      ? configuredRootNames
-      : compilerFiles.map((file) =>
+    if (configFile) {
+      parseProject(absoluteRepositoryPath(rootPath, configFile.path));
+    }
+
+    const configuredRootNames = new Set<string>();
+    const programInputs = parsedProjects.length
+      ? parsedProjects.map((project) => {
+          const rootNames = project.commandLine.fileNames.filter((path) => {
+            const normalized = normalize(path);
+            if (!sourceByPath.has(normalized)) return false;
+            configuredRootNames.add(normalized);
+            return true;
+          });
+          return {
+            rootNames,
+            options: {
+              ...defaultOptions,
+              ...project.commandLine.options,
+              composite: false,
+              declaration: false,
+              declarationMap: false,
+              incremental: false,
+              noEmit: true,
+              skipLibCheck: true,
+              tsBuildInfoFile: undefined,
+            } satisfies ts.CompilerOptions,
+          };
+        })
+      : [
+          {
+            rootNames: compilerFiles.map((file) =>
+              absoluteRepositoryPath(rootPath, file.path),
+            ),
+            options: defaultOptions,
+          },
+        ];
+    const analyzedFilePaths = new Set<string>();
+    const resolvedImportsByKey = new Map<string, TypeCheckedImport>();
+    const compilerDiagnostics: ts.Diagnostic[] = [];
+
+    for (const input of programInputs) {
+      if (!input.rootNames.length) continue;
+      const program = ts.createProgram({
+        rootNames: input.rootNames,
+        options: input.options,
+        host: createRepositoryCompilerHost(
+          input.options,
+          rootPath,
+          sourceByPath,
+        ),
+      });
+      const checker = program.getTypeChecker();
+      compilerDiagnostics.push(...ts.getPreEmitDiagnostics(program));
+
+      for (const file of compilerFiles) {
+        const source = program.getSourceFile(
           absoluteRepositoryPath(rootPath, file.path),
         );
-    const baseHost = ts.createCompilerHost(options, true);
-    const virtualDirectories = new Set<string>([rootPath]);
-    for (const path of sourceByPath.keys()) {
-      let directory = dirname(path);
-      while (
-        directory === rootPath ||
-        directory.startsWith(`${rootPath}/`)
-      ) {
-        virtualDirectories.add(directory);
-        if (directory === rootPath) break;
-        directory = dirname(directory);
+        if (!source) continue;
+        analyzedFilePaths.add(file.path);
+        source.forEachChild((node) => {
+          if (
+            !ts.isImportDeclaration(node) ||
+            !ts.isStringLiteral(node.moduleSpecifier)
+          ) {
+            return;
+          }
+          const moduleTarget = targetForSymbol(
+            checker,
+            checker.getSymbolAtLocation(node.moduleSpecifier),
+            rootPath,
+          );
+          if (!moduleTarget) return;
+          const start = source.getLineAndCharacterOfPosition(node.getStart());
+          const resolvedImport: TypeCheckedImport = {
+            sourcePath: file.path,
+            targetPath: moduleTarget.targetPath,
+            specifier: node.moduleSpecifier.text,
+            line: start.line + 1,
+            resolutionKind: node.moduleSpecifier.text.startsWith(".")
+              ? "relative"
+              : "configured_path_alias",
+            symbols: importedSymbols(
+              checker,
+              node,
+              moduleTarget.targetPath,
+              rootPath,
+            ),
+          };
+          resolvedImportsByKey.set(
+            `${resolvedImport.sourcePath}:${resolvedImport.line}:${resolvedImport.specifier}`,
+            resolvedImport,
+          );
+        });
       }
     }
 
-    const host: ts.CompilerHost = {
-      ...baseHost,
-      directoryExists: (path) =>
-        virtualDirectories.has(normalize(path)) ||
-        Boolean(baseHost.directoryExists?.(path)),
-      fileExists: (path) =>
-        sourceByPath.has(normalize(path)) || baseHost.fileExists(path),
-      getCurrentDirectory: () => rootPath,
-      getDirectories: (path) => {
-        const normalized = normalize(path);
-        const prefix = `${normalized}/`;
-        const directories = [...virtualDirectories]
-          .filter((item) => item.startsWith(prefix))
-          .map((item) => item.slice(prefix.length).split("/")[0])
-          .filter((item): item is string => Boolean(item));
-        return [
-          ...new Set([
-            ...directories,
-            ...(baseHost.getDirectories?.(path) ?? []),
-          ]),
-        ];
-      },
-      getSourceFile: (path, languageVersion, onError, shouldCreateNew) => {
-        const normalized = normalize(path);
-        const file = sourceByPath.get(normalized);
-        if (file) {
-          return ts.createSourceFile(
-            normalized,
-            file.content,
-            languageVersion,
-            true,
-            scriptKind(normalized),
-          );
-        }
-        return baseHost.getSourceFile(
-          path,
-          languageVersion,
-          onError,
-          shouldCreateNew,
-        );
-      },
-      readFile: (path) =>
-        sourceByPath.get(normalize(path))?.content ?? baseHost.readFile(path),
-      realpath: (path) =>
-        sourceByPath.has(normalize(path))
-          ? normalize(path)
-          : (baseHost.realpath?.(path) ?? path),
-      writeFile: () => undefined,
-    };
-    const program = ts.createProgram({
-      rootNames,
-      options,
-      host,
-    });
-    const checker = program.getTypeChecker();
-    const resolvedImports: TypeCheckedImport[] = [];
-    const analyzedFiles = compilerFiles.filter((file) =>
-      program.getSourceFile(absoluteRepositoryPath(rootPath, file.path)),
-    );
-
-    for (const file of analyzedFiles) {
-      const source = program.getSourceFile(
-        absoluteRepositoryPath(rootPath, file.path),
-      );
-      if (!source) continue;
-      source.forEachChild((node) => {
-        if (
-          !ts.isImportDeclaration(node) ||
-          !ts.isStringLiteral(node.moduleSpecifier)
-        ) {
-          return;
-        }
-        const moduleTarget = targetForSymbol(
-          checker,
-          checker.getSymbolAtLocation(node.moduleSpecifier),
-          rootPath,
-        );
-        if (!moduleTarget) return;
-        const start = source.getLineAndCharacterOfPosition(node.getStart());
-        resolvedImports.push({
-          sourcePath: file.path,
-          targetPath: moduleTarget.targetPath,
-          specifier: node.moduleSpecifier.text,
-          line: start.line + 1,
-          resolutionKind: node.moduleSpecifier.text.startsWith(".")
-            ? "relative"
-            : "configured_path_alias",
-          symbols: importedSymbols(
-            checker,
-            node,
-            moduleTarget.targetPath,
-            rootPath,
-          ),
-        });
-      });
-    }
-
-    const diagnostics = [...configDiagnostics, ...ts.getPreEmitDiagnostics(program)]
-      .slice(0, 100)
+    const diagnosticKeys = new Set<string>();
+    const diagnostics = [...configDiagnostics, ...compilerDiagnostics]
       .map<TypeCheckDiagnostic>((diagnostic) => {
         const location =
           diagnostic.file && diagnostic.start !== undefined
@@ -430,10 +541,24 @@ export class TypeCheckerService {
             ? { line: location.line + 1, character: location.character + 1 }
             : {}),
         };
-      });
+      })
+      .filter((diagnostic) => {
+        const key = [
+          diagnostic.code,
+          diagnostic.filePath ?? "",
+          diagnostic.line ?? "",
+          diagnostic.character ?? "",
+          diagnostic.message,
+        ].join(":");
+        if (diagnosticKeys.has(key)) return false;
+        diagnosticKeys.add(key);
+        return true;
+      })
+      .slice(0, 100);
+    const resolvedImports = [...resolvedImportsByKey.values()];
 
     return {
-      filesAnalyzed: analyzedFiles.length,
+      filesAnalyzed: analyzedFilePaths.size,
       importsResolved: resolvedImports.length,
       pathAliasesResolved: resolvedImports.filter(
         (item) => item.resolutionKind === "configured_path_alias",
@@ -442,7 +567,11 @@ export class TypeCheckerService {
       resolvedImports,
       configuration: {
         configFilePath: configFile?.path ?? null,
-        configuredRootFiles: configuredRootNames.length,
+        configuredRootFiles: configuredRootNames.size,
+        projectConfigPaths: parsedProjects.map(
+          (project) => project.repositoryConfigPath,
+        ),
+        projectReferences: Math.max(0, parsedProjects.length - 1),
       },
     };
   }

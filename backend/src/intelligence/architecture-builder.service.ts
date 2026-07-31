@@ -149,6 +149,10 @@ export class ArchitectureBuilderService {
                   typeChecker.configuration.configFilePath,
                 configuredRootFiles:
                   typeChecker.configuration.configuredRootFiles,
+                projectConfigPaths:
+                  typeChecker.configuration.projectConfigPaths,
+                projectReferences:
+                  typeChecker.configuration.projectReferences,
               }
             : null,
         },

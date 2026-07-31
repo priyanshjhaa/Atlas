@@ -176,6 +176,8 @@ describe("forked CodeMap intelligence services", () => {
     expect(analysis.configuration).toEqual({
       configFilePath: "tsconfig.json",
       configuredRootFiles: 3,
+      projectConfigPaths: ["tsconfig.json"],
+      projectReferences: 0,
     });
     expect(analysis.filesAnalyzed).toBe(3);
     expect(
@@ -246,6 +248,93 @@ describe("forked CodeMap intelligence services", () => {
       targetPath: "src/core/users.ts",
       evidence: {
         importSpecifier: "@core/users",
+        resolvedBy: "typescript_type_checker",
+        resolutionKind: "configured_path_alias",
+      },
+    });
+  });
+
+  it("traverses referenced TypeScript projects with their own options", () => {
+    const projectFiles: RepositorySourceFile[] = [
+      {
+        path: "packages/api/src/index.ts",
+        language: "typescript",
+        content:
+          'import { loadUser } from "@core/users";\nexport const handler = () => loadUser();\n',
+        checksum: "j",
+        sizeBytes: 88,
+      },
+      {
+        path: "packages/core/src/users.ts",
+        language: "typescript",
+        content: "export const loadUser = () => ({ id: 1 });\n",
+        checksum: "k",
+        sizeBytes: 47,
+      },
+      {
+        path: "tsconfig.json",
+        language: "json",
+        content: JSON.stringify({
+          files: [],
+          references: [
+            { path: "packages/core" },
+            { path: "packages/api" },
+          ],
+        }),
+        checksum: "l",
+        sizeBytes: 100,
+      },
+      {
+        path: "packages/core/tsconfig.json",
+        language: "json",
+        content: JSON.stringify({
+          compilerOptions: { composite: true },
+          include: ["src/**/*.ts"],
+        }),
+        checksum: "m",
+        sizeBytes: 80,
+      },
+      {
+        path: "packages/api/tsconfig.json",
+        language: "json",
+        content: JSON.stringify({
+          compilerOptions: {
+            composite: true,
+            baseUrl: ".",
+            paths: { "@core/*": ["../core/src/*"] },
+          },
+          include: ["src/**/*.ts"],
+        }),
+        checksum: "n",
+        sizeBytes: 140,
+      },
+    ];
+    const parsed = new ParserService().parseFiles(projectFiles);
+    const typeChecker = new TypeCheckerService().analyze(parsed);
+    const relationships = new RelationshipExtractorService().extract(
+      parsed,
+      typeChecker,
+    );
+
+    expect(typeChecker.configuration).toEqual({
+      configFilePath: "tsconfig.json",
+      configuredRootFiles: 2,
+      projectConfigPaths: [
+        "tsconfig.json",
+        "packages/core/tsconfig.json",
+        "packages/api/tsconfig.json",
+      ],
+      projectReferences: 2,
+    });
+    expect(typeChecker).toMatchObject({
+      filesAnalyzed: 2,
+      importsResolved: 1,
+      pathAliasesResolved: 1,
+    });
+    expect(relationships[0]).toMatchObject({
+      sourcePath: "packages/api/src/index.ts",
+      targetPath: "packages/core/src/users.ts",
+      evidence: {
         resolvedBy: "typescript_type_checker",
         resolutionKind: "configured_path_alias",
       },

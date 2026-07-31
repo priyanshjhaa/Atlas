@@ -179,9 +179,9 @@ GitHub revision:
 2. Discover supported source files within file-count and byte limits.
 3. Parse TypeScript/JavaScript symbols, imports, exports, and citation chunks.
 4. Discover the repository `tsconfig.json`, apply its compiler options and file
-   scope, build a TypeScript program, and resolve imported declarations to
-   repository files and symbols. Repositories without a config use safe
-   TypeScript/JavaScript defaults.
+   scope, traverse referenced project configs, build their TypeScript programs,
+   and resolve imported declarations to repository files and symbols.
+   Repositories without a config use safe TypeScript/JavaScript defaults.
 5. Extract observed local-import relationships with compiler evidence,
    confidence, configured path-alias support, and a syntax-only fallback for
    partially compilable repositories.

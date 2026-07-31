@@ -153,6 +153,10 @@ export class IngestionService {
             typeCheckerAnalysis.configuration.configFilePath,
           configuredRootFiles:
             typeCheckerAnalysis.configuration.configuredRootFiles,
+          projectConfigPaths:
+            typeCheckerAnalysis.configuration.projectConfigPaths,
+          projectReferences:
+            typeCheckerAnalysis.configuration.projectReferences,
         },
       };
     } finally {

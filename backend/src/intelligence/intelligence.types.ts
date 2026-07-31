@@ -46,6 +46,8 @@ export interface TypeCheckerAnalysis {
   configuration: {
     configFilePath: string | null;
     configuredRootFiles: number;
+    projectConfigPaths: string[];
+    projectReferences: number;
   };
 }
 
@@ -113,5 +115,7 @@ export interface IngestionSummary {
     diagnosticCount: number;
     configFilePath: string | null;
     configuredRootFiles: number;
+    projectConfigPaths: string[];
+    projectReferences: number;
   };
 }

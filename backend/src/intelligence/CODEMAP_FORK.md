@@ -36,6 +36,8 @@ services from the sibling CodeMap repository.
   numeric confidence.
 - Atlas creates an in-memory TypeScript program during ingestion and records
   compiler-resolved import targets and imported symbol identities.
+- Solution-style `tsconfig` project references are traversed with each
+  referenced project's compiler options and source scope.
 - Temporary repository archives are deleted after every worker attempt.
 
 This directory is now maintained as Atlas code. Future CodeMap changes are not
