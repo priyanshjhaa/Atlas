@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { DatabaseService } from "../database/database.service";
 import {
   architectureSnapshots,
@@ -722,6 +722,156 @@ export class IntelligenceRepository {
       .limit(240);
   }
 
+  async graphSeed(
+    workspaceId: string,
+    repositoryId: string,
+    entityId: string | undefined,
+    includeHistorical: boolean,
+  ) {
+    const [seed] = await this.database.client
+      .select({
+        id: graphEntities.id,
+        repositoryId: graphEntities.repositoryId,
+        entityType: graphEntities.entityType,
+        stableKey: graphEntities.stableKey,
+      })
+      .from(graphEntities)
+      .where(
+        and(
+          eq(graphEntities.workspaceId, workspaceId),
+          eq(graphEntities.repositoryId, repositoryId),
+          entityId
+            ? eq(graphEntities.id, entityId)
+            : and(
+                eq(graphEntities.entityType, "repository"),
+                eq(graphEntities.stableKey, "repository"),
+              ),
+          includeHistorical
+            ? undefined
+            : eq(graphEntities.isCurrent, true),
+        ),
+      )
+      .limit(1);
+    return seed ?? null;
+  }
+
+  async graphEdges(
+    workspaceId: string,
+    frontierEntityIds: string[],
+    direction: "incoming" | "outgoing" | "both",
+    includeHistorical: boolean,
+    includeInferred: boolean,
+    limit: number,
+  ) {
+    if (!frontierEntityIds.length || limit <= 0) return [];
+    const currentClassification = includeInferred
+      ? or(
+          eq(graphRelationships.classification, "observed"),
+          eq(graphRelationships.classification, "inferred"),
+        )
+      : eq(graphRelationships.classification, "observed");
+    const classificationFilter = includeHistorical
+      ? or(
+          and(
+            eq(graphRelationships.isCurrent, true),
+            currentClassification,
+          ),
+          eq(graphRelationships.classification, "historical"),
+        )
+      : and(
+          eq(graphRelationships.isCurrent, true),
+          currentClassification,
+        );
+    const directionFilter =
+      direction === "incoming"
+        ? inArray(
+            graphRelationships.targetEntityId,
+            frontierEntityIds,
+          )
+        : direction === "outgoing"
+          ? inArray(
+              graphRelationships.sourceEntityId,
+              frontierEntityIds,
+            )
+          : or(
+              inArray(
+                graphRelationships.sourceEntityId,
+                frontierEntityIds,
+              ),
+              inArray(
+                graphRelationships.targetEntityId,
+                frontierEntityIds,
+              ),
+            );
+    return this.database.client
+      .select({
+        id: graphRelationships.id,
+        sourceEntityId: graphRelationships.sourceEntityId,
+        targetEntityId: graphRelationships.targetEntityId,
+        kind: graphRelationships.kind,
+        classification: graphRelationships.classification,
+        provenance: graphRelationships.provenance,
+        confidence: graphRelationships.confidence,
+        sourceRevision: graphRelationships.sourceRevision,
+        targetRevision: graphRelationships.targetRevision,
+        evidence: graphRelationships.evidence,
+        isCurrent: graphRelationships.isCurrent,
+      })
+      .from(graphRelationships)
+      .where(
+        and(
+          eq(graphRelationships.workspaceId, workspaceId),
+          classificationFilter,
+          directionFilter,
+        ),
+      )
+      .orderBy(desc(graphRelationships.confidence), graphRelationships.kind)
+      .limit(Math.min(limit, 400));
+  }
+
+  async graphNodes(workspaceId: string, entityIds: string[]) {
+    if (!entityIds.length) return [];
+    return this.database.client
+      .select({
+        id: graphEntities.id,
+        repositoryId: graphEntities.repositoryId,
+        repositoryOwner: repositories.owner,
+        repositoryName: repositories.name,
+        entityType: graphEntities.entityType,
+        stableKey: graphEntities.stableKey,
+        name: graphEntities.name,
+        path: graphEntities.path,
+        sourceRevision: graphEntities.sourceRevision,
+        metadata: graphEntities.metadata,
+        isCurrent: graphEntities.isCurrent,
+      })
+      .from(graphEntities)
+      .innerJoin(repositories, eq(repositories.id, graphEntities.repositoryId))
+      .where(
+        and(
+          eq(graphEntities.workspaceId, workspaceId),
+          inArray(graphEntities.id, entityIds),
+          eq(repositories.workspaceId, workspaceId),
+          eq(repositories.isActive, true),
+        ),
+      )
+      .orderBy(graphEntities.entityType, graphEntities.name)
+      .then((nodes) =>
+        nodes.map((node) => ({
+          id: node.id,
+          repositoryId: node.repositoryId,
+          repository: `${node.repositoryOwner}/${node.repositoryName}`,
+          entityType: node.entityType,
+          stableKey: node.stableKey,
+          name: node.name,
+          path: node.path,
+          sourceRevision: node.sourceRevision,
+          metadata: node.metadata,
+          isCurrent: node.isCurrent,
+        })),
+      );
+  }
+
   async repositoryExists(
     workspaceId: string,
     repositoryId: string,
@@ -733,6 +883,7 @@ export class IntelligenceRepository {
         and(
           eq(repositories.workspaceId, workspaceId),
           eq(repositories.id, repositoryId),
+          eq(repositories.isActive, true),
         ),
       )
       .limit(1);

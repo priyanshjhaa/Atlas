@@ -48,6 +48,7 @@ POST /v1/workspaces/:workspaceId/sync-jobs
 POST /v1/workspaces/:workspaceId/sync-jobs/:syncJobId/cancel
 POST /v1/workspaces/:workspaceId/sync-jobs/:syncJobId/retry
 GET /v1/workspaces/:workspaceId/repositories/:repositoryId/intelligence/architecture
+GET /v1/workspaces/:workspaceId/repositories/:repositoryId/intelligence/graph
 POST /v1/workspaces/:workspaceId/repositories/:repositoryId/intelligence/search
 ```
 
@@ -214,6 +215,12 @@ When a revision history contains an incoming stable edge that is absent from
 the current graph, impact analysis returns it as historical evidence with
 reduced confidence and an explicit revalidation requirement. Historical edges
 never masquerade as current observed consumers in reports or LLM explanations.
+
+Graph traversal starts from the selected repository node or a graph entity
+owned by that repository. It supports incoming, outgoing, or bidirectional
+walks up to three hops, returns at most 200 nodes and 400 edges, includes
+inferred edges by default, and requires `includeHistorical=true` before
+superseded edges are returned.
 
 The exact source commit, included concepts, exclusions, and Atlas adaptations
 are recorded in `src/intelligence/CODEMAP_FORK.md`. Atlas does not depend on the
