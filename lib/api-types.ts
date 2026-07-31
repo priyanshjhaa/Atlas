@@ -132,6 +132,7 @@ export type AtlasImpactExplanationFailureCode =
   | "provider_error"
   | "invalid_explanation_schema"
   | "explanation_too_large"
+  | "prompt_injection_content"
   | "unknown_evidence_id"
   | "unknown_file_path"
   | "unknown_symbol"

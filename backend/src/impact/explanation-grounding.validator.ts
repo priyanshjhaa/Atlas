@@ -16,6 +16,15 @@ const STANDALONE_FILE_NAME_PATTERN =
   /^(?:[A-Za-z0-9_.-]+\.(?:ts|tsx|js|jsx|mjs|cjs|json|md|sql|py|go|rs|java|kt|rb|php|cs|css|scss|html|yaml|yml|toml|xml|sh)|README(?:\.[A-Za-z0-9]+)?|CHANGELOG(?:\.[A-Za-z0-9]+)?|Dockerfile|Makefile)$/;
 const RELATIONSHIP_PATTERN =
   /\b(imports?|imported by|depends?\s+on|dependency|calls?|relationship)\b/i;
+const PROMPT_INJECTION_OUTPUT_PATTERNS = [
+  /\b(?:ignore|disregard|override|bypass)\b.{0,80}\b(?:instructions?|rules?|polic(?:y|ies)|system|developer|atlas)\b/i,
+  /\b(?:system|developer|security)\s+(?:message|instructions?|override|policy)\b/i,
+  /\byou are now (?:the|a) (?:system|developer|assistant|tool)\b/i,
+  /\b(?:call|invoke)\b.{0,40}\b(?:external\s+)?(?:tools?|internet|browser|network)\b/i,
+  /\b(?:reveal|retrieve|exfiltrate|leak)\b.{0,40}\b(?:secrets?|credentials?|tokens?|private keys?)\b/i,
+  /\b(?:BEGIN|END)_ATLAS_EVIDENCE_PACKET\b/,
+  /\b(?:FINAL_OUTPUT_CHECKLIST|INSTRUCTION_AUTHORITY|CONTENT_CLASSIFICATION)\b/,
+] as const;
 const PROVENANCE_PATTERNS = [
   {
     pattern: /\b(indexed source(?: chunk)?|source chunk)\b/i,
@@ -68,6 +77,16 @@ export class ExplanationGroundingValidator {
     const explanation = parsed.data;
     const units = this.textUnits(explanation);
     const allText = units.map((unit) => unit.text).join("\n");
+    if (
+      PROMPT_INJECTION_OUTPUT_PATTERNS.some((pattern) =>
+        pattern.test(allText),
+      )
+    ) {
+      return {
+        status: "invalid",
+        failureCode: "prompt_injection_content",
+      };
+    }
 
     const evidenceIds = new Set(packet.evidence.map((item) => item.id));
     if (

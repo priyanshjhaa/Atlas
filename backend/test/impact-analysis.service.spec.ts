@@ -166,7 +166,7 @@ describe("ImpactAnalysisService", () => {
     const { repository, retrieval, service } = setup();
     repository.filesByPaths.mockResolvedValue([]);
     repository.matchingSymbols.mockResolvedValue([]);
-    repository.incomingRelationships.mockResolvedValue([]);
+    repository.incomingRelationships.mockReset().mockResolvedValue([]);
     retrieval.search.mockResolvedValue({
       query: "unknown",
       lowConfidence: true,
@@ -202,5 +202,155 @@ describe("ImpactAnalysisService", () => {
       score: null,
     });
     expect(report.answer).toContain("cannot answer");
+  });
+
+  it("keeps Better Auth and JWT boundaries together in migration guidance", async () => {
+    const { repository, retrieval, service } = setup();
+    repository.filesByPaths.mockResolvedValue([
+      {
+        id: "file-auth",
+        path: "lib/auth.ts",
+        language: "typescript",
+        sourceRevision: "revision-1",
+      },
+      {
+        id: "file-jwt",
+        path: "backend/src/auth/jwt-verifier.ts",
+        language: "typescript",
+        sourceRevision: "revision-1",
+      },
+    ]);
+    repository.matchingSymbols.mockResolvedValue([
+      {
+        id: "symbol-auth",
+        fileId: "file-auth",
+        filePath: "lib/auth.ts",
+        name: "auth",
+        kind: "variable",
+        exported: true,
+      },
+      {
+        id: "symbol-jwt",
+        fileId: "file-jwt",
+        filePath: "backend/src/auth/jwt-verifier.ts",
+        name: "verifyJwt",
+        kind: "function",
+        exported: true,
+      },
+    ]);
+    repository.incomingRelationships.mockReset().mockResolvedValue([]);
+    retrieval.search.mockResolvedValue({
+      query: "better auth jwt",
+      lowConfidence: false,
+      results: [
+        {
+          id: "chunk-auth",
+          score: 0.9,
+          lexicalMatches: 2,
+          reason: "Matched Better Auth",
+          excerpt: "export const auth = betterAuth({});",
+          citation: {
+            repositoryId,
+            filePath: "lib/auth.ts",
+            symbol: "auth",
+            provenance: "indexed_source_chunk",
+          },
+        },
+        {
+          id: "chunk-jwt",
+          score: 0.88,
+          lexicalMatches: 2,
+          reason: "Matched JWT verification",
+          excerpt: "export function verifyJwt() {}",
+          citation: {
+            repositoryId,
+            filePath: "backend/src/auth/jwt-verifier.ts",
+            symbol: "verifyJwt",
+            provenance: "indexed_source_chunk",
+          },
+        },
+      ],
+    });
+
+    const report = await service.analyze(workspaceId, {
+      mode: "planned",
+      repositoryId,
+      description: "Replace Better Auth sessions with a JWT boundary.",
+      scope: "repository",
+      anchors: ["lib/auth.ts", "backend/src/auth/jwt-verifier.ts"],
+    });
+
+    expect(report.answer).toContain("cross-boundary authentication migration");
+    expect(report.answer).toContain("lib/auth.ts");
+    expect(report.answer).toContain("backend/src/auth/jwt-verifier.ts");
+    expect(report.recommendations.join("\n")).toContain("JWT claims");
+    expect(report.unknownImpacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "unknown:no-observed-consumers" }),
+      ]),
+    );
+  });
+
+  it("keeps deleted and newly introduced PR files unresolved against the base index", async () => {
+    const { repository, retrieval, service } = setup();
+    repository.filesByPaths.mockResolvedValue([]);
+    repository.matchingSymbols.mockResolvedValue([]);
+    repository.incomingRelationships.mockReset().mockResolvedValue([]);
+    retrieval.search.mockResolvedValue({
+      query: "new and deleted files",
+      lowConfidence: true,
+      results: [],
+    });
+
+    const report = await service.analyze(workspaceId, {
+      mode: "pull-request",
+      repositoryId,
+      description: "Add a new API contract and remove its legacy adapter.",
+      scope: "repository",
+      anchors: ["src/new-contract.ts", "src/legacy-adapter.ts"],
+      pullRequest: {
+        number: 42,
+        title: "Replace the legacy API contract",
+        url: "https://github.com/atlas/identity/pull/42",
+        author: "engineer",
+        baseRevision: "revision-1",
+        headRevision: "revision-2",
+        analysisBudget: {
+          totalChangedFiles: 2,
+          filesRetrieved: 2,
+          filesWithPatchContext: 2,
+          patchCharactersAnalyzed: 200,
+          githubFileLimitReached: false,
+        },
+        changedFiles: [
+          {
+            path: "src/new-contract.ts",
+            status: "added",
+            additions: 40,
+            deletions: 0,
+          },
+          {
+            path: "src/legacy-adapter.ts",
+            status: "removed",
+            additions: 0,
+            deletions: 30,
+          },
+        ],
+      },
+    });
+
+    expect(report.status).toBe("insufficient_evidence");
+    expect(report.directImpacts).toHaveLength(0);
+    expect(report.unknownImpacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "unknown:unresolved-input" }),
+      ]),
+    );
+    expect(report.limitations.join("\n")).toContain(
+      "newly introduced files and symbols remain unknown",
+    );
+    expect(report.limitations.join("\n")).toContain(
+      "GitHub reported 2 changed files",
+    );
   });
 });

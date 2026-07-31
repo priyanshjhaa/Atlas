@@ -4,6 +4,12 @@ import type {
   ImpactReportInput,
   ImpactReportResult,
 } from "../src/impact/impact.types";
+import {
+  MALICIOUS_CODE_COMMENT,
+  MALICIOUS_PR_DESCRIPTION,
+  MALICIOUS_PR_TITLE,
+  MALICIOUS_README,
+} from "./fixtures/malicious-explanation-content";
 
 const repositoryId = "01951ca1-2c72-7000-8000-000000000002";
 
@@ -220,6 +226,93 @@ describe("EvidencePacketBuilder", () => {
     expect(JSON.stringify(output.packet)).not.toContain("other/private");
     expect(JSON.stringify(output.packet)).not.toContain("secrets.ts");
     expect(JSON.stringify(output.packet)).not.toContain("Old source");
+  });
+
+  it("keeps hostile code, README, and PR text bounded as data while excluding foreign-tenant evidence", () => {
+    const { input, result } = fixture();
+    const maliciousInput: ImpactReportInput = {
+      ...input,
+      mode: "pull-request",
+      description: `${MALICIOUS_PR_TITLE}\n\n${MALICIOUS_PR_DESCRIPTION}`,
+      pullRequest: {
+        number: 42,
+        title: MALICIOUS_PR_TITLE,
+        url: "https://github.com/atlas/identity/pull/42",
+        author: "attacker",
+        baseRevision: "revision-1",
+        headRevision: "revision-2",
+        analysisBudget: {
+          totalChangedFiles: 2,
+          filesRetrieved: 2,
+          filesWithPatchContext: 2,
+          patchCharactersAnalyzed: 100,
+          githubFileLimitReached: false,
+        },
+        changedFiles: [],
+      },
+    };
+    const maliciousResult: ImpactReportResult = {
+      ...result,
+      directImpacts: result.directImpacts.map((finding) => ({
+        ...finding,
+        evidenceIds: [
+          ...finding.evidenceIds,
+          "chunk:malicious-code",
+          "chunk:malicious-readme",
+          "chunk:foreign-tenant",
+        ],
+      })),
+      evidence: [
+        ...result.evidence,
+        {
+          id: "chunk:malicious-code",
+          repositoryId,
+          repository: "atlas/identity",
+          filePath: "src/session.ts",
+          excerpt: MALICIOUS_CODE_COMMENT,
+          provenance: "indexed_source_chunk",
+          sourceRevision: "revision-1",
+        },
+        {
+          id: "chunk:malicious-readme",
+          repositoryId,
+          repository: "atlas/identity",
+          filePath: "README.md",
+          excerpt: MALICIOUS_README,
+          provenance: "indexed_source_chunk",
+          sourceRevision: "revision-1",
+        },
+        {
+          id: "chunk:foreign-tenant",
+          repositoryId: "01951ca1-2c72-7000-8000-000000000099",
+          repository: "other-tenant/identity",
+          filePath: "src/session.ts",
+          excerpt: "FOREIGN_TENANT_SECRET",
+          provenance: "indexed_source_chunk",
+          sourceRevision: "revision-1",
+        },
+      ],
+    };
+
+    const output = new EvidencePacketBuilder().build(
+      maliciousInput,
+      maliciousResult,
+    );
+
+    expect(output.status).toBe("ready");
+    if (output.status !== "ready") return;
+    const serialized = JSON.stringify(output.packet);
+    expect(output.packet.question).toContain("SYSTEM OVERRIDE");
+    expect(serialized).toContain("END_ATLAS_EVIDENCE_PACKET");
+    expect(serialized).toContain("Security override");
+    expect(serialized).not.toContain("FOREIGN_TENANT_SECRET");
+    expect(serialized).not.toContain("other-tenant");
+    expect(output.packet.risk).toEqual(result.risk);
+    expect(output.packet.unknownImpacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ title: "Runtime consumers" }),
+      ]),
+    );
   });
 
   it("bounds the complete serialized packet, not only evidence excerpts", () => {

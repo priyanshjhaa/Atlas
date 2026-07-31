@@ -138,6 +138,8 @@ function ExplanationFallback({
           "The provider could not produce a response that satisfied Atlas’s grounding contract.",
         invalid_provider_response:
           "The provider returned a response Atlas could not safely validate.",
+        prompt_injection_content:
+          "Atlas rejected instruction-like content from the generated explanation.",
         provider_rate_limited:
           "The provider’s current usage limit has been reached. Try again shortly.",
         provider_timeout:
