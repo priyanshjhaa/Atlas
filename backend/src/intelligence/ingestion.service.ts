@@ -191,6 +191,12 @@ export class IngestionService {
             persistence.ambiguousApiImports,
           relationshipObservationsRecorded:
             persistence.relationshipObservationsPersisted,
+          graphEntitiesProjected:
+            persistence.graphEntitiesProjected,
+          graphRelationshipsProjected:
+            persistence.graphRelationshipsProjected,
+          inferredGraphRelationships:
+            persistence.inferredGraphRelationships,
         },
       };
     } finally {

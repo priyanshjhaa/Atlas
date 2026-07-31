@@ -10,6 +10,8 @@ import {
   codePackages,
   codeRelationships,
   codeSymbols,
+  graphEntities,
+  graphRelationships,
   packageRelationships,
   relationshipObservations,
   repositories,
@@ -23,6 +25,10 @@ import type {
   WorkspacePackage,
 } from "./intelligence.types";
 import { ApiSymbolLinkerService } from "./api-symbol-linker.service";
+import {
+  GraphProjectionBuilder,
+  graphEntityReferenceKey,
+} from "./graph-projection.builder";
 import { PackageLinkerService } from "./package-linker.service";
 import { RelationshipObservationBuilder } from "./relationship-observation.builder";
 
@@ -46,6 +52,9 @@ interface PersistSummary {
   apiCallRelationshipsPersisted: number;
   ambiguousApiImports: number;
   relationshipObservationsPersisted: number;
+  graphEntitiesProjected: number;
+  graphRelationshipsProjected: number;
+  inferredGraphRelationships: number;
 }
 
 interface RetrievedChunkRow extends Record<string, unknown> {
@@ -65,6 +74,7 @@ export class IntelligenceRepository {
     private readonly packageLinker: PackageLinkerService,
     private readonly apiSymbolLinker: ApiSymbolLinkerService,
     private readonly relationshipObservationBuilder: RelationshipObservationBuilder,
+    private readonly graphProjectionBuilder: GraphProjectionBuilder,
   ) {}
 
   async persist(input: PersistInput): Promise<PersistSummary> {
@@ -404,6 +414,39 @@ export class IntelligenceRepository {
         .innerJoin(codeFiles, eq(codeFiles.id, codeCalls.fileId))
         .leftJoin(codeSymbols, eq(codeSymbols.id, codeCalls.sourceSymbolId))
         .where(eq(codeCalls.workspaceId, input.workspaceId));
+      const workspaceFiles = await transaction
+        .select({
+          repositoryId: codeFiles.repositoryId,
+          path: codeFiles.path,
+          language: codeFiles.language,
+          sourceRevision: codeFiles.sourceRevision,
+        })
+        .from(codeFiles)
+        .where(eq(codeFiles.workspaceId, input.workspaceId));
+      const workspaceRepositories = (
+        await transaction
+          .select({
+            id: repositories.id,
+            owner: repositories.owner,
+            name: repositories.name,
+            lastSyncedRevision: repositories.lastSyncedRevision,
+          })
+          .from(repositories)
+          .where(
+            and(
+              eq(repositories.workspaceId, input.workspaceId),
+              eq(repositories.isActive, true),
+            ),
+          )
+      ).flatMap((repository) => {
+        const sourceRevision =
+          repository.id === input.repositoryId
+            ? input.sourceRevision
+            : repository.lastSyncedRevision;
+        return sourceRevision
+          ? [{ ...repository, sourceRevision }]
+          : [];
+      });
       const apiLinks = this.apiSymbolLinker.link(
         workspaceImports,
         workspaceCalls,
@@ -433,6 +476,156 @@ export class IntelligenceRepository {
             .onConflictDoNothing()
             .returning({ id: relationshipObservations.id })
         : [];
+      const graph = this.graphProjectionBuilder.build({
+        workspaceId: input.workspaceId,
+        currentRepositoryId: input.repositoryId,
+        repositories: workspaceRepositories,
+        files: workspaceFiles,
+        packages: workspacePackages,
+        symbols: workspaceSymbols,
+        localRelationships: input.relationships,
+        packageRelationships: linked.relationships,
+        apiRelationships: apiLinks.relationships,
+      });
+      await transaction
+        .update(graphEntities)
+        .set({ isCurrent: false, updatedAt: new Date() })
+        .where(
+          and(
+            eq(graphEntities.workspaceId, input.workspaceId),
+            eq(graphEntities.repositoryId, input.repositoryId),
+          ),
+        );
+      for (let index = 0; index < graph.entities.length; index += 500) {
+        await transaction
+          .insert(graphEntities)
+          .values(graph.entities.slice(index, index + 500))
+          .onConflictDoUpdate({
+            target: [
+              graphEntities.repositoryId,
+              graphEntities.entityType,
+              graphEntities.stableKey,
+            ],
+            set: {
+              name: sql`excluded.name`,
+              path: sql`excluded.path`,
+              sourceRevision: sql`excluded.source_revision`,
+              metadata: sql`excluded.metadata`,
+              isCurrent: true,
+              updatedAt: new Date(),
+            },
+          });
+      }
+      const persistedGraphEntities = await transaction
+        .select({
+          id: graphEntities.id,
+          repositoryId: graphEntities.repositoryId,
+          entityType: graphEntities.entityType,
+          stableKey: graphEntities.stableKey,
+        })
+        .from(graphEntities)
+        .where(
+          and(
+            eq(graphEntities.workspaceId, input.workspaceId),
+            eq(graphEntities.isCurrent, true),
+          ),
+        );
+      const graphEntityIds = new Map(
+        persistedGraphEntities.map((entity) => [
+          graphEntityReferenceKey({
+            repositoryId: entity.repositoryId,
+            entityType:
+              entity.entityType as Parameters<
+                typeof graphEntityReferenceKey
+              >[0]["entityType"],
+            stableKey: entity.stableKey,
+          }),
+          entity.id,
+        ]),
+      );
+      await transaction
+        .update(graphRelationships)
+        .set({
+          classification: "historical",
+          isCurrent: false,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(graphRelationships.workspaceId, input.workspaceId),
+            eq(graphRelationships.isCurrent, true),
+            or(
+              eq(
+                graphRelationships.sourceRepositoryId,
+                input.repositoryId,
+              ),
+              eq(
+                graphRelationships.targetRepositoryId,
+                input.repositoryId,
+              ),
+            ),
+          ),
+        );
+      const graphRelationshipValues = graph.relationships.flatMap(
+        (relationship) => {
+          const sourceEntityId = graphEntityIds.get(
+            graphEntityReferenceKey(relationship.source),
+          );
+          const targetEntityId = graphEntityIds.get(
+            graphEntityReferenceKey(relationship.target),
+          );
+          if (!sourceEntityId || !targetEntityId) return [];
+          return [
+            {
+              workspaceId: relationship.workspaceId,
+              sourceRepositoryId: relationship.sourceRepositoryId,
+              sourceEntityId,
+              targetRepositoryId: relationship.targetRepositoryId,
+              targetEntityId,
+              kind: relationship.kind,
+              stableKey: relationship.stableKey,
+              classification: relationship.classification,
+              provenance: relationship.provenance,
+              confidence: relationship.confidence,
+              sourceRevision: relationship.sourceRevision,
+              targetRevision: relationship.targetRevision,
+              evidence: relationship.evidence,
+              isCurrent: true,
+            },
+          ];
+        },
+      );
+      for (
+        let index = 0;
+        index < graphRelationshipValues.length;
+        index += 500
+      ) {
+        await transaction
+          .insert(graphRelationships)
+          .values(graphRelationshipValues.slice(index, index + 500))
+          .onConflictDoUpdate({
+            target: [
+              graphRelationships.workspaceId,
+              graphRelationships.stableKey,
+            ],
+            set: {
+              sourceRepositoryId: sql`excluded.source_repository_id`,
+              sourceEntityId: sql`excluded.source_entity_id`,
+              targetRepositoryId: sql`excluded.target_repository_id`,
+              targetEntityId: sql`excluded.target_entity_id`,
+              kind: sql`excluded.kind`,
+              classification: sql`excluded.classification`,
+              provenance: sql`excluded.provenance`,
+              confidence: sql`excluded.confidence`,
+              sourceRevision: sql`excluded.source_revision`,
+              targetRevision: sql`excluded.target_revision`,
+              evidence: sql`excluded.evidence`,
+              isCurrent: true,
+              lastSeenAt: new Date(),
+              updatedAt: new Date(),
+            },
+          });
+      }
       return {
         packagesPersisted: input.packages.length,
         packageRelationshipsPersisted: linked.relationships.length,
@@ -447,6 +640,11 @@ export class IntelligenceRepository {
           apiLinks.ambiguousPackageImports +
           apiLinks.ambiguousSymbolImports,
         relationshipObservationsPersisted: persistedObservations.length,
+        graphEntitiesProjected: graph.entities.length,
+        graphRelationshipsProjected: graphRelationshipValues.length,
+        inferredGraphRelationships: graphRelationshipValues.filter(
+          (item) => item.classification === "inferred",
+        ).length,
       };
     });
   }

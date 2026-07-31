@@ -85,6 +85,13 @@
       "when": 1785520377629,
       "tag": "20260731175257_whole_manta",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1785521344297,
+      "tag": "20260731180904_fancy_alex_wilder",
+      "breakpoints": true
     }
   ]
 }

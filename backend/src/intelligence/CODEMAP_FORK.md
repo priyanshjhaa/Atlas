@@ -51,6 +51,9 @@ services from the sibling CodeMap repository.
 - Local imports, package dependencies, public API imports, and calls are also
   recorded in an append-only observation history keyed by workspace,
   synchronizing repository, source revision, and stable relationship identity.
+- Stable repository, package, file, and symbol graph entities retain their
+  identities across index replacement. Graph edges explicitly classify current
+  observations, superseded history, and bounded import-binding inferences.
 - Temporary repository archives are deleted after every worker attempt.
 
 This directory is now maintained as Atlas code. Future CodeMap changes are not

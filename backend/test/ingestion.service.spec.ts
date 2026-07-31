@@ -32,6 +32,9 @@ describe("IngestionService", () => {
         apiCallRelationshipsPersisted: 0,
         ambiguousApiImports: 0,
         relationshipObservationsPersisted: 1,
+        graphEntitiesProjected: 5,
+        graphRelationshipsProjected: 4,
+        inferredGraphRelationships: 1,
       };
     });
     const config = {
@@ -130,6 +133,9 @@ describe("IngestionService", () => {
           apiCallsLinked: 0,
           ambiguousApiImports: 0,
           relationshipObservationsRecorded: 1,
+          graphEntitiesProjected: 5,
+          graphRelationshipsProjected: 4,
+          inferredGraphRelationships: 1,
         },
       });
       expect(persist).toHaveBeenCalledOnce();

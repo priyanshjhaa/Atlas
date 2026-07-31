@@ -190,5 +190,8 @@ export interface IngestionSummary {
     apiCallsLinked: number;
     ambiguousApiImports: number;
     relationshipObservationsRecorded: number;
+    graphEntitiesProjected: number;
+    graphRelationshipsProjected: number;
+    inferredGraphRelationships: number;
   };
 }

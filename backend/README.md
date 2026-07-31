@@ -198,8 +198,12 @@ GitHub revision:
 10. Append a revision-scoped observation for every local import, package
     dependency, public API import, and public API call so later graph analysis
     can distinguish current structure from relationships seen historically.
-11. Generate deterministic local embeddings or optional OpenAI embeddings.
-12. Atomically replace the repository index and create an architecture snapshot.
+11. Project stable repository, package, file, and symbol graph entities. Current
+    structural edges are marked observed, removed edges become historical, and
+    compiler-resolved import bindings create lower-confidence inferred symbol
+    references with explicit provenance.
+12. Generate deterministic local embeddings or optional OpenAI embeddings.
+13. Atomically replace the repository index and create an architecture snapshot.
 
 Workspace-scoped impact analysis consumes the indexed package, public API
 import, and public API call edges to report observed consumers in other active

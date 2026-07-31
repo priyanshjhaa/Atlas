@@ -43,6 +43,10 @@ export const syncJobStatus = pgEnum("sync_job_status", [
   "failed",
   "cancelled",
 ]);
+export const graphRelationshipClassification = pgEnum(
+  "graph_relationship_classification",
+  ["observed", "historical", "inferred"],
+);
 
 // Better Auth-compatible identity tables. The adapter is connected in Milestone 3.
 export const users = pgTable(
@@ -679,6 +683,106 @@ export const relationshipObservations = pgTable(
       table.targetRepositoryId,
     ),
     index("relationship_observations_stable_key_idx").on(table.stableKey),
+  ],
+);
+
+export const graphEntities = pgTable(
+  "graph_entities",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    repositoryId: uuid("repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    stableKey: text("stable_key").notNull(),
+    name: text("name").notNull(),
+    path: text("path"),
+    sourceRevision: text("source_revision").notNull(),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    isCurrent: boolean("is_current").default(true).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("graph_entities_repository_type_stable_key_unique").on(
+      table.repositoryId,
+      table.entityType,
+      table.stableKey,
+    ),
+    index("graph_entities_workspace_id_idx").on(table.workspaceId),
+    index("graph_entities_repository_id_idx").on(table.repositoryId),
+    index("graph_entities_workspace_type_current_idx").on(
+      table.workspaceId,
+      table.entityType,
+      table.isCurrent,
+    ),
+  ],
+);
+
+export const graphRelationships = pgTable(
+  "graph_relationships",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    sourceRepositoryId: uuid("source_repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    sourceEntityId: uuid("source_entity_id")
+      .notNull()
+      .references(() => graphEntities.id, { onDelete: "cascade" }),
+    targetRepositoryId: uuid("target_repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    targetEntityId: uuid("target_entity_id")
+      .notNull()
+      .references(() => graphEntities.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    stableKey: text("stable_key").notNull(),
+    classification: graphRelationshipClassification("classification")
+      .notNull(),
+    provenance: text("provenance").notNull(),
+    confidence: real("confidence").notNull(),
+    sourceRevision: text("source_revision").notNull(),
+    targetRevision: text("target_revision").notNull(),
+    evidence: jsonb("evidence")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    isCurrent: boolean("is_current").default(true).notNull(),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("graph_relationships_workspace_stable_key_unique").on(
+      table.workspaceId,
+      table.stableKey,
+    ),
+    index("graph_relationships_workspace_id_idx").on(table.workspaceId),
+    index("graph_relationships_source_repository_id_idx").on(
+      table.sourceRepositoryId,
+    ),
+    index("graph_relationships_target_repository_id_idx").on(
+      table.targetRepositoryId,
+    ),
+    index("graph_relationships_source_entity_id_idx").on(table.sourceEntityId),
+    index("graph_relationships_target_entity_id_idx").on(table.targetEntityId),
+    index("graph_relationships_workspace_classification_current_idx").on(
+      table.workspaceId,
+      table.classification,
+      table.isCurrent,
+    ),
   ],
 );
 

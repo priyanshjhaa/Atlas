@@ -3,6 +3,7 @@ import { GitHubAppService } from "../connectors/github-app.service";
 import { ArchitectureBuilderService } from "./architecture-builder.service";
 import { ApiSymbolLinkerService } from "./api-symbol-linker.service";
 import { EmbeddingsService } from "./embeddings.service";
+import { GraphProjectionBuilder } from "./graph-projection.builder";
 import { IngestionService } from "./ingestion.service";
 import { IntelligenceController } from "./intelligence.controller";
 import { IntelligenceRepository } from "./intelligence.repository";
@@ -22,6 +23,7 @@ import { WorkspaceAnalyzerService } from "./workspace-analyzer.service";
     ArchitectureBuilderService,
     ApiSymbolLinkerService,
     EmbeddingsService,
+    GraphProjectionBuilder,
     GitHubAppService,
     IngestionService,
     IntelligenceRepository,
