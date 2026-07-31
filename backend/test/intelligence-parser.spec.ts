@@ -53,6 +53,7 @@ describe("forked CodeMap intelligence services", () => {
       importSpecifier: "./users",
       line: 1,
       resolvedBy: "typescript_type_checker",
+      resolutionKind: "relative",
       importedSymbols: [
         {
           localName: "loadUser",
@@ -66,6 +67,7 @@ describe("forked CodeMap intelligence services", () => {
     expect(typeChecker).toMatchObject({
       filesAnalyzed: 2,
       importsResolved: 1,
+      pathAliasesResolved: 0,
       diagnostics: [],
       configuration: {
         configFilePath: null,
@@ -97,6 +99,7 @@ describe("forked CodeMap intelligence services", () => {
       typeChecker: {
         filesAnalyzed: 2,
         importsResolved: 1,
+        pathAliasesResolved: 0,
         diagnosticCount: 0,
         configFilePath: null,
         configuredRootFiles: 0,
@@ -187,5 +190,65 @@ describe("forked CodeMap intelligence services", () => {
         line: 1,
       }),
     );
+  });
+
+  it("resolves configured path aliases into observed relationships", () => {
+    const aliasFiles: RepositorySourceFile[] = [
+      {
+        path: "src/api.ts",
+        language: "typescript",
+        content:
+          'import { loadUser } from "@core/users";\nexport const handler = () => loadUser();\n',
+        checksum: "g",
+        sizeBytes: 88,
+      },
+      {
+        path: "src/core/users.ts",
+        language: "typescript",
+        content: "export const loadUser = () => ({ id: 1 });\n",
+        checksum: "h",
+        sizeBytes: 47,
+      },
+      {
+        path: "tsconfig.json",
+        language: "json",
+        content: JSON.stringify({
+          compilerOptions: {
+            baseUrl: ".",
+            paths: { "@core/*": ["src/core/*"] },
+          },
+          include: ["src/**/*.ts"],
+        }),
+        checksum: "i",
+        sizeBytes: 110,
+      },
+    ];
+    const parsed = new ParserService().parseFiles(aliasFiles);
+    const typeChecker = new TypeCheckerService().analyze(parsed);
+    const relationships = new RelationshipExtractorService().extract(
+      parsed,
+      typeChecker,
+    );
+
+    expect(typeChecker).toMatchObject({
+      importsResolved: 1,
+      pathAliasesResolved: 1,
+    });
+    expect(typeChecker.resolvedImports[0]).toMatchObject({
+      sourcePath: "src/api.ts",
+      targetPath: "src/core/users.ts",
+      specifier: "@core/users",
+      resolutionKind: "configured_path_alias",
+    });
+    expect(relationships).toHaveLength(1);
+    expect(relationships[0]).toMatchObject({
+      sourcePath: "src/api.ts",
+      targetPath: "src/core/users.ts",
+      evidence: {
+        importSpecifier: "@core/users",
+        resolvedBy: "typescript_type_checker",
+        resolutionKind: "configured_path_alias",
+      },
+    });
   });
 });

@@ -63,6 +63,8 @@ export class RelationshipExtractorService {
             resolvedBy: compilerResolution
               ? "typescript_type_checker"
               : "syntax_path_fallback",
+            resolutionKind:
+              compilerResolution?.resolutionKind ?? "relative",
             ...(compilerResolution?.symbols.length
               ? { importedSymbols: compilerResolution.symbols }
               : {}),

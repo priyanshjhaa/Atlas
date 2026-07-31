@@ -211,6 +211,7 @@ export class TypeCheckerService {
       return {
         filesAnalyzed: 0,
         importsResolved: 0,
+        pathAliasesResolved: 0,
         diagnostics: [],
         resolvedImports: [],
         configuration: {
@@ -394,6 +395,9 @@ export class TypeCheckerService {
           targetPath: moduleTarget.targetPath,
           specifier: node.moduleSpecifier.text,
           line: start.line + 1,
+          resolutionKind: node.moduleSpecifier.text.startsWith(".")
+            ? "relative"
+            : "configured_path_alias",
           symbols: importedSymbols(
             checker,
             node,
@@ -431,6 +435,9 @@ export class TypeCheckerService {
     return {
       filesAnalyzed: analyzedFiles.length,
       importsResolved: resolvedImports.length,
+      pathAliasesResolved: resolvedImports.filter(
+        (item) => item.resolutionKind === "configured_path_alias",
+      ).length,
       diagnostics,
       resolvedImports,
       configuration: {

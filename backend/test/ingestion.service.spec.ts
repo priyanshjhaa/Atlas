@@ -93,6 +93,7 @@ describe("IngestionService", () => {
         typeChecker: {
           filesAnalyzed: 2,
           importsResolved: 1,
+          pathAliasesResolved: 0,
           diagnosticCount: 0,
           configFilePath: "tsconfig.json",
           configuredRootFiles: 2,

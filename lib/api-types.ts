@@ -71,6 +71,7 @@ export interface AtlasSyncJob {
     typeChecker?: {
       filesAnalyzed: number;
       importsResolved: number;
+      pathAliasesResolved: number;
       diagnosticCount: number;
       configFilePath: string | null;
       configuredRootFiles: number;

@@ -24,6 +24,7 @@ export interface TypeCheckedImport {
   targetPath: string;
   specifier: string;
   line: number;
+  resolutionKind: "relative" | "configured_path_alias";
   symbols: TypeCheckedImportSymbol[];
 }
 
@@ -39,6 +40,7 @@ export interface TypeCheckDiagnostic {
 export interface TypeCheckerAnalysis {
   filesAnalyzed: number;
   importsResolved: number;
+  pathAliasesResolved: number;
   diagnostics: TypeCheckDiagnostic[];
   resolvedImports: TypeCheckedImport[];
   configuration: {
@@ -86,6 +88,7 @@ export interface ObservedRelationship {
     importSpecifier: string;
     line: number;
     resolvedBy: "typescript_type_checker" | "syntax_path_fallback";
+    resolutionKind: "relative" | "configured_path_alias";
     importedSymbols?: TypeCheckedImportSymbol[];
   };
 }
@@ -106,6 +109,7 @@ export interface IngestionSummary {
   typeChecker: {
     filesAnalyzed: number;
     importsResolved: number;
+    pathAliasesResolved: number;
     diagnosticCount: number;
     configFilePath: string | null;
     configuredRootFiles: number;

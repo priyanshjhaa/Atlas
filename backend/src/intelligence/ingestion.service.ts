@@ -146,6 +146,8 @@ export class IngestionService {
         typeChecker: {
           filesAnalyzed: typeCheckerAnalysis.filesAnalyzed,
           importsResolved: typeCheckerAnalysis.importsResolved,
+          pathAliasesResolved:
+            typeCheckerAnalysis.pathAliasesResolved,
           diagnosticCount: typeCheckerAnalysis.diagnostics.length,
           configFilePath:
             typeCheckerAnalysis.configuration.configFilePath,

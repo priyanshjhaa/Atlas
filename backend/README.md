@@ -183,7 +183,8 @@ GitHub revision:
    repository files and symbols. Repositories without a config use safe
    TypeScript/JavaScript defaults.
 5. Extract observed local-import relationships with compiler evidence,
-   confidence, and a syntax-only fallback for partially compilable repositories.
+   confidence, configured path-alias support, and a syntax-only fallback for
+   partially compilable repositories.
 6. Generate deterministic local embeddings or optional OpenAI embeddings.
 7. Atomically replace the repository index and create an architecture snapshot.
 

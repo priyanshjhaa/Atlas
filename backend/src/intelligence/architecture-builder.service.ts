@@ -142,6 +142,8 @@ export class ArchitectureBuilderService {
             ? {
                 filesAnalyzed: typeChecker.filesAnalyzed,
                 importsResolved: typeChecker.importsResolved,
+                pathAliasesResolved:
+                  typeChecker.pathAliasesResolved,
                 diagnosticCount: typeChecker.diagnostics.length,
                 configFilePath:
                   typeChecker.configuration.configFilePath,
