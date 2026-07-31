@@ -24,6 +24,11 @@ describe("IngestionService", () => {
     );
     const persist = vi.fn(async (input: unknown) => {
       void input;
+      return {
+        packagesPersisted: 1,
+        packageRelationshipsPersisted: 0,
+        ambiguousPackageDependencies: 0,
+      };
     });
     const config = {
       get: (key: keyof Environment) => {
@@ -113,6 +118,8 @@ describe("IngestionService", () => {
           packageCount: 1,
           packageNames: ["@atlas/api"],
           warningCount: 0,
+          relationshipsLinked: 0,
+          ambiguousDependencies: 0,
         },
       });
       expect(persist).toHaveBeenCalledOnce();
@@ -121,6 +128,7 @@ describe("IngestionService", () => {
         repositoryId: string;
         sourceRevision: string;
         relationships: ObservedRelationship[];
+        packages: Array<{ name: string; stableKey?: string }>;
       };
       expect(persisted).toMatchObject({
         workspaceId: "workspace-1",
@@ -140,6 +148,11 @@ describe("IngestionService", () => {
           }),
         ],
       });
+      expect(persisted.packages).toEqual([
+        expect.objectContaining({
+          name: "@atlas/api",
+        }),
+      ]);
     } finally {
       await rm(storageRoot, { recursive: true, force: true });
     }

@@ -5,15 +5,19 @@ import {
   architectureSnapshots,
   codeChunks,
   codeFiles,
+  codePackages,
   codeRelationships,
   codeSymbols,
+  packageRelationships,
   repositories,
 } from "../database/schema";
 import type {
   ArchitectureSnapshotData,
   ObservedRelationship,
   ParsedFile,
+  WorkspacePackage,
 } from "./intelligence.types";
+import { PackageLinkerService } from "./package-linker.service";
 
 interface PersistInput {
   workspaceId: string;
@@ -21,8 +25,15 @@ interface PersistInput {
   sourceRevision: string;
   files: ParsedFile[];
   relationships: ObservedRelationship[];
+  packages: WorkspacePackage[];
   embeddings: Map<string, number[]>;
   architecture: ArchitectureSnapshotData;
+}
+
+interface PersistSummary {
+  packagesPersisted: number;
+  packageRelationshipsPersisted: number;
+  ambiguousPackageDependencies: number;
 }
 
 interface RetrievedChunkRow extends Record<string, unknown> {
@@ -37,13 +48,34 @@ interface RetrievedChunkRow extends Record<string, unknown> {
 
 @Injectable()
 export class IntelligenceRepository {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly packageLinker: PackageLinkerService,
+  ) {}
 
-  async persist(input: PersistInput): Promise<void> {
-    await this.database.client.transaction(async (transaction) => {
+  async persist(input: PersistInput): Promise<PersistSummary> {
+    return this.database.client.transaction(async (transaction) => {
       await transaction
         .delete(codeFiles)
         .where(eq(codeFiles.repositoryId, input.repositoryId));
+      await transaction
+        .delete(codePackages)
+        .where(eq(codePackages.repositoryId, input.repositoryId));
+
+      for (const item of input.packages) {
+        await transaction.insert(codePackages).values({
+          workspaceId: input.workspaceId,
+          repositoryId: input.repositoryId,
+          stableKey: `${item.name}:${item.rootPath || "."}`,
+          name: item.name,
+          version: item.version,
+          rootPath: item.rootPath,
+          manifestPath: item.manifestPath,
+          entryPoints: item.entryPoints,
+          dependencies: item.dependencies,
+          sourceRevision: input.sourceRevision,
+        });
+      }
 
       const fileIds = new Map<string, string>();
       for (const file of input.files) {
@@ -144,6 +176,32 @@ export class IntelligenceRepository {
             generatedAt: new Date(),
           },
         });
+
+      const workspacePackages = await transaction
+        .select({
+          id: codePackages.id,
+          workspaceId: codePackages.workspaceId,
+          repositoryId: codePackages.repositoryId,
+          name: codePackages.name,
+          sourceRevision: codePackages.sourceRevision,
+          dependencies: codePackages.dependencies,
+        })
+        .from(codePackages)
+        .where(eq(codePackages.workspaceId, input.workspaceId));
+      const linked = this.packageLinker.link(
+        workspacePackages,
+        input.repositoryId,
+      );
+      if (linked.relationships.length) {
+        await transaction
+          .insert(packageRelationships)
+          .values(linked.relationships);
+      }
+      return {
+        packagesPersisted: input.packages.length,
+        packageRelationshipsPersisted: linked.relationships.length,
+        ambiguousPackageDependencies: linked.ambiguousDependencies,
+      };
     });
   }
 

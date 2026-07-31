@@ -41,6 +41,8 @@ services from the sibling CodeMap repository.
 - Workspace manifests contribute stable package names, entry points, exports,
   dependencies, and compiler mappings without relying on `node_modules`
   symlinks inside downloaded repository archives.
+- Package identities and dependency links are persisted with source revision,
+  manifest provenance, confidence, and strict workspace scoping.
 - Temporary repository archives are deleted after every worker attempt.
 
 This directory is now maintained as Atlas code. Future CodeMap changes are not

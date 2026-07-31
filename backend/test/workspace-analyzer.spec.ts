@@ -76,6 +76,18 @@ describe("WorkspaceAnalyzerService", () => {
           manifestPath: "packages/core/package.json",
           entryPoints: ["packages/core/src/index.ts"],
           dependencyNames: ["react", "zod"],
+          dependencies: [
+            {
+              name: "react",
+              range: "^19.0.0",
+              kind: "peer",
+            },
+            {
+              name: "zod",
+              range: "^4.0.0",
+              kind: "runtime",
+            },
+          ],
         },
         {
           name: "@atlas/ignored",

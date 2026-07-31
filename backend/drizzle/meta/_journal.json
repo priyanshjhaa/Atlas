@@ -57,6 +57,13 @@
       "when": 1785333675281,
       "tag": "20260729140115_noisy_vision",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785480112629,
+      "tag": "20260731064152_rich_iron_patriot",
+      "breakpoints": true
     }
   ]
 }

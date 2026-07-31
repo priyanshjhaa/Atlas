@@ -62,6 +62,13 @@ export interface WorkspacePackage {
   manifestPath: string;
   entryPoints: string[];
   dependencyNames: string[];
+  dependencies: WorkspacePackageDependency[];
+}
+
+export interface WorkspacePackageDependency {
+  name: string;
+  range: string;
+  kind: "runtime" | "development" | "peer" | "optional";
 }
 
 export interface WorkspaceAnalysis {
@@ -147,5 +154,7 @@ export interface IngestionSummary {
     packageCount: number;
     packageNames: string[];
     warningCount: number;
+    relationshipsLinked: number;
+    ambiguousDependencies: number;
   };
 }

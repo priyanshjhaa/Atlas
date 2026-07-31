@@ -125,12 +125,13 @@ export class IngestionService {
 
       await this.checkCancellation(input);
       await input.progress(90, "persisting_intelligence_graph");
-      await this.repository.persist({
+      const persistence = await this.repository.persist({
         workspaceId: input.workspaceId,
         repositoryId: input.repositoryId,
         sourceRevision: input.revision,
         files: parsedFiles,
         relationships: observedRelationships,
+        packages: workspaceAnalysis.packages,
         embeddings: embeddingMap,
         architecture: snapshot,
       });
@@ -171,6 +172,10 @@ export class IngestionService {
             (item) => item.name,
           ),
           warningCount: workspaceAnalysis.warnings.length,
+          relationshipsLinked:
+            persistence.packageRelationshipsPersisted,
+          ambiguousDependencies:
+            persistence.ambiguousPackageDependencies,
         },
       };
     } finally {

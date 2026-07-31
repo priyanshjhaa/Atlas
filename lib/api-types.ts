@@ -83,6 +83,8 @@ export interface AtlasSyncJob {
       packageCount: number;
       packageNames: string[];
       warningCount: number;
+      relationshipsLinked: number;
+      ambiguousDependencies: number;
     };
     embeddingProvider?: "local" | "openai";
   } | null;

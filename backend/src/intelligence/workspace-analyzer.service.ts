@@ -9,6 +9,7 @@ import type {
   ParsedFile,
   WorkspaceAnalysis,
   WorkspacePackage,
+  WorkspacePackageDependency,
 } from "./intelligence.types";
 
 interface PackageManifest {
@@ -106,20 +107,27 @@ function packageMatchesWorkspace(
   });
 }
 
-function dependencyNames(manifest: PackageManifest) {
-  const sections = [
-    manifest.dependencies,
-    manifest.devDependencies,
-    manifest.peerDependencies,
-    manifest.optionalDependencies,
+function dependencies(manifest: PackageManifest) {
+  const sections: Array<{
+    value: unknown;
+    kind: WorkspacePackageDependency["kind"];
+  }> = [
+    { value: manifest.dependencies, kind: "runtime" },
+    { value: manifest.peerDependencies, kind: "peer" },
+    { value: manifest.optionalDependencies, kind: "optional" },
+    { value: manifest.devDependencies, kind: "development" },
   ];
-  return [
-    ...new Set(
-      sections.flatMap((section) =>
-        isRecord(section) ? Object.keys(section) : [],
-      ),
-    ),
-  ].sort();
+  const dependenciesByName = new Map<string, WorkspacePackageDependency>();
+  for (const section of sections) {
+    if (!isRecord(section.value)) continue;
+    for (const [name, range] of Object.entries(section.value)) {
+      if (typeof range !== "string" || dependenciesByName.has(name)) continue;
+      dependenciesByName.set(name, { name, range, kind: section.kind });
+    }
+  }
+  return [...dependenciesByName.values()].sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
 }
 
 function targetPath(packageRoot: string, target: string) {
@@ -224,6 +232,7 @@ function packageAnalysis(
     packageWildcard,
   ];
 
+  const packageDependencies = dependencies(manifest);
   return {
     package: {
       name: manifest.name,
@@ -231,7 +240,8 @@ function packageAnalysis(
       rootPath: packageRoot,
       manifestPath,
       entryPoints,
-      dependencyNames: dependencyNames(manifest),
+      dependencyNames: packageDependencies.map((item) => item.name),
+      dependencies: packageDependencies,
     },
     mappings,
   };

@@ -371,6 +371,101 @@ export const codeRelationships = pgTable(
   ],
 );
 
+export const codePackages = pgTable(
+  "code_packages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    repositoryId: uuid("repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    stableKey: text("stable_key").notNull(),
+    name: text("name").notNull(),
+    version: text("version"),
+    rootPath: text("root_path").notNull(),
+    manifestPath: text("manifest_path").notNull(),
+    entryPoints: jsonb("entry_points").$type<string[]>().default([]).notNull(),
+    dependencies: jsonb("dependencies")
+      .$type<
+        Array<{
+          name: string;
+          range: string;
+          kind: "runtime" | "development" | "peer" | "optional";
+        }>
+      >()
+      .default([])
+      .notNull(),
+    sourceRevision: text("source_revision").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("code_packages_repository_stable_key_unique").on(
+      table.repositoryId,
+      table.stableKey,
+    ),
+    index("code_packages_workspace_name_idx").on(
+      table.workspaceId,
+      table.name,
+    ),
+    index("code_packages_repository_id_idx").on(table.repositoryId),
+  ],
+);
+
+export const packageRelationships = pgTable(
+  "package_relationships",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    sourceRepositoryId: uuid("source_repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    sourcePackageId: uuid("source_package_id")
+      .notNull()
+      .references(() => codePackages.id, { onDelete: "cascade" }),
+    targetRepositoryId: uuid("target_repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    targetPackageId: uuid("target_package_id")
+      .notNull()
+      .references(() => codePackages.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    stableKey: text("stable_key").notNull(),
+    provenance: text("provenance").notNull(),
+    confidence: real("confidence").notNull(),
+    sourceRevision: text("source_revision").notNull(),
+    evidence: jsonb("evidence")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("package_relationships_workspace_stable_key_unique").on(
+      table.workspaceId,
+      table.stableKey,
+    ),
+    index("package_relationships_workspace_id_idx").on(table.workspaceId),
+    index("package_relationships_source_repository_id_idx").on(
+      table.sourceRepositoryId,
+    ),
+    index("package_relationships_target_repository_id_idx").on(
+      table.targetRepositoryId,
+    ),
+    index("package_relationships_source_package_id_idx").on(
+      table.sourcePackageId,
+    ),
+    index("package_relationships_target_package_id_idx").on(
+      table.targetPackageId,
+    ),
+  ],
+);
+
 export const architectureSnapshots = pgTable(
   "architecture_snapshots",
   {

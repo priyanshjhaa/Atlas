@@ -7,6 +7,7 @@ import { IntelligenceController } from "./intelligence.controller";
 import { IntelligenceRepository } from "./intelligence.repository";
 import { IntelligenceService } from "./intelligence.service";
 import { ParserService } from "./parser.service";
+import { PackageLinkerService } from "./package-linker.service";
 import { RelationshipExtractorService } from "./relationship-extractor.service";
 import { RetrievalService } from "./retrieval.service";
 import { SourceDiscoveryService } from "./source-discovery.service";
@@ -23,6 +24,7 @@ import { WorkspaceAnalyzerService } from "./workspace-analyzer.service";
     IntelligenceRepository,
     IntelligenceService,
     ParserService,
+    PackageLinkerService,
     RelationshipExtractorService,
     RetrievalService,
     SourceDiscoveryService,

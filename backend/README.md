@@ -187,8 +187,11 @@ GitHub revision:
 6. Extract observed local-import and workspace-package relationships with
    compiler evidence, confidence, configured path-alias support, and a
    syntax-only fallback for partially compilable repositories.
-7. Generate deterministic local embeddings or optional OpenAI embeddings.
-8. Atomically replace the repository index and create an architecture snapshot.
+7. Persist stable package identities and exact manifest dependency links,
+   including cross-repository links when a package name resolves uniquely
+   inside the workspace. Ambiguous package names are not linked.
+8. Generate deterministic local embeddings or optional OpenAI embeddings.
+9. Atomically replace the repository index and create an architecture snapshot.
 
 The exact source commit, included concepts, exclusions, and Atlas adaptations
 are recorded in `src/intelligence/CODEMAP_FORK.md`. Atlas does not depend on the
