@@ -14,6 +14,7 @@ import type {
   TypeCheckedImport,
   TypeCheckedImportSymbol,
   TypeCheckerAnalysis,
+  WorkspaceAnalysis,
 } from "./intelligence.types";
 
 const virtualRoot = "/__atlas_repository__";
@@ -317,6 +318,7 @@ export class TypeCheckerService {
   analyze(
     files: ParsedFile[],
     repositoryRoot?: string,
+    workspace?: WorkspaceAnalysis,
   ): TypeCheckerAnalysis {
     const compilerFiles = files.filter((file) =>
       supportedLanguages.has(file.language),
@@ -326,6 +328,7 @@ export class TypeCheckerService {
         filesAnalyzed: 0,
         importsResolved: 0,
         pathAliasesResolved: 0,
+        workspaceImportsResolved: 0,
         diagnostics: [],
         resolvedImports: [],
         configuration: {
@@ -354,6 +357,33 @@ export class TypeCheckerService {
       resolveJsonModule: true,
       skipLibCheck: true,
       target: ts.ScriptTarget.ES2022,
+    };
+    const workspacePaths = Object.fromEntries(
+      Object.entries(workspace?.pathMappings ?? {}).map(
+        ([specifier, targets]) => [
+          specifier,
+          targets.map((target) =>
+            absoluteRepositoryPath(rootPath, target),
+          ),
+        ],
+      ),
+    );
+    const workspacePackageNames = new Set(
+      workspace?.packages.map((item) => item.name) ?? [],
+    );
+    const resolutionKind = (
+      specifier: string,
+    ): TypeCheckedImport["resolutionKind"] => {
+      if (specifier.startsWith(".")) return "relative";
+      if (
+        [...workspacePackageNames].some(
+          (name) =>
+            specifier === name || specifier.startsWith(`${name}/`),
+        )
+      ) {
+        return "workspace_package";
+      }
+      return "configured_path_alias";
     };
     const configFile = files
       .filter((file) => /^tsconfig(?:\.[^/]+)?\.json$/.test(basename(file.path)))
@@ -440,11 +470,17 @@ export class TypeCheckerService {
             options: {
               ...defaultOptions,
               ...project.commandLine.options,
+              baseUrl:
+                project.commandLine.options.baseUrl ?? rootPath,
               composite: false,
               declaration: false,
               declarationMap: false,
               incremental: false,
               noEmit: true,
+              paths: {
+                ...workspacePaths,
+                ...project.commandLine.options.paths,
+              },
               skipLibCheck: true,
               tsBuildInfoFile: undefined,
             } satisfies ts.CompilerOptions,
@@ -455,7 +491,15 @@ export class TypeCheckerService {
             rootNames: compilerFiles.map((file) =>
               absoluteRepositoryPath(rootPath, file.path),
             ),
-            options: defaultOptions,
+            options: {
+              ...defaultOptions,
+              ...(Object.keys(workspacePaths).length
+                ? {
+                    baseUrl: rootPath,
+                    paths: workspacePaths,
+                  }
+                : {}),
+            },
           },
         ];
     const analyzedFilePaths = new Set<string>();
@@ -501,9 +545,7 @@ export class TypeCheckerService {
             targetPath: moduleTarget.targetPath,
             specifier: node.moduleSpecifier.text,
             line: start.line + 1,
-            resolutionKind: node.moduleSpecifier.text.startsWith(".")
-              ? "relative"
-              : "configured_path_alias",
+            resolutionKind: resolutionKind(node.moduleSpecifier.text),
             symbols: importedSymbols(
               checker,
               node,
@@ -562,6 +604,9 @@ export class TypeCheckerService {
       importsResolved: resolvedImports.length,
       pathAliasesResolved: resolvedImports.filter(
         (item) => item.resolutionKind === "configured_path_alias",
+      ).length,
+      workspaceImportsResolved: resolvedImports.filter(
+        (item) => item.resolutionKind === "workspace_package",
       ).length,
       diagnostics,
       resolvedImports,

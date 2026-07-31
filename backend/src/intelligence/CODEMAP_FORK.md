@@ -38,6 +38,9 @@ services from the sibling CodeMap repository.
   compiler-resolved import targets and imported symbol identities.
 - Solution-style `tsconfig` project references are traversed with each
   referenced project's compiler options and source scope.
+- Workspace manifests contribute stable package names, entry points, exports,
+  dependencies, and compiler mappings without relying on `node_modules`
+  symlinks inside downloaded repository archives.
 - Temporary repository archives are deleted after every worker attempt.
 
 This directory is now maintained as Atlas code. Future CodeMap changes are not

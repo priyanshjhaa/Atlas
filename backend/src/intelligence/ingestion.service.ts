@@ -12,6 +12,7 @@ import { ParserService } from "./parser.service";
 import { RelationshipExtractorService } from "./relationship-extractor.service";
 import { SourceDiscoveryService } from "./source-discovery.service";
 import { TypeCheckerService } from "./type-checker.service";
+import { WorkspaceAnalyzerService } from "./workspace-analyzer.service";
 
 export class IngestionCancelledError extends Error {
   constructor() {
@@ -37,6 +38,7 @@ export class IngestionService {
     private readonly github: GitHubAppService,
     private readonly discovery: SourceDiscoveryService,
     private readonly parser: ParserService,
+    private readonly workspaceAnalyzer: WorkspaceAnalyzerService,
     private readonly typeChecker: TypeCheckerService,
     private readonly relationships: RelationshipExtractorService,
     private readonly embeddings: EmbeddingsService,
@@ -81,9 +83,11 @@ export class IngestionService {
       await this.checkCancellation(input);
       await input.progress(52, "parsing_symbols_and_chunks");
       const parsedFiles = this.parser.parseFiles(files);
+      const workspaceAnalysis = this.workspaceAnalyzer.analyze(parsedFiles);
       const typeCheckerAnalysis = this.typeChecker.analyze(
         parsedFiles,
         syncPath,
+        workspaceAnalysis,
       );
       const observedRelationships = this.relationships.extract(
         parsedFiles,
@@ -116,6 +120,7 @@ export class IngestionService {
         parsedFiles,
         observedRelationships,
         typeCheckerAnalysis,
+        workspaceAnalysis,
       );
 
       await this.checkCancellation(input);
@@ -148,6 +153,8 @@ export class IngestionService {
           importsResolved: typeCheckerAnalysis.importsResolved,
           pathAliasesResolved:
             typeCheckerAnalysis.pathAliasesResolved,
+          workspaceImportsResolved:
+            typeCheckerAnalysis.workspaceImportsResolved,
           diagnosticCount: typeCheckerAnalysis.diagnostics.length,
           configFilePath:
             typeCheckerAnalysis.configuration.configFilePath,
@@ -157,6 +164,13 @@ export class IngestionService {
             typeCheckerAnalysis.configuration.projectConfigPaths,
           projectReferences:
             typeCheckerAnalysis.configuration.projectReferences,
+        },
+        workspace: {
+          packageCount: workspaceAnalysis.packages.length,
+          packageNames: workspaceAnalysis.packages.map(
+            (item) => item.name,
+          ),
+          warningCount: workspaceAnalysis.warnings.length,
         },
       };
     } finally {

@@ -3,6 +3,7 @@ import { ArchitectureBuilderService } from "../src/intelligence/architecture-bui
 import { ParserService } from "../src/intelligence/parser.service";
 import { RelationshipExtractorService } from "../src/intelligence/relationship-extractor.service";
 import { TypeCheckerService } from "../src/intelligence/type-checker.service";
+import { WorkspaceAnalyzerService } from "../src/intelligence/workspace-analyzer.service";
 import type { RepositorySourceFile } from "../src/intelligence/intelligence.types";
 
 const files: RepositorySourceFile[] = [
@@ -337,6 +338,120 @@ describe("forked CodeMap intelligence services", () => {
       evidence: {
         resolvedBy: "typescript_type_checker",
         resolutionKind: "configured_path_alias",
+      },
+    });
+  });
+
+  it("resolves workspace package imports without node_modules symlinks", () => {
+    const workspaceFiles: RepositorySourceFile[] = [
+      {
+        path: "package.json",
+        language: "json",
+        content: JSON.stringify({
+          private: true,
+          workspaces: ["packages/*"],
+        }),
+        checksum: "o",
+        sizeBytes: 60,
+      },
+      {
+        path: "packages/core/package.json",
+        language: "json",
+        content: JSON.stringify({
+          name: "@atlas/core",
+          source: "./src/index.ts",
+        }),
+        checksum: "p",
+        sizeBytes: 70,
+      },
+      {
+        path: "packages/api/package.json",
+        language: "json",
+        content: JSON.stringify({
+          name: "@atlas/api",
+          source: "./src/index.ts",
+          dependencies: { "@atlas/core": "workspace:*" },
+        }),
+        checksum: "q",
+        sizeBytes: 110,
+      },
+      {
+        path: "packages/core/src/index.ts",
+        language: "typescript",
+        content: "export const loadUser = () => ({ id: 1 });\n",
+        checksum: "r",
+        sizeBytes: 47,
+      },
+      {
+        path: "packages/api/src/index.ts",
+        language: "typescript",
+        content:
+          'import { loadUser } from "@atlas/core";\nexport const handler = () => loadUser();\n',
+        checksum: "s",
+        sizeBytes: 88,
+      },
+      {
+        path: "tsconfig.json",
+        language: "json",
+        content: JSON.stringify({
+          files: [],
+          references: [
+            { path: "packages/core" },
+            { path: "packages/api" },
+          ],
+        }),
+        checksum: "t",
+        sizeBytes: 100,
+      },
+      {
+        path: "packages/core/tsconfig.json",
+        language: "json",
+        content: JSON.stringify({
+          compilerOptions: { composite: true },
+          include: ["src/**/*.ts"],
+        }),
+        checksum: "u",
+        sizeBytes: 80,
+      },
+      {
+        path: "packages/api/tsconfig.json",
+        language: "json",
+        content: JSON.stringify({
+          compilerOptions: { composite: true },
+          include: ["src/**/*.ts"],
+        }),
+        checksum: "v",
+        sizeBytes: 80,
+      },
+    ];
+    const parsed = new ParserService().parseFiles(workspaceFiles);
+    const workspace = new WorkspaceAnalyzerService().analyze(parsed);
+    const typeChecker = new TypeCheckerService().analyze(
+      parsed,
+      undefined,
+      workspace,
+    );
+    const relationships = new RelationshipExtractorService().extract(
+      parsed,
+      typeChecker,
+    );
+
+    expect(workspace.packages.map((item) => item.name)).toEqual([
+      "@atlas/api",
+      "@atlas/core",
+    ]);
+    expect(typeChecker).toMatchObject({
+      importsResolved: 1,
+      pathAliasesResolved: 0,
+      workspaceImportsResolved: 1,
+    });
+    expect(relationships[0]).toMatchObject({
+      sourcePath: "packages/api/src/index.ts",
+      targetPath: "packages/core/src/index.ts",
+      evidence: {
+        importSpecifier: "@atlas/core",
+        resolvedBy: "typescript_type_checker",
+        resolutionKind: "workspace_package",
       },
     });
   });

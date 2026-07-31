@@ -14,6 +14,7 @@ import { ParserService } from "../src/intelligence/parser.service";
 import { RelationshipExtractorService } from "../src/intelligence/relationship-extractor.service";
 import { SourceDiscoveryService } from "../src/intelligence/source-discovery.service";
 import { TypeCheckerService } from "../src/intelligence/type-checker.service";
+import { WorkspaceAnalyzerService } from "../src/intelligence/workspace-analyzer.service";
 import type { ObservedRelationship } from "../src/intelligence/intelligence.types";
 
 describe("IngestionService", () => {
@@ -53,6 +54,14 @@ describe("IngestionService", () => {
               include: ["src/**/*.ts"],
             }),
           );
+          await writeFile(
+            join(destinationPath, "package.json"),
+            JSON.stringify({
+              name: "@atlas/api",
+              version: "1.0.0",
+              source: "./src/api.ts",
+            }),
+          );
           return { bytesDownloaded: 100 };
         },
       ),
@@ -66,6 +75,7 @@ describe("IngestionService", () => {
       github,
       new SourceDiscoveryService(),
       new ParserService(),
+      new WorkspaceAnalyzerService(),
       new TypeCheckerService(),
       new RelationshipExtractorService(),
       new EmbeddingsService(config),
@@ -86,7 +96,7 @@ describe("IngestionService", () => {
       });
 
       expect(summary).toMatchObject({
-        filesIndexed: 3,
+        filesIndexed: 4,
         symbolsExtracted: 2,
         relationshipsExtracted: 1,
         embeddingProvider: "local",
@@ -94,9 +104,15 @@ describe("IngestionService", () => {
           filesAnalyzed: 2,
           importsResolved: 1,
           pathAliasesResolved: 0,
+          workspaceImportsResolved: 0,
           diagnosticCount: 0,
           configFilePath: "tsconfig.json",
           configuredRootFiles: 2,
+        },
+        workspace: {
+          packageCount: 1,
+          packageNames: ["@atlas/api"],
+          warningCount: 0,
         },
       });
       expect(persist).toHaveBeenCalledOnce();

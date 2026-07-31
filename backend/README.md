@@ -182,11 +182,13 @@ GitHub revision:
    scope, traverse referenced project configs, build their TypeScript programs,
    and resolve imported declarations to repository files and symbols.
    Repositories without a config use safe TypeScript/JavaScript defaults.
-5. Extract observed local-import relationships with compiler evidence,
-   confidence, configured path-alias support, and a syntax-only fallback for
-   partially compilable repositories.
-6. Generate deterministic local embeddings or optional OpenAI embeddings.
-7. Atomically replace the repository index and create an architecture snapshot.
+5. Discover npm/Yarn, pnpm, and Lerna workspace packages, exports, entry points,
+   and dependency declarations.
+6. Extract observed local-import and workspace-package relationships with
+   compiler evidence, confidence, configured path-alias support, and a
+   syntax-only fallback for partially compilable repositories.
+7. Generate deterministic local embeddings or optional OpenAI embeddings.
+8. Atomically replace the repository index and create an architecture snapshot.
 
 The exact source commit, included concepts, exclusions, and Atlas adaptations
 are recorded in `src/intelligence/CODEMAP_FORK.md`. Atlas does not depend on the

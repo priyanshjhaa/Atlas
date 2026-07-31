@@ -72,11 +72,17 @@ export interface AtlasSyncJob {
       filesAnalyzed: number;
       importsResolved: number;
       pathAliasesResolved: number;
+      workspaceImportsResolved: number;
       diagnosticCount: number;
       configFilePath: string | null;
       configuredRootFiles: number;
       projectConfigPaths: string[];
       projectReferences: number;
+    };
+    workspace?: {
+      packageCount: number;
+      packageNames: string[];
+      warningCount: number;
     };
     embeddingProvider?: "local" | "openai";
   } | null;

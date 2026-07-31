@@ -5,6 +5,7 @@ import type {
   ObservedRelationship,
   ParsedFile,
   TypeCheckerAnalysis,
+  WorkspaceAnalysis,
 } from "./intelligence.types";
 
 interface ModuleNode {
@@ -51,6 +52,7 @@ export class ArchitectureBuilderService {
     files: ParsedFile[],
     relationships: ObservedRelationship[],
     typeChecker?: TypeCheckerAnalysis,
+    workspace?: WorkspaceAnalysis,
   ): ArchitectureSnapshotData {
     const moduleIds = [...new Set(files.map((file) => moduleForPath(file.path)))]
       .sort()
@@ -144,6 +146,8 @@ export class ArchitectureBuilderService {
                 importsResolved: typeChecker.importsResolved,
                 pathAliasesResolved:
                   typeChecker.pathAliasesResolved,
+                workspaceImportsResolved:
+                  typeChecker.workspaceImportsResolved,
                 diagnosticCount: typeChecker.diagnostics.length,
                 configFilePath:
                   typeChecker.configuration.configFilePath,
@@ -153,6 +157,18 @@ export class ArchitectureBuilderService {
                   typeChecker.configuration.projectConfigPaths,
                 projectReferences:
                   typeChecker.configuration.projectReferences,
+              }
+            : null,
+          workspace: workspace
+            ? {
+                packageCount: workspace.packages.length,
+                packages: workspace.packages.map((item) => ({
+                  name: item.name,
+                  rootPath: item.rootPath,
+                  entryPoints: item.entryPoints,
+                  dependencyNames: item.dependencyNames,
+                })),
+                warningCount: workspace.warnings.length,
               }
             : null,
         },

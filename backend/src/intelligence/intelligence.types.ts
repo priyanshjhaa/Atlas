@@ -24,7 +24,10 @@ export interface TypeCheckedImport {
   targetPath: string;
   specifier: string;
   line: number;
-  resolutionKind: "relative" | "configured_path_alias";
+  resolutionKind:
+    | "relative"
+    | "configured_path_alias"
+    | "workspace_package";
   symbols: TypeCheckedImportSymbol[];
 }
 
@@ -41,6 +44,7 @@ export interface TypeCheckerAnalysis {
   filesAnalyzed: number;
   importsResolved: number;
   pathAliasesResolved: number;
+  workspaceImportsResolved: number;
   diagnostics: TypeCheckDiagnostic[];
   resolvedImports: TypeCheckedImport[];
   configuration: {
@@ -49,6 +53,23 @@ export interface TypeCheckerAnalysis {
     projectConfigPaths: string[];
     projectReferences: number;
   };
+}
+
+export interface WorkspacePackage {
+  name: string;
+  version: string | null;
+  rootPath: string;
+  manifestPath: string;
+  entryPoints: string[];
+  dependencyNames: string[];
+}
+
+export interface WorkspaceAnalysis {
+  rootManifestPath: string | null;
+  workspacePatterns: string[];
+  packages: WorkspacePackage[];
+  pathMappings: Record<string, string[]>;
+  warnings: string[];
 }
 
 export interface ParsedSymbol {
@@ -90,7 +111,10 @@ export interface ObservedRelationship {
     importSpecifier: string;
     line: number;
     resolvedBy: "typescript_type_checker" | "syntax_path_fallback";
-    resolutionKind: "relative" | "configured_path_alias";
+    resolutionKind:
+      | "relative"
+      | "configured_path_alias"
+      | "workspace_package";
     importedSymbols?: TypeCheckedImportSymbol[];
   };
 }
@@ -112,10 +136,16 @@ export interface IngestionSummary {
     filesAnalyzed: number;
     importsResolved: number;
     pathAliasesResolved: number;
+    workspaceImportsResolved: number;
     diagnosticCount: number;
     configFilePath: string | null;
     configuredRootFiles: number;
     projectConfigPaths: string[];
     projectReferences: number;
+  };
+  workspace: {
+    packageCount: number;
+    packageNames: string[];
+    warningCount: number;
   };
 }

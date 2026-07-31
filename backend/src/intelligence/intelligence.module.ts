@@ -11,6 +11,7 @@ import { RelationshipExtractorService } from "./relationship-extractor.service";
 import { RetrievalService } from "./retrieval.service";
 import { SourceDiscoveryService } from "./source-discovery.service";
 import { TypeCheckerService } from "./type-checker.service";
+import { WorkspaceAnalyzerService } from "./workspace-analyzer.service";
 
 @Module({
   controllers: [IntelligenceController],
@@ -26,6 +27,7 @@ import { TypeCheckerService } from "./type-checker.service";
     RetrievalService,
     SourceDiscoveryService,
     TypeCheckerService,
+    WorkspaceAnalyzerService,
   ],
   exports: [IngestionService, RetrievalService],
 })
