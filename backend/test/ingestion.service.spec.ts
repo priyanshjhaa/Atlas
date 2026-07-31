@@ -13,13 +13,30 @@ import type { IntelligenceRepository } from "../src/intelligence/intelligence.re
 import { ParserService } from "../src/intelligence/parser.service";
 import { RelationshipExtractorService } from "../src/intelligence/relationship-extractor.service";
 import { SourceDiscoveryService } from "../src/intelligence/source-discovery.service";
+import { TypeCheckerService } from "../src/intelligence/type-checker.service";
+import { WorkspaceAnalyzerService } from "../src/intelligence/workspace-analyzer.service";
+import type { ObservedRelationship } from "../src/intelligence/intelligence.types";
 
 describe("IngestionService", () => {
   it("runs the forked pipeline and persists Atlas-scoped intelligence", async () => {
     const storageRoot = await mkdtemp(
       join(tmpdir(), "atlas-ingestion-test-"),
     );
-    const persist = vi.fn(async () => undefined);
+    const persist = vi.fn(async (input: unknown) => {
+      void input;
+      return {
+        packagesPersisted: 1,
+        packageRelationshipsPersisted: 0,
+        ambiguousPackageDependencies: 0,
+        apiSymbolRelationshipsPersisted: 0,
+        apiCallRelationshipsPersisted: 0,
+        ambiguousApiImports: 0,
+        relationshipObservationsPersisted: 1,
+        graphEntitiesProjected: 5,
+        graphRelationshipsProjected: 4,
+        inferredGraphRelationships: 1,
+      };
+    });
     const config = {
       get: (key: keyof Environment) => {
         if (key === "REPOSITORY_STORAGE_PATH") return storageRoot;
@@ -39,6 +56,24 @@ describe("IngestionService", () => {
             join(destinationPath, "src", "user.ts"),
             "export const user = { id: 1 };\n",
           );
+          await writeFile(
+            join(destinationPath, "tsconfig.json"),
+            JSON.stringify({
+              compilerOptions: {
+                strict: true,
+                target: "ES2020",
+              },
+              include: ["src/**/*.ts"],
+            }),
+          );
+          await writeFile(
+            join(destinationPath, "package.json"),
+            JSON.stringify({
+              name: "@atlas/api",
+              version: "1.0.0",
+              source: "./src/api.ts",
+            }),
+          );
           return { bytesDownloaded: 100 };
         },
       ),
@@ -52,6 +87,8 @@ describe("IngestionService", () => {
       github,
       new SourceDiscoveryService(),
       new ParserService(),
+      new WorkspaceAnalyzerService(),
+      new TypeCheckerService(),
       new RelationshipExtractorService(),
       new EmbeddingsService(config),
       new ArchitectureBuilderService(),
@@ -71,24 +108,67 @@ describe("IngestionService", () => {
       });
 
       expect(summary).toMatchObject({
-        filesIndexed: 2,
+        filesIndexed: 4,
         symbolsExtracted: 2,
+        callsDetected: 0,
         relationshipsExtracted: 1,
         embeddingProvider: "local",
+        typeChecker: {
+          filesAnalyzed: 2,
+          importsResolved: 1,
+          pathAliasesResolved: 0,
+          workspaceImportsResolved: 0,
+          publicApiSymbols: 1,
+          diagnosticCount: 0,
+          configFilePath: "tsconfig.json",
+          configuredRootFiles: 2,
+        },
+        workspace: {
+          packageCount: 1,
+          packageNames: ["@atlas/api"],
+          warningCount: 0,
+          relationshipsLinked: 0,
+          ambiguousDependencies: 0,
+          apiSymbolsLinked: 0,
+          apiCallsLinked: 0,
+          ambiguousApiImports: 0,
+          relationshipObservationsRecorded: 1,
+          graphEntitiesProjected: 5,
+          graphRelationshipsProjected: 4,
+          inferredGraphRelationships: 1,
+        },
       });
-      expect(persist).toHaveBeenCalledWith(
+      expect(persist).toHaveBeenCalledOnce();
+      const persisted = persist.mock.calls[0]?.[0] as {
+        workspaceId: string;
+        repositoryId: string;
+        sourceRevision: string;
+        relationships: ObservedRelationship[];
+        packages: Array<{ name: string; stableKey?: string }>;
+      };
+      expect(persisted).toMatchObject({
+        workspaceId: "workspace-1",
+        repositoryId: "repository-1",
+        sourceRevision: "abcdef1234567890",
+      });
+      expect(persisted.relationships[0]).toMatchObject({
+        provenance: "typescript_static_import",
+        confidence: 1,
+      });
+      expect(persisted.relationships[0]?.evidence).toMatchObject({
+        resolvedBy: "typescript_type_checker",
+        importedSymbols: [
+          expect.objectContaining({
+            localName: "user",
+            targetPath: "src/user.ts",
+          }),
+        ],
+      });
+      expect(persisted.packages).toEqual([
         expect.objectContaining({
-          workspaceId: "workspace-1",
-          repositoryId: "repository-1",
-          sourceRevision: "abcdef1234567890",
-          relationships: [
-            expect.objectContaining({
-              provenance: "typescript_static_import",
-              confidence: 1,
-            }),
-          ],
+          name: "@atlas/api",
         }),
-      );
+      ]);
     } finally {
       await rm(storageRoot, { recursive: true, force: true });
     }

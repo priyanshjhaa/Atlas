@@ -34,8 +34,33 @@ const PROVENANCE_PATTERNS = [
     pattern: /\b(typescript static import|static import)\b/i,
     value: "typescript_static_import",
   },
+  {
+    pattern: /\b(package manifest dependency|manifest dependency)\b/i,
+    value: "package_manifest_dependency",
+  },
+  {
+    pattern: /\b(typescript public api import|public api import)\b/i,
+    value: "typescript_public_api_import",
+  },
+  {
+    pattern: /\b(typescript public api call|public api call)\b/i,
+    value: "typescript_public_api_call",
+  },
+  {
+    pattern: /\b(historical relationship|historically observed)\b/i,
+    value: "historical_relationship",
+  },
   { pattern: /\banalysis gap\b/i, value: "analysis_gap" },
 ] as const;
+const RELATIONSHIP_PROVENANCES = new Set<
+  ImpactEvidencePacketCitation["provenance"]
+>([
+  "typescript_static_import",
+  "package_manifest_dependency",
+  "typescript_public_api_import",
+  "typescript_public_api_call",
+  "historical_relationship",
+]);
 
 interface ExplanationTextUnit {
   text: string;
@@ -296,7 +321,7 @@ export class ExplanationGroundingValidator {
   ): boolean {
     const citations = new Map(packet.evidence.map((item) => [item.id, item]));
     const relationshipCitations = packet.evidence.filter(
-      (item) => item.provenance === "typescript_static_import",
+      (item) => RELATIONSHIP_PROVENANCES.has(item.provenance),
     );
 
     return units.every((unit) => {
@@ -307,17 +332,40 @@ export class ExplanationGroundingValidator {
       if (!RELATIONSHIP_PATTERN.test(unit.text) && !usesMultipleFiles) {
         return true;
       }
-      if (/\bcalls?\b/i.test(unit.text)) return false;
       if (mentionedPaths.length === 0) return true;
       const scopedCitations = unit.evidenceIds.length
         ? unit.evidenceIds
             .map((id) => citations.get(id))
             .filter(
               (item): item is ImpactEvidencePacketCitation =>
-                item?.provenance === "typescript_static_import",
+                Boolean(
+                  item && RELATIONSHIP_PROVENANCES.has(item.provenance),
+                ),
             )
         : relationshipCitations;
       if (unit.evidenceIds.length && scopedCitations.length === 0) return false;
+      const historicalOnly = scopedCitations.every(
+        (citation) => citation.provenance === "historical_relationship",
+      );
+      if (
+        historicalOnly &&
+        !/\b(historical(?:ly)?|previously|former(?:ly)?|used to|prior revision)\b/i.test(
+          unit.text,
+        )
+      ) {
+        return false;
+      }
+      if (
+        /\bcalls?\b/i.test(unit.text) &&
+        !scopedCitations.some(
+          (citation) =>
+            citation.provenance === "typescript_public_api_call" ||
+            (citation.provenance === "historical_relationship" &&
+              /\btypescript_public_api_call\b/.test(citation.excerpt)),
+        )
+      ) {
+        return false;
+      }
       if (mentionedPaths.length < 2) return true;
 
       return scopedCitations.some((citation) => {

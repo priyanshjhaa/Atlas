@@ -55,6 +55,9 @@ function setup() {
         },
       ])
       .mockResolvedValueOnce([]),
+    hasWorkspaceRelationshipIndex: vi.fn().mockResolvedValue(false),
+    incomingWorkspaceRelationships: vi.fn().mockResolvedValue([]),
+    incomingHistoricalRelationships: vi.fn().mockResolvedValue([]),
   };
   const retrieval = {
     search: vi.fn().mockResolvedValue({
@@ -162,6 +165,63 @@ describe("ImpactAnalysisService", () => {
     expect(repository.incomingRelationships).toHaveBeenCalledTimes(2);
   });
 
+  it("does not treat cross-repository retrieval expansion as a local change anchor", async () => {
+    const { repository, retrieval, service } = setup();
+    retrieval.search.mockResolvedValue({
+      query: "refresh session",
+      lowConfidence: false,
+      results: [
+        {
+          id: "chunk-cross-repository",
+          score: 1,
+          lexicalMatches: 2,
+          reason: "Graph-related consumer",
+          excerpt: "refreshSession();",
+          citation: {
+            repositoryId: "repository-web",
+            filePath: "src/session-client.ts",
+            symbol: "refreshSession",
+            provenance: "indexed_source_chunk",
+          },
+        },
+        {
+          id: "chunk-session",
+          score: 0.84,
+          lexicalMatches: 2,
+          reason: "Matched refreshSession",
+          excerpt: "export function refreshSession() {}",
+          citation: {
+            repositoryId,
+            filePath: "src/session.ts",
+            symbol: "refreshSession",
+            provenance: "indexed_source_chunk",
+          },
+        },
+      ],
+    });
+
+    const report = await service.analyze(workspaceId, {
+      mode: "planned",
+      repositoryId,
+      description: "Rotate the refresh session contract.",
+      scope: "repository",
+      anchors: ["refreshSession"],
+    });
+
+    expect(repository.filesByPaths).toHaveBeenCalledWith(
+      workspaceId,
+      repositoryId,
+      ["src/session.ts"],
+    );
+    expect(report.evidence).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          filePath: "src/session-client.ts",
+        }),
+      ]),
+    );
+  });
+
   it("reports analysis gaps explicitly instead of inventing consumers", async () => {
     const { repository, retrieval, service } = setup();
     repository.filesByPaths.mockResolvedValue([]);
@@ -202,6 +262,173 @@ describe("ImpactAnalysisService", () => {
       score: null,
     });
     expect(report.answer).toContain("cannot answer");
+  });
+
+  it("reports indexed cross-repository API consumers for workspace analysis", async () => {
+    const { repository, service } = setup();
+    repository.hasWorkspaceRelationshipIndex.mockResolvedValue(true);
+    repository.incomingWorkspaceRelationships.mockResolvedValue([
+      {
+        id: "cross-call",
+        sourceRepositoryId: "repository-web",
+        sourceRepository: "atlas/web",
+        sourceFileId: "file-session-client",
+        sourcePath: "src/session-client.ts",
+        targetRepositoryId: repositoryId,
+        targetRepository: "atlas/identity",
+        targetPath: "src/session.ts",
+        targetSymbol: "refreshSession",
+        kind: "calls_api",
+        provenance: "typescript_public_api_call",
+        confidence: 1,
+        sourceRevision: "web-revision-1",
+        targetRevision: "revision-1",
+        evidence: {
+          importedName: "refreshSession",
+          lines: [8],
+        },
+      },
+    ]);
+
+    const report = await service.analyze(workspaceId, {
+      mode: "planned",
+      repositoryId,
+      description: "Rotate the refresh session contract.",
+      scope: "workspace",
+      anchors: ["refreshSession"],
+    });
+
+    expect(report.downstreamImpacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          repositoryId: "repository-web",
+          repository: "atlas/web",
+          filePath: "src/session-client.ts",
+          symbol: "refreshSession",
+          provenance: "typescript_public_api_call",
+        }),
+      ]),
+    );
+    expect(report.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          repositoryId: "repository-web",
+          repository: "atlas/web",
+          filePath: "src/session-client.ts",
+          lineStart: 8,
+          provenance: "typescript_public_api_call",
+          sourceRevision: "web-revision-1",
+        }),
+      ]),
+    );
+    expect(report.unknownImpacts.map((item) => item.id)).not.toContain(
+      "unknown:cross-repository-links",
+    );
+    expect(report.limitations.join("\n")).toContain(
+      "Cross-repository traversal covers",
+    );
+    expect(report.limitations.join("\n")).not.toContain(
+      "traversal is not available",
+    );
+    expect(report.relationshipPath).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          repository: "atlas/web",
+          filePath: "src/session-client.ts",
+        }),
+      ]),
+    );
+    expect(repository.incomingWorkspaceRelationships).toHaveBeenCalledWith(
+      workspaceId,
+      repositoryId,
+      ["symbol-refresh"],
+      ["file-session"],
+    );
+  });
+
+  it("keeps historical relationships distinct from current consumers", async () => {
+    const { repository, service } = setup();
+    repository.incomingRelationships.mockReset().mockResolvedValue([]);
+    repository.hasWorkspaceRelationshipIndex.mockResolvedValue(true);
+    repository.incomingWorkspaceRelationships.mockResolvedValue([]);
+    repository.incomingHistoricalRelationships.mockResolvedValue([
+      {
+        id: "historical-call",
+        stableKey: "symbol:historical-call",
+        sourceRepositoryId: "repository-web",
+        sourceRepository: "atlas/web",
+        sourcePath: "src/legacy-session-client.ts",
+        sourceEntityKind: "symbol",
+        targetRepositoryId: repositoryId,
+        targetRepository: "atlas/identity",
+        targetPath: "src/session.ts",
+        targetSymbol: "refreshSession",
+        targetEntityKind: "symbol",
+        kind: "calls_api",
+        originalProvenance: "typescript_public_api_call",
+        confidence: 1,
+        observedRevision: "historical-revision-123",
+        sourceRevision: "web-revision-old",
+        targetRevision: "identity-revision-old",
+        observedAt: new Date("2026-07-01T00:00:00.000Z"),
+        evidence: {
+          importedName: "refreshSession",
+          lines: [11],
+        },
+      },
+    ]);
+
+    const report = await service.analyze(workspaceId, {
+      mode: "planned",
+      repositoryId,
+      description: "Rotate the refresh session contract.",
+      scope: "workspace",
+      anchors: ["refreshSession"],
+    });
+
+    expect(report.downstreamImpacts).toEqual([
+      expect.objectContaining({
+        repository: "atlas/web",
+        filePath: "src/legacy-session-client.ts",
+        provenance: "historical_relationship",
+        confidence: 0.75,
+      }),
+    ]);
+    expect(report.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          repository: "atlas/web",
+          filePath: "src/legacy-session-client.ts",
+          lineStart: 11,
+          provenance: "historical_relationship",
+          sourceRevision: "web-revision-old",
+        }),
+      ]),
+    );
+    expect(report.answer).toContain("0 current consumers");
+    expect(report.answer).toContain("1 historical relationship");
+    expect(report.unknownImpacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "unknown:no-observed-consumers",
+        }),
+      ]),
+    );
+    expect(report.limitations.join("\n")).toContain(
+      "Historical relationships record previously indexed structure",
+    );
+    expect(report.risk.reasons).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("1 historical relationship"),
+      ]),
+    );
+    expect(repository.incomingHistoricalRelationships).toHaveBeenCalledWith(
+      workspaceId,
+      repositoryId,
+      ["symbol-refresh"],
+      ["file-session"],
+      "workspace",
+    );
   });
 
   it("keeps Better Auth and JWT boundaries together in migration guidance", async () => {

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { ArchitectureBuilderService } from "../src/intelligence/architecture-builder.service";
 import { ParserService } from "../src/intelligence/parser.service";
 import { RelationshipExtractorService } from "../src/intelligence/relationship-extractor.service";
+import { TypeCheckerService } from "../src/intelligence/type-checker.service";
+import { WorkspaceAnalyzerService } from "../src/intelligence/workspace-analyzer.service";
 import type { RepositorySourceFile } from "../src/intelligence/intelligence.types";
 
 const files: RepositorySourceFile[] = [
@@ -25,7 +27,11 @@ const files: RepositorySourceFile[] = [
 describe("forked CodeMap intelligence services", () => {
   it("extracts symbols, citations, and observed import evidence", () => {
     const parsed = new ParserService().parseFiles(files);
-    const relationships = new RelationshipExtractorService().extract(parsed);
+    const typeChecker = new TypeCheckerService().analyze(parsed);
+    const relationships = new RelationshipExtractorService().extract(
+      parsed,
+      typeChecker,
+    );
 
     expect(parsed[0]?.symbols[0]).toMatchObject({
       name: "handler",
@@ -47,16 +53,42 @@ describe("forked CodeMap intelligence services", () => {
     expect(relationships[0]?.evidence).toMatchObject({
       importSpecifier: "./users",
       line: 1,
+      resolvedBy: "typescript_type_checker",
+      resolutionKind: "relative",
+      importedSymbols: [
+        {
+          localName: "loadUser",
+          exportedName: "loadUser",
+          targetName: "loadUser",
+          targetKind: "function",
+          targetPath: "src/users.ts",
+        },
+      ],
+    });
+    expect(typeChecker).toMatchObject({
+      filesAnalyzed: 2,
+      importsResolved: 1,
+      pathAliasesResolved: 0,
+      diagnostics: [],
+      configuration: {
+        configFilePath: null,
+        configuredRootFiles: 0,
+      },
     });
   });
 
   it("builds architecture only from observed parsed relationships", () => {
     const parsed = new ParserService().parseFiles(files);
-    const relationships = new RelationshipExtractorService().extract(parsed);
+    const typeChecker = new TypeCheckerService().analyze(parsed);
+    const relationships = new RelationshipExtractorService().extract(
+      parsed,
+      typeChecker,
+    );
     const snapshot = new ArchitectureBuilderService().build(
       "atlas-api",
       parsed,
       relationships,
+      typeChecker,
     );
 
     expect(snapshot.summary).toContain("2 indexed files");
@@ -65,6 +97,457 @@ describe("forked CodeMap intelligence services", () => {
     );
     expect(snapshot.moduleMap.stats).toMatchObject({
       relationshipsObserved: 1,
+      typeChecker: {
+        filesAnalyzed: 2,
+        importsResolved: 1,
+        pathAliasesResolved: 0,
+        diagnosticCount: 0,
+        configFilePath: null,
+        configuredRootFiles: 0,
+      },
     });
+  });
+
+  it("reports compiler diagnostics without dropping valid source analysis", () => {
+    const parsed = new ParserService().parseFiles([
+      ...files,
+      {
+        path: "src/broken.ts",
+        language: "typescript",
+        content:
+          'import { missing } from "./does-not-exist";\nexport const value: number = "wrong";\n',
+        checksum: "c",
+        sizeBytes: 88,
+      },
+    ]);
+
+    const analysis = new TypeCheckerService().analyze(parsed);
+
+    expect(analysis.filesAnalyzed).toBe(3);
+    expect(analysis.importsResolved).toBe(1);
+    expect(analysis.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 2307,
+          category: "error",
+          filePath: "src/broken.ts",
+          line: 1,
+        }),
+        expect.objectContaining({
+          code: 2322,
+          category: "error",
+          filePath: "src/broken.ts",
+          line: 2,
+        }),
+      ]),
+    );
+  });
+
+  it("applies repository tsconfig compiler options and source scope", () => {
+    const parsed = new ParserService().parseFiles([
+      ...files,
+      {
+        path: "src/untyped.ts",
+        language: "typescript",
+        content: "export function identity(value) { return value; }\n",
+        checksum: "d",
+        sizeBytes: 51,
+      },
+      {
+        path: "tsconfig.json",
+        language: "json",
+        content: JSON.stringify({
+          compilerOptions: { strict: true },
+          include: ["src/**/*.ts"],
+        }),
+        checksum: "e",
+        sizeBytes: 72,
+      },
+      {
+        path: "scripts/ignored.ts",
+        language: "typescript",
+        content: "export function ignored(value) { return value; }\n",
+        checksum: "f",
+        sizeBytes: 50,
+      },
+    ]);
+
+    const analysis = new TypeCheckerService().analyze(parsed);
+
+    expect(analysis.configuration).toEqual({
+      configFilePath: "tsconfig.json",
+      configuredRootFiles: 3,
+      projectConfigPaths: ["tsconfig.json"],
+      projectReferences: 0,
+    });
+    expect(analysis.filesAnalyzed).toBe(3);
+    expect(
+      analysis.diagnostics.some(
+        (diagnostic) => diagnostic.filePath === "scripts/ignored.ts",
+      ),
+    ).toBe(false);
+    expect(analysis.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: 7006,
+        filePath: "src/untyped.ts",
+        line: 1,
+      }),
+    );
+  });
+
+  it("resolves configured path aliases into observed relationships", () => {
+    const aliasFiles: RepositorySourceFile[] = [
+      {
+        path: "src/api.ts",
+        language: "typescript",
+        content:
+          'import { loadUser } from "@core/users";\nexport const handler = () => loadUser();\n',
+        checksum: "g",
+        sizeBytes: 88,
+      },
+      {
+        path: "src/core/users.ts",
+        language: "typescript",
+        content: "export const loadUser = () => ({ id: 1 });\n",
+        checksum: "h",
+        sizeBytes: 47,
+      },
+      {
+        path: "tsconfig.json",
+        language: "json",
+        content: JSON.stringify({
+          compilerOptions: {
+            baseUrl: ".",
+            paths: { "@core/*": ["src/core/*"] },
+          },
+          include: ["src/**/*.ts"],
+        }),
+        checksum: "i",
+        sizeBytes: 110,
+      },
+    ];
+    const parsed = new ParserService().parseFiles(aliasFiles);
+    const typeChecker = new TypeCheckerService().analyze(parsed);
+    const relationships = new RelationshipExtractorService().extract(
+      parsed,
+      typeChecker,
+    );
+
+    expect(typeChecker).toMatchObject({
+      importsResolved: 1,
+      pathAliasesResolved: 1,
+    });
+    expect(typeChecker.resolvedImports[0]).toMatchObject({
+      sourcePath: "src/api.ts",
+      targetPath: "src/core/users.ts",
+      specifier: "@core/users",
+      resolutionKind: "configured_path_alias",
+    });
+    expect(relationships).toHaveLength(1);
+    expect(relationships[0]).toMatchObject({
+      sourcePath: "src/api.ts",
+      targetPath: "src/core/users.ts",
+      evidence: {
+        importSpecifier: "@core/users",
+        resolvedBy: "typescript_type_checker",
+        resolutionKind: "configured_path_alias",
+      },
+    });
+  });
+
+  it("traverses referenced TypeScript projects with their own options", () => {
+    const projectFiles: RepositorySourceFile[] = [
+      {
+        path: "packages/api/src/index.ts",
+        language: "typescript",
+        content:
+          'import { loadUser } from "@core/users";\nexport const handler = () => loadUser();\n',
+        checksum: "j",
+        sizeBytes: 88,
+      },
+      {
+        path: "packages/core/src/users.ts",
+        language: "typescript",
+        content: "export const loadUser = () => ({ id: 1 });\n",
+        checksum: "k",
+        sizeBytes: 47,
+      },
+      {
+        path: "tsconfig.json",
+        language: "json",
+        content: JSON.stringify({
+          files: [],
+          references: [
+            { path: "packages/core" },
+            { path: "packages/api" },
+          ],
+        }),
+        checksum: "l",
+        sizeBytes: 100,
+      },
+      {
+        path: "packages/core/tsconfig.json",
+        language: "json",
+        content: JSON.stringify({
+          compilerOptions: { composite: true },
+          include: ["src/**/*.ts"],
+        }),
+        checksum: "m",
+        sizeBytes: 80,
+      },
+      {
+        path: "packages/api/tsconfig.json",
+        language: "json",
+        content: JSON.stringify({
+          compilerOptions: {
+            composite: true,
+            baseUrl: ".",
+            paths: { "@core/*": ["../core/src/*"] },
+          },
+          include: ["src/**/*.ts"],
+        }),
+        checksum: "n",
+        sizeBytes: 140,
+      },
+    ];
+    const parsed = new ParserService().parseFiles(projectFiles);
+    const typeChecker = new TypeCheckerService().analyze(parsed);
+    const relationships = new RelationshipExtractorService().extract(
+      parsed,
+      typeChecker,
+    );
+
+    expect(typeChecker.configuration).toEqual({
+      configFilePath: "tsconfig.json",
+      configuredRootFiles: 2,
+      projectConfigPaths: [
+        "tsconfig.json",
+        "packages/core/tsconfig.json",
+        "packages/api/tsconfig.json",
+      ],
+      projectReferences: 2,
+    });
+    expect(typeChecker).toMatchObject({
+      filesAnalyzed: 2,
+      importsResolved: 1,
+      pathAliasesResolved: 1,
+    });
+    expect(relationships[0]).toMatchObject({
+      sourcePath: "packages/api/src/index.ts",
+      targetPath: "packages/core/src/users.ts",
+      evidence: {
+        resolvedBy: "typescript_type_checker",
+        resolutionKind: "configured_path_alias",
+      },
+    });
+  });
+
+  it("resolves workspace package imports without node_modules symlinks", () => {
+    const workspaceFiles: RepositorySourceFile[] = [
+      {
+        path: "package.json",
+        language: "json",
+        content: JSON.stringify({
+          private: true,
+          workspaces: ["packages/*"],
+        }),
+        checksum: "o",
+        sizeBytes: 60,
+      },
+      {
+        path: "packages/core/package.json",
+        language: "json",
+        content: JSON.stringify({
+          name: "@atlas/core",
+          source: "./src/index.ts",
+        }),
+        checksum: "p",
+        sizeBytes: 70,
+      },
+      {
+        path: "packages/api/package.json",
+        language: "json",
+        content: JSON.stringify({
+          name: "@atlas/api",
+          source: "./src/index.ts",
+          dependencies: { "@atlas/core": "workspace:*" },
+        }),
+        checksum: "q",
+        sizeBytes: 110,
+      },
+      {
+        path: "packages/core/src/index.ts",
+        language: "typescript",
+        content: 'export { loadUser } from "./users";\n',
+        checksum: "r",
+        sizeBytes: 38,
+      },
+      {
+        path: "packages/core/src/users.ts",
+        language: "typescript",
+        content: "export const loadUser = () => ({ id: 1 });\n",
+        checksum: "r2",
+        sizeBytes: 47,
+      },
+      {
+        path: "packages/api/src/index.ts",
+        language: "typescript",
+        content:
+          'import { loadUser } from "@atlas/core";\nexport const handler = () => loadUser();\n',
+        checksum: "s",
+        sizeBytes: 88,
+      },
+      {
+        path: "tsconfig.json",
+        language: "json",
+        content: JSON.stringify({
+          files: [],
+          references: [
+            { path: "packages/core" },
+            { path: "packages/api" },
+          ],
+        }),
+        checksum: "t",
+        sizeBytes: 100,
+      },
+      {
+        path: "packages/core/tsconfig.json",
+        language: "json",
+        content: JSON.stringify({
+          compilerOptions: { composite: true },
+          include: ["src/**/*.ts"],
+        }),
+        checksum: "u",
+        sizeBytes: 80,
+      },
+      {
+        path: "packages/api/tsconfig.json",
+        language: "json",
+        content: JSON.stringify({
+          compilerOptions: { composite: true },
+          include: ["src/**/*.ts"],
+        }),
+        checksum: "v",
+        sizeBytes: 80,
+      },
+    ];
+    const parsed = new ParserService().parseFiles(workspaceFiles);
+    const workspace = new WorkspaceAnalyzerService().analyze(parsed);
+    const typeChecker = new TypeCheckerService().analyze(
+      parsed,
+      undefined,
+      workspace,
+    );
+    const relationships = new RelationshipExtractorService().extract(
+      parsed,
+      typeChecker,
+    );
+
+    expect(workspace.packages.map((item) => item.name)).toEqual([
+      "@atlas/api",
+      "@atlas/core",
+    ]);
+    expect(typeChecker).toMatchObject({
+      importsResolved: 1,
+      pathAliasesResolved: 0,
+      workspaceImportsResolved: 1,
+    });
+    expect(typeChecker.publicApiSymbols).toContainEqual({
+      packageName: "@atlas/core",
+      entryPoint: "packages/core/src/index.ts",
+      exportName: "loadUser",
+      targetPath: "packages/core/src/users.ts",
+      targetName: "loadUser",
+      targetKind: "variable",
+    });
+    expect(relationships[0]).toMatchObject({
+      sourcePath: "packages/api/src/index.ts",
+      targetPath: "packages/core/src/index.ts",
+      evidence: {
+        importSpecifier: "@atlas/core",
+        resolvedBy: "typescript_type_checker",
+        resolutionKind: "workspace_package",
+      },
+    });
+  });
+
+  it("keeps symbol identities stable across line movement and records bindings", () => {
+    const before = new ParserService().parseFiles([
+      {
+        path: "src/public.ts",
+        language: "typescript",
+        content:
+          'import primary, { value as localValue, type Contract } from "@atlas/core";\nconst internal = 1;\nexport { internal as publicValue };\nexport const first = 1, second = 2;\nexport default function handler() { return primary(localValue); }\n',
+        checksum: "w",
+        sizeBytes: 240,
+      },
+    ])[0];
+    const after = new ParserService().parseFiles([
+      {
+        path: "src/public.ts",
+        language: "typescript",
+        content:
+          '\n\nimport primary, { value as localValue, type Contract } from "@atlas/core";\nconst internal = 1;\nexport { internal as publicValue };\nexport const first = 1, second = 2;\nexport default function handler() { return primary(localValue); }\n',
+        checksum: "x",
+        sizeBytes: 242,
+      },
+    ])[0];
+
+    expect(before?.imports[0]).toMatchObject({
+      specifier: "@atlas/core",
+      bindings: [
+        {
+          localName: "primary",
+          importedName: "default",
+          kind: "default",
+          typeOnly: false,
+        },
+        {
+          localName: "localValue",
+          importedName: "value",
+          kind: "named",
+          typeOnly: false,
+        },
+        {
+          localName: "Contract",
+          importedName: "Contract",
+          kind: "named",
+          typeOnly: true,
+        },
+      ],
+    });
+    expect(before?.symbols.map((item) => item.stableKey)).toEqual(
+      after?.symbols.map((item) => item.stableKey),
+    );
+    expect(before?.calls).toContainEqual({
+      localName: "primary",
+      line: 5,
+      sourceSymbolStableKey: "src/public.ts:function:handler",
+    });
+    expect(before?.symbols).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stableKey: "src/public.ts:variable:internal",
+          name: "internal",
+          exported: true,
+          exportNames: ["publicValue"],
+        }),
+        expect.objectContaining({
+          stableKey: "src/public.ts:variable:first",
+          name: "first",
+          exportNames: ["first"],
+        }),
+        expect.objectContaining({
+          stableKey: "src/public.ts:variable:second",
+          name: "second",
+          exportNames: ["second"],
+        }),
+        expect.objectContaining({
+          stableKey: "src/public.ts:function:handler",
+          name: "handler",
+          exportNames: ["default"],
+        }),
+      ]),
+    );
   });
 });

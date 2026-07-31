@@ -1,19 +1,36 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { DatabaseService } from "../database/database.service";
 import {
   architectureSnapshots,
+  codeCalls,
   codeChunks,
   codeFiles,
+  codeImports,
+  codePackages,
   codeRelationships,
   codeSymbols,
+  graphEntities,
+  graphRelationships,
+  packageRelationships,
+  relationshipObservations,
   repositories,
+  symbolRelationships,
 } from "../database/schema";
 import type {
   ArchitectureSnapshotData,
   ObservedRelationship,
   ParsedFile,
+  TypeCheckerAnalysis,
+  WorkspacePackage,
 } from "./intelligence.types";
+import { ApiSymbolLinkerService } from "./api-symbol-linker.service";
+import {
+  GraphProjectionBuilder,
+  graphEntityReferenceKey,
+} from "./graph-projection.builder";
+import { PackageLinkerService } from "./package-linker.service";
+import { RelationshipObservationBuilder } from "./relationship-observation.builder";
 
 interface PersistInput {
   workspaceId: string;
@@ -21,8 +38,23 @@ interface PersistInput {
   sourceRevision: string;
   files: ParsedFile[];
   relationships: ObservedRelationship[];
+  packages: WorkspacePackage[];
+  typeChecker: TypeCheckerAnalysis;
   embeddings: Map<string, number[]>;
   architecture: ArchitectureSnapshotData;
+}
+
+interface PersistSummary {
+  packagesPersisted: number;
+  packageRelationshipsPersisted: number;
+  ambiguousPackageDependencies: number;
+  apiSymbolRelationshipsPersisted: number;
+  apiCallRelationshipsPersisted: number;
+  ambiguousApiImports: number;
+  relationshipObservationsPersisted: number;
+  graphEntitiesProjected: number;
+  graphRelationshipsProjected: number;
+  inferredGraphRelationships: number;
 }
 
 interface RetrievedChunkRow extends Record<string, unknown> {
@@ -35,15 +67,75 @@ interface RetrievedChunkRow extends Record<string, unknown> {
   distance: number;
 }
 
+interface RetrievedGraphChunkRow {
+  id: string;
+  repositoryId: string;
+  content: string;
+  summary: string | null;
+  metadata: Record<string, unknown>;
+  filePath: string;
+  graphContext: {
+    seedEntityId: string;
+    relatedEntityId: string;
+    kind: string;
+    classification: "observed" | "inferred";
+    provenance: string;
+    confidence: number;
+  };
+}
+
 @Injectable()
 export class IntelligenceRepository {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly packageLinker: PackageLinkerService,
+    private readonly apiSymbolLinker: ApiSymbolLinkerService,
+    private readonly relationshipObservationBuilder: RelationshipObservationBuilder,
+    private readonly graphProjectionBuilder: GraphProjectionBuilder,
+  ) {}
 
-  async persist(input: PersistInput): Promise<void> {
-    await this.database.client.transaction(async (transaction) => {
+  async persist(input: PersistInput): Promise<PersistSummary> {
+    return this.database.client.transaction(async (transaction) => {
       await transaction
         .delete(codeFiles)
         .where(eq(codeFiles.repositoryId, input.repositoryId));
+      await transaction
+        .delete(codePackages)
+        .where(eq(codePackages.repositoryId, input.repositoryId));
+
+      const currentPackages: Array<{
+        id: string;
+        name: string;
+        rootPath: string;
+        entryPoints: string[];
+        exportMappings: Record<string, string[]>;
+      }> = [];
+      for (const item of input.packages) {
+        const [createdPackage] = await transaction
+          .insert(codePackages)
+          .values({
+          workspaceId: input.workspaceId,
+          repositoryId: input.repositoryId,
+          stableKey: `${item.name}:${item.rootPath || "."}`,
+          name: item.name,
+          version: item.version,
+          rootPath: item.rootPath,
+          manifestPath: item.manifestPath,
+          entryPoints: item.entryPoints,
+          exportMappings: item.exportMappings,
+          dependencies: item.dependencies,
+          sourceRevision: input.sourceRevision,
+          })
+          .returning({
+            id: codePackages.id,
+            name: codePackages.name,
+            rootPath: codePackages.rootPath,
+            entryPoints: codePackages.entryPoints,
+            exportMappings: codePackages.exportMappings,
+          });
+        if (!createdPackage) throw new Error("Code package was not persisted.");
+        currentPackages.push(createdPackage);
+      }
 
       const fileIds = new Map<string, string>();
       for (const file of input.files) {
@@ -62,20 +154,140 @@ export class IntelligenceRepository {
         if (!createdFile) throw new Error("Code file was not persisted.");
         fileIds.set(file.path, createdFile.id);
 
+        const symbolIds = new Map<string, string>();
         if (file.symbols.length) {
-          await transaction.insert(codeSymbols).values(
-            file.symbols.map((symbol) => ({
-              workspaceId: input.workspaceId,
-              repositoryId: input.repositoryId,
-              fileId: createdFile.id,
-              stableKey: symbol.stableKey,
-              name: symbol.name,
-              kind: symbol.kind,
-              lineStart: symbol.lineStart,
-              lineEnd: symbol.lineEnd,
-              exported: symbol.exported,
-              metadata: symbol.metadata,
-            })),
+          const packageItem = currentPackages
+            .filter(
+              (item) =>
+                !item.rootPath ||
+                file.path === item.rootPath ||
+                file.path.startsWith(`${item.rootPath}/`),
+            )
+            .sort(
+              (left, right) =>
+                right.rootPath.length - left.rootPath.length,
+            )[0];
+          const createdSymbols = await transaction
+            .insert(codeSymbols)
+            .values(
+              file.symbols.map((symbol) => {
+              const publicApi = input.typeChecker.publicApiSymbols.filter(
+                (item) =>
+                  item.packageName === packageItem?.name &&
+                  item.targetPath === file.path &&
+                  item.targetName === symbol.name,
+              );
+              const exportNames = [
+                ...new Set([
+                  ...symbol.exportNames,
+                  ...publicApi.map((item) => item.exportName),
+                ]),
+              ];
+              const apiSpecifiers = [
+                ...new Set(
+                  publicApi.flatMap((api) => {
+                    const mapped = Object.entries(
+                      packageItem?.exportMappings ?? {},
+                    )
+                      .filter(([, targets]) =>
+                        targets.includes(api.entryPoint),
+                      )
+                      .map(([specifier]) => specifier);
+                    if (mapped.length) return mapped;
+                    return packageItem?.entryPoints.includes(api.entryPoint)
+                      ? [packageItem.name]
+                      : [];
+                  }),
+                ),
+              ];
+                return {
+                workspaceId: input.workspaceId,
+                repositoryId: input.repositoryId,
+                fileId: createdFile.id,
+                packageId: packageItem?.id,
+                stableKey: symbol.stableKey,
+                name: symbol.name,
+                kind: symbol.kind,
+                qualifiedName: packageItem
+                  ? `${packageItem.name}:${symbol.name}`
+                  : `${file.path}:${symbol.name}`,
+                lineStart: symbol.lineStart,
+                lineEnd: symbol.lineEnd,
+                exported: symbol.exported,
+                publicApi: publicApi.length > 0,
+                exportNames,
+                apiSpecifiers,
+                sourceRevision: input.sourceRevision,
+                metadata: symbol.metadata,
+                };
+              }),
+            )
+            .returning({
+              id: codeSymbols.id,
+              stableKey: codeSymbols.stableKey,
+            });
+          for (const symbol of createdSymbols) {
+            symbolIds.set(symbol.stableKey, symbol.id);
+          }
+        }
+        if (file.imports.length) {
+          const occurrences = new Map<string, number>();
+          await transaction.insert(codeImports).values(
+            file.imports.map((imported) => {
+              const bindingKey = imported.bindings
+                .map(
+                  (binding) =>
+                    `${binding.kind}:${binding.importedName}:${binding.localName}`,
+                )
+                .join(",");
+              const stableBase = `${file.path}:${imported.specifier}:${bindingKey}`;
+              const occurrence = (occurrences.get(stableBase) ?? 0) + 1;
+              occurrences.set(stableBase, occurrence);
+              return {
+                workspaceId: input.workspaceId,
+                repositoryId: input.repositoryId,
+                fileId: createdFile.id,
+                stableKey:
+                  occurrence === 1
+                    ? stableBase
+                    : `${stableBase}#${occurrence}`,
+                specifier: imported.specifier,
+                line: imported.line,
+                bindings: imported.bindings,
+                sourceRevision: input.sourceRevision,
+              };
+            }),
+          );
+        }
+        if (file.calls.length) {
+          const occurrences = new Map<string, number>();
+          await transaction.insert(codeCalls).values(
+            file.calls.map((call) => {
+              const stableBase = [
+                file.path,
+                call.sourceSymbolStableKey ?? "file",
+                call.localName,
+                call.memberName ?? "",
+              ].join(":");
+              const occurrence = (occurrences.get(stableBase) ?? 0) + 1;
+              occurrences.set(stableBase, occurrence);
+              return {
+                workspaceId: input.workspaceId,
+                repositoryId: input.repositoryId,
+                fileId: createdFile.id,
+                sourceSymbolId: call.sourceSymbolStableKey
+                  ? symbolIds.get(call.sourceSymbolStableKey)
+                  : undefined,
+                stableKey:
+                  occurrence === 1
+                    ? stableBase
+                    : `${stableBase}#${occurrence}`,
+                localName: call.localName,
+                memberName: call.memberName,
+                line: call.line,
+                sourceRevision: input.sourceRevision,
+              };
+            }),
           );
         }
         if (file.chunks.length) {
@@ -144,6 +356,313 @@ export class IntelligenceRepository {
             generatedAt: new Date(),
           },
         });
+
+      const workspacePackages = await transaction
+        .select({
+          id: codePackages.id,
+          workspaceId: codePackages.workspaceId,
+          repositoryId: codePackages.repositoryId,
+          name: codePackages.name,
+          rootPath: codePackages.rootPath,
+          manifestPath: codePackages.manifestPath,
+          sourceRevision: codePackages.sourceRevision,
+          dependencies: codePackages.dependencies,
+          entryPoints: codePackages.entryPoints,
+          exportMappings: codePackages.exportMappings,
+        })
+        .from(codePackages)
+        .where(eq(codePackages.workspaceId, input.workspaceId));
+      const linked = this.packageLinker.link(
+        workspacePackages,
+        input.repositoryId,
+      );
+      if (linked.relationships.length) {
+        await transaction
+          .insert(packageRelationships)
+          .values(linked.relationships);
+      }
+      const workspaceImports = await transaction
+        .select({
+          id: codeImports.id,
+          workspaceId: codeImports.workspaceId,
+          repositoryId: codeImports.repositoryId,
+          fileId: codeImports.fileId,
+          filePath: codeFiles.path,
+          specifier: codeImports.specifier,
+          line: codeImports.line,
+          bindings: codeImports.bindings,
+          sourceRevision: codeImports.sourceRevision,
+        })
+        .from(codeImports)
+        .innerJoin(codeFiles, eq(codeFiles.id, codeImports.fileId))
+        .where(eq(codeImports.workspaceId, input.workspaceId));
+      const workspaceSymbols = await transaction
+        .select({
+          id: codeSymbols.id,
+          workspaceId: codeSymbols.workspaceId,
+          repositoryId: codeSymbols.repositoryId,
+          packageId: codeSymbols.packageId,
+          filePath: codeFiles.path,
+          stableKey: codeSymbols.stableKey,
+          name: codeSymbols.name,
+          exportNames: codeSymbols.exportNames,
+          apiSpecifiers: codeSymbols.apiSpecifiers,
+          publicApi: codeSymbols.publicApi,
+          sourceRevision: codeSymbols.sourceRevision,
+        })
+        .from(codeSymbols)
+        .innerJoin(codeFiles, eq(codeFiles.id, codeSymbols.fileId))
+        .where(eq(codeSymbols.workspaceId, input.workspaceId));
+      const workspaceCalls = await transaction
+        .select({
+          id: codeCalls.id,
+          workspaceId: codeCalls.workspaceId,
+          repositoryId: codeCalls.repositoryId,
+          fileId: codeCalls.fileId,
+          filePath: codeFiles.path,
+          sourceSymbolId: codeCalls.sourceSymbolId,
+          sourceSymbolStableKey: codeSymbols.stableKey,
+          localName: codeCalls.localName,
+          memberName: codeCalls.memberName,
+          line: codeCalls.line,
+          sourceRevision: codeCalls.sourceRevision,
+        })
+        .from(codeCalls)
+        .innerJoin(codeFiles, eq(codeFiles.id, codeCalls.fileId))
+        .leftJoin(codeSymbols, eq(codeSymbols.id, codeCalls.sourceSymbolId))
+        .where(eq(codeCalls.workspaceId, input.workspaceId));
+      const workspaceFiles = await transaction
+        .select({
+          repositoryId: codeFiles.repositoryId,
+          path: codeFiles.path,
+          language: codeFiles.language,
+          sourceRevision: codeFiles.sourceRevision,
+        })
+        .from(codeFiles)
+        .where(eq(codeFiles.workspaceId, input.workspaceId));
+      const workspaceRepositories = (
+        await transaction
+          .select({
+            id: repositories.id,
+            owner: repositories.owner,
+            name: repositories.name,
+            lastSyncedRevision: repositories.lastSyncedRevision,
+          })
+          .from(repositories)
+          .where(
+            and(
+              eq(repositories.workspaceId, input.workspaceId),
+              eq(repositories.isActive, true),
+            ),
+          )
+      ).flatMap((repository) => {
+        const sourceRevision =
+          repository.id === input.repositoryId
+            ? input.sourceRevision
+            : repository.lastSyncedRevision;
+        return sourceRevision
+          ? [{ ...repository, sourceRevision }]
+          : [];
+      });
+      const apiLinks = this.apiSymbolLinker.link(
+        workspaceImports,
+        workspaceCalls,
+        workspacePackages,
+        workspaceSymbols,
+        input.repositoryId,
+      );
+      if (apiLinks.relationships.length) {
+        await transaction
+          .insert(symbolRelationships)
+          .values(apiLinks.relationships);
+      }
+      const observations = this.relationshipObservationBuilder.build({
+        workspaceId: input.workspaceId,
+        repositoryId: input.repositoryId,
+        sourceRevision: input.sourceRevision,
+        localRelationships: input.relationships,
+        packageRelationships: linked.relationships,
+        apiRelationships: apiLinks.relationships,
+        packages: workspacePackages,
+        symbols: workspaceSymbols,
+      });
+      const persistedObservations = observations.length
+        ? await transaction
+            .insert(relationshipObservations)
+            .values(observations)
+            .onConflictDoNothing()
+            .returning({ id: relationshipObservations.id })
+        : [];
+      const graph = this.graphProjectionBuilder.build({
+        workspaceId: input.workspaceId,
+        currentRepositoryId: input.repositoryId,
+        repositories: workspaceRepositories,
+        files: workspaceFiles,
+        packages: workspacePackages,
+        symbols: workspaceSymbols,
+        localRelationships: input.relationships,
+        packageRelationships: linked.relationships,
+        apiRelationships: apiLinks.relationships,
+      });
+      await transaction
+        .update(graphEntities)
+        .set({ isCurrent: false, updatedAt: new Date() })
+        .where(
+          and(
+            eq(graphEntities.workspaceId, input.workspaceId),
+            eq(graphEntities.repositoryId, input.repositoryId),
+          ),
+        );
+      for (let index = 0; index < graph.entities.length; index += 500) {
+        await transaction
+          .insert(graphEntities)
+          .values(graph.entities.slice(index, index + 500))
+          .onConflictDoUpdate({
+            target: [
+              graphEntities.repositoryId,
+              graphEntities.entityType,
+              graphEntities.stableKey,
+            ],
+            set: {
+              name: sql`excluded.name`,
+              path: sql`excluded.path`,
+              sourceRevision: sql`excluded.source_revision`,
+              metadata: sql`excluded.metadata`,
+              isCurrent: true,
+              updatedAt: new Date(),
+            },
+          });
+      }
+      const persistedGraphEntities = await transaction
+        .select({
+          id: graphEntities.id,
+          repositoryId: graphEntities.repositoryId,
+          entityType: graphEntities.entityType,
+          stableKey: graphEntities.stableKey,
+        })
+        .from(graphEntities)
+        .where(
+          and(
+            eq(graphEntities.workspaceId, input.workspaceId),
+            eq(graphEntities.isCurrent, true),
+          ),
+        );
+      const graphEntityIds = new Map(
+        persistedGraphEntities.map((entity) => [
+          graphEntityReferenceKey({
+            repositoryId: entity.repositoryId,
+            entityType:
+              entity.entityType as Parameters<
+                typeof graphEntityReferenceKey
+              >[0]["entityType"],
+            stableKey: entity.stableKey,
+          }),
+          entity.id,
+        ]),
+      );
+      await transaction
+        .update(graphRelationships)
+        .set({
+          classification: "historical",
+          isCurrent: false,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(graphRelationships.workspaceId, input.workspaceId),
+            eq(graphRelationships.isCurrent, true),
+            or(
+              eq(
+                graphRelationships.sourceRepositoryId,
+                input.repositoryId,
+              ),
+              eq(
+                graphRelationships.targetRepositoryId,
+                input.repositoryId,
+              ),
+            ),
+          ),
+        );
+      const graphRelationshipValues = graph.relationships.flatMap(
+        (relationship) => {
+          const sourceEntityId = graphEntityIds.get(
+            graphEntityReferenceKey(relationship.source),
+          );
+          const targetEntityId = graphEntityIds.get(
+            graphEntityReferenceKey(relationship.target),
+          );
+          if (!sourceEntityId || !targetEntityId) return [];
+          return [
+            {
+              workspaceId: relationship.workspaceId,
+              sourceRepositoryId: relationship.sourceRepositoryId,
+              sourceEntityId,
+              targetRepositoryId: relationship.targetRepositoryId,
+              targetEntityId,
+              kind: relationship.kind,
+              stableKey: relationship.stableKey,
+              classification: relationship.classification,
+              provenance: relationship.provenance,
+              confidence: relationship.confidence,
+              sourceRevision: relationship.sourceRevision,
+              targetRevision: relationship.targetRevision,
+              evidence: relationship.evidence,
+              isCurrent: true,
+            },
+          ];
+        },
+      );
+      for (
+        let index = 0;
+        index < graphRelationshipValues.length;
+        index += 500
+      ) {
+        await transaction
+          .insert(graphRelationships)
+          .values(graphRelationshipValues.slice(index, index + 500))
+          .onConflictDoUpdate({
+            target: [
+              graphRelationships.workspaceId,
+              graphRelationships.stableKey,
+            ],
+            set: {
+              sourceRepositoryId: sql`excluded.source_repository_id`,
+              sourceEntityId: sql`excluded.source_entity_id`,
+              targetRepositoryId: sql`excluded.target_repository_id`,
+              targetEntityId: sql`excluded.target_entity_id`,
+              kind: sql`excluded.kind`,
+              classification: sql`excluded.classification`,
+              provenance: sql`excluded.provenance`,
+              confidence: sql`excluded.confidence`,
+              sourceRevision: sql`excluded.source_revision`,
+              targetRevision: sql`excluded.target_revision`,
+              evidence: sql`excluded.evidence`,
+              isCurrent: true,
+              lastSeenAt: new Date(),
+              updatedAt: new Date(),
+            },
+          });
+      }
+      return {
+        packagesPersisted: input.packages.length,
+        packageRelationshipsPersisted: linked.relationships.length,
+        ambiguousPackageDependencies: linked.ambiguousDependencies,
+        apiSymbolRelationshipsPersisted: apiLinks.relationships.filter(
+          (item) => item.kind === "imports_api",
+        ).length,
+        apiCallRelationshipsPersisted: apiLinks.relationships.filter(
+          (item) => item.kind === "calls_api",
+        ).length,
+        ambiguousApiImports:
+          apiLinks.ambiguousPackageImports +
+          apiLinks.ambiguousSymbolImports,
+        relationshipObservationsPersisted: persistedObservations.length,
+        graphEntitiesProjected: graph.entities.length,
+        graphRelationshipsProjected: graphRelationshipValues.length,
+        inferredGraphRelationships: graphRelationshipValues.filter(
+          (item) => item.classification === "inferred",
+        ).length,
+      };
     });
   }
 
@@ -220,6 +739,313 @@ export class IntelligenceRepository {
       .limit(240);
   }
 
+  async graphContextCandidates(
+    workspaceId: string,
+    repositoryId: string,
+    seedPaths: string[],
+  ): Promise<RetrievedGraphChunkRow[]> {
+    if (!seedPaths.length) return [];
+    const seedEntities = await this.database.client
+      .select({ id: graphEntities.id })
+      .from(graphEntities)
+      .where(
+        and(
+          eq(graphEntities.workspaceId, workspaceId),
+          eq(graphEntities.repositoryId, repositoryId),
+          eq(graphEntities.isCurrent, true),
+          inArray(graphEntities.path, seedPaths),
+          or(
+            eq(graphEntities.entityType, "file"),
+            eq(graphEntities.entityType, "symbol"),
+          ),
+        ),
+      )
+      .limit(40);
+    const seedEntityIds = seedEntities.map((item) => item.id);
+    if (!seedEntityIds.length) return [];
+    const edges = await this.database.client
+      .select({
+        id: graphRelationships.id,
+        sourceEntityId: graphRelationships.sourceEntityId,
+        targetEntityId: graphRelationships.targetEntityId,
+        kind: graphRelationships.kind,
+        classification: graphRelationships.classification,
+        provenance: graphRelationships.provenance,
+        confidence: graphRelationships.confidence,
+      })
+      .from(graphRelationships)
+      .where(
+        and(
+          eq(graphRelationships.workspaceId, workspaceId),
+          eq(graphRelationships.isCurrent, true),
+          or(
+            eq(graphRelationships.classification, "observed"),
+            eq(graphRelationships.classification, "inferred"),
+          ),
+          or(
+            inArray(
+              graphRelationships.sourceEntityId,
+              seedEntityIds,
+            ),
+            inArray(
+              graphRelationships.targetEntityId,
+              seedEntityIds,
+            ),
+          ),
+        ),
+      )
+      .orderBy(desc(graphRelationships.confidence))
+      .limit(200);
+    const seedIds = new Set(seedEntityIds);
+    const contextByEntityId = new Map<
+      string,
+      RetrievedGraphChunkRow["graphContext"]
+    >();
+    for (const edge of edges) {
+      const sourceIsSeed = seedIds.has(edge.sourceEntityId);
+      const targetIsSeed = seedIds.has(edge.targetEntityId);
+      if (sourceIsSeed === targetIsSeed) continue;
+      const seedEntityId = sourceIsSeed
+        ? edge.sourceEntityId
+        : edge.targetEntityId;
+      const relatedEntityId = sourceIsSeed
+        ? edge.targetEntityId
+        : edge.sourceEntityId;
+      const candidate = {
+        seedEntityId,
+        relatedEntityId,
+        kind: edge.kind,
+        classification: edge.classification as "observed" | "inferred",
+        provenance: edge.provenance,
+        confidence: edge.confidence,
+      };
+      const existing = contextByEntityId.get(relatedEntityId);
+      const candidateRank =
+        (candidate.classification === "observed" ? 2 : 1) +
+        candidate.confidence;
+      const existingRank = existing
+        ? (existing.classification === "observed" ? 2 : 1) +
+          existing.confidence
+        : -1;
+      if (candidateRank > existingRank) {
+        contextByEntityId.set(relatedEntityId, candidate);
+      }
+    }
+    const relatedNodes = await this.graphNodes(
+      workspaceId,
+      [...contextByEntityId.keys()],
+    );
+    const contextByLocation = new Map<
+      string,
+      RetrievedGraphChunkRow["graphContext"]
+    >();
+    for (const node of relatedNodes) {
+      if (
+        !node.path ||
+        (node.entityType !== "file" && node.entityType !== "symbol")
+      ) {
+        continue;
+      }
+      const context = contextByEntityId.get(node.id);
+      if (!context) continue;
+      const key = `${node.repositoryId}\u0000${node.path}`;
+      const existing = contextByLocation.get(key);
+      if (
+        !existing ||
+        (context.classification === "observed" &&
+          existing.classification === "inferred") ||
+        context.confidence > existing.confidence
+      ) {
+        contextByLocation.set(key, context);
+      }
+    }
+    if (!contextByLocation.size) return [];
+    const locationFilters = [...contextByLocation.keys()].map((key) => {
+      const [contextRepositoryId, filePath] = key.split("\u0000");
+      return and(
+        eq(codeChunks.repositoryId, contextRepositoryId),
+        eq(codeFiles.path, filePath),
+      )!;
+    });
+    const rows = await this.database.client
+      .select({
+        id: codeChunks.id,
+        repositoryId: codeChunks.repositoryId,
+        content: codeChunks.content,
+        summary: codeChunks.summary,
+        metadata: codeChunks.metadata,
+        filePath: codeFiles.path,
+      })
+      .from(codeChunks)
+      .innerJoin(codeFiles, eq(codeFiles.id, codeChunks.fileId))
+      .innerJoin(repositories, eq(repositories.id, codeChunks.repositoryId))
+      .where(
+        and(
+          eq(codeChunks.workspaceId, workspaceId),
+          eq(repositories.workspaceId, workspaceId),
+          eq(repositories.isActive, true),
+          or(...locationFilters),
+        ),
+      )
+      .limit(160);
+    return rows.flatMap((row) => {
+      const graphContext = contextByLocation.get(
+        `${row.repositoryId}\u0000${row.filePath}`,
+      );
+      return graphContext ? [{ ...row, graphContext }] : [];
+    });
+  }
+
+  async graphSeed(
+    workspaceId: string,
+    repositoryId: string,
+    entityId: string | undefined,
+    includeHistorical: boolean,
+  ) {
+    const [seed] = await this.database.client
+      .select({
+        id: graphEntities.id,
+        repositoryId: graphEntities.repositoryId,
+        entityType: graphEntities.entityType,
+        stableKey: graphEntities.stableKey,
+      })
+      .from(graphEntities)
+      .where(
+        and(
+          eq(graphEntities.workspaceId, workspaceId),
+          eq(graphEntities.repositoryId, repositoryId),
+          entityId
+            ? eq(graphEntities.id, entityId)
+            : and(
+                eq(graphEntities.entityType, "repository"),
+                eq(graphEntities.stableKey, "repository"),
+              ),
+          includeHistorical
+            ? undefined
+            : eq(graphEntities.isCurrent, true),
+        ),
+      )
+      .limit(1);
+    return seed ?? null;
+  }
+
+  async graphEdges(
+    workspaceId: string,
+    frontierEntityIds: string[],
+    direction: "incoming" | "outgoing" | "both",
+    includeHistorical: boolean,
+    includeInferred: boolean,
+    limit: number,
+  ) {
+    if (!frontierEntityIds.length || limit <= 0) return [];
+    const currentClassification = includeInferred
+      ? or(
+          eq(graphRelationships.classification, "observed"),
+          eq(graphRelationships.classification, "inferred"),
+        )
+      : eq(graphRelationships.classification, "observed");
+    const classificationFilter = includeHistorical
+      ? or(
+          and(
+            eq(graphRelationships.isCurrent, true),
+            currentClassification,
+          ),
+          eq(graphRelationships.classification, "historical"),
+        )
+      : and(
+          eq(graphRelationships.isCurrent, true),
+          currentClassification,
+        );
+    const directionFilter =
+      direction === "incoming"
+        ? inArray(
+            graphRelationships.targetEntityId,
+            frontierEntityIds,
+          )
+        : direction === "outgoing"
+          ? inArray(
+              graphRelationships.sourceEntityId,
+              frontierEntityIds,
+            )
+          : or(
+              inArray(
+                graphRelationships.sourceEntityId,
+                frontierEntityIds,
+              ),
+              inArray(
+                graphRelationships.targetEntityId,
+                frontierEntityIds,
+              ),
+            );
+    return this.database.client
+      .select({
+        id: graphRelationships.id,
+        sourceEntityId: graphRelationships.sourceEntityId,
+        targetEntityId: graphRelationships.targetEntityId,
+        kind: graphRelationships.kind,
+        classification: graphRelationships.classification,
+        provenance: graphRelationships.provenance,
+        confidence: graphRelationships.confidence,
+        sourceRevision: graphRelationships.sourceRevision,
+        targetRevision: graphRelationships.targetRevision,
+        evidence: graphRelationships.evidence,
+        isCurrent: graphRelationships.isCurrent,
+      })
+      .from(graphRelationships)
+      .where(
+        and(
+          eq(graphRelationships.workspaceId, workspaceId),
+          classificationFilter,
+          directionFilter,
+        ),
+      )
+      .orderBy(desc(graphRelationships.confidence), graphRelationships.kind)
+      .limit(Math.min(limit, 400));
+  }
+
+  async graphNodes(workspaceId: string, entityIds: string[]) {
+    if (!entityIds.length) return [];
+    return this.database.client
+      .select({
+        id: graphEntities.id,
+        repositoryId: graphEntities.repositoryId,
+        repositoryOwner: repositories.owner,
+        repositoryName: repositories.name,
+        entityType: graphEntities.entityType,
+        stableKey: graphEntities.stableKey,
+        name: graphEntities.name,
+        path: graphEntities.path,
+        sourceRevision: graphEntities.sourceRevision,
+        metadata: graphEntities.metadata,
+        isCurrent: graphEntities.isCurrent,
+      })
+      .from(graphEntities)
+      .innerJoin(repositories, eq(repositories.id, graphEntities.repositoryId))
+      .where(
+        and(
+          eq(graphEntities.workspaceId, workspaceId),
+          inArray(graphEntities.id, entityIds),
+          eq(repositories.workspaceId, workspaceId),
+          eq(repositories.isActive, true),
+        ),
+      )
+      .orderBy(graphEntities.entityType, graphEntities.name)
+      .then((nodes) =>
+        nodes.map((node) => ({
+          id: node.id,
+          repositoryId: node.repositoryId,
+          repository: `${node.repositoryOwner}/${node.repositoryName}`,
+          entityType: node.entityType,
+          stableKey: node.stableKey,
+          name: node.name,
+          path: node.path,
+          sourceRevision: node.sourceRevision,
+          metadata: node.metadata,
+          isCurrent: node.isCurrent,
+        })),
+      );
+  }
+
   async repositoryExists(
     workspaceId: string,
     repositoryId: string,
@@ -231,6 +1057,7 @@ export class IntelligenceRepository {
         and(
           eq(repositories.workspaceId, workspaceId),
           eq(repositories.id, repositoryId),
+          eq(repositories.isActive, true),
         ),
       )
       .limit(1);

@@ -34,6 +34,29 @@ services from the sibling CodeMap repository.
 - BullMQ jobs use Atlas sync IDs, cancellation, retries, and audit events.
 - Relationships include observed evidence, source revision, provenance, and
   numeric confidence.
+- Atlas creates an in-memory TypeScript program during ingestion and records
+  compiler-resolved import targets and imported symbol identities.
+- Solution-style `tsconfig` project references are traversed with each
+  referenced project's compiler options and source scope.
+- Workspace manifests contribute stable package names, entry points, exports,
+  dependencies, and compiler mappings without relying on `node_modules`
+  symlinks inside downloaded repository archives.
+- Package identities and dependency links are persisted with source revision,
+  manifest provenance, confidence, and strict workspace scoping.
+- Symbol identities do not depend on line numbers. Public API exports and named
+  import bindings form revision-stamped symbol links across repositories when
+  both the package and symbol targets resolve uniquely.
+- Direct and namespace call usages are stored independently from import edges
+  and linked back to the containing source symbol when one is available.
+- Local imports, package dependencies, public API imports, and calls are also
+  recorded in an append-only observation history keyed by workspace,
+  synchronizing repository, source revision, and stable relationship identity.
+- Stable repository, package, file, and symbol graph entities retain their
+  identities across index replacement. Graph edges explicitly classify current
+  observations, superseded history, and bounded import-binding inferences.
+- Retrieval expands credible direct matches through one-hop current graph
+  context, applies classification-aware score boosts, and preserves the actual
+  repository and file on every expanded citation.
 - Temporary repository archives are deleted after every worker attempt.
 
 This directory is now maintained as Atlas code. Future CodeMap changes are not

@@ -415,6 +415,156 @@ describe("ExplanationGroundingValidator", () => {
     });
   });
 
+  it("accepts calls backed by an indexed public API call edge", () => {
+    const packetWithCall: ImpactEvidencePacket = {
+      ...packet,
+      downstreamImpacts: [
+        ...packet.downstreamImpacts,
+        {
+          id: "workspace-downstream:call",
+          classification: "downstream",
+          kind: "Consumer",
+          title: "atlas/web · src/session-client.ts",
+          detail: "Calls refreshSession across the repository boundary.",
+          repositoryId: "repository-web",
+          repository: "atlas/web",
+          filePath: "src/session-client.ts",
+          symbol: "refreshSession",
+          hop: 1,
+          confidence: 1,
+          provenance: "typescript_public_api_call",
+          evidenceIds: ["workspace-relationship:call"],
+        },
+      ],
+      relationshipPaths: [
+        ...packet.relationshipPaths,
+        {
+          repository: "atlas/web",
+          filePath: "src/session-client.ts",
+          hop: 1,
+        },
+      ],
+      evidence: [
+        ...packet.evidence,
+        {
+          id: "workspace-relationship:call",
+          repositoryId: "repository-web",
+          repository: "atlas/web",
+          filePath: "src/session-client.ts",
+          lineStart: 8,
+          lineEnd: 8,
+          symbol: "refreshSession",
+          excerpt: "Calls refreshSession from src/session.ts.",
+          provenance: "typescript_public_api_call",
+          sourceRevision: "web-revision-1",
+        },
+      ],
+    };
+    const explanationWithCall = {
+      ...validExplanation,
+      claims: validExplanation.claims.map((claim, index) =>
+        index === 0
+          ? {
+              text: "`src/session-client.ts` calls `refreshSession` from `src/session.ts`.",
+              evidenceIds: ["workspace-relationship:call"],
+            }
+          : claim,
+      ),
+    };
+
+    expect(
+      validator().validate(explanationWithCall, packetWithCall),
+    ).toEqual({
+      status: "valid",
+      explanation: explanationWithCall,
+    });
+  });
+
+  it("requires historical evidence to be described as historical", () => {
+    const packetWithHistory: ImpactEvidencePacket = {
+      ...packet,
+      downstreamImpacts: [
+        ...packet.downstreamImpacts,
+        {
+          id: "historical-downstream:call",
+          classification: "downstream",
+          kind: "Consumer",
+          title: "atlas/web · src/legacy-client.ts",
+          detail: "Previously called refreshSession.",
+          repositoryId: "repository-web",
+          repository: "atlas/web",
+          filePath: "src/legacy-client.ts",
+          symbol: "refreshSession",
+          hop: 1,
+          confidence: 0.75,
+          provenance: "historical_relationship",
+          evidenceIds: ["historical-relationship:call"],
+        },
+      ],
+      relationshipPaths: [
+        ...packet.relationshipPaths,
+        {
+          repository: "atlas/web",
+          filePath: "src/legacy-client.ts",
+          hop: 1,
+        },
+      ],
+      evidence: [
+        ...packet.evidence,
+        {
+          id: "historical-relationship:call",
+          repositoryId: "repository-web",
+          repository: "atlas/web",
+          filePath: "src/legacy-client.ts",
+          lineStart: 8,
+          lineEnd: 8,
+          symbol: "refreshSession",
+          excerpt:
+            "Historically observed typescript_public_api_call from src/legacy-client.ts to src/session.ts.",
+          provenance: "historical_relationship",
+          sourceRevision: "web-revision-old",
+        },
+      ],
+    };
+    const historicalExplanation = {
+      ...validExplanation,
+      claims: validExplanation.claims.map((claim, index) =>
+        index === 0
+          ? {
+              text: "`src/legacy-client.ts` historically called `refreshSession` from `src/session.ts`.",
+              evidenceIds: ["historical-relationship:call"],
+            }
+          : claim,
+      ),
+    };
+
+    expect(
+      validator().validate(historicalExplanation, packetWithHistory),
+    ).toEqual({
+      status: "valid",
+      explanation: historicalExplanation,
+    });
+    expect(
+      validator().validate(
+        {
+          ...historicalExplanation,
+          claims: historicalExplanation.claims.map((claim, index) =>
+            index === 0
+              ? {
+                  ...claim,
+                  text: "`src/legacy-client.ts` calls `refreshSession` from `src/session.ts`.",
+                }
+              : claim,
+          ),
+        },
+        packetWithHistory,
+      ),
+    ).toEqual({
+      status: "invalid",
+      failureCode: "unsupported_relationship",
+    });
+  });
+
   it("does not treat recommended future checks as observed provenance", () => {
     expect(
       validator().validate(

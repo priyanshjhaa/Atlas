@@ -57,6 +57,41 @@
       "when": 1785333675281,
       "tag": "20260729140115_noisy_vision",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785480112629,
+      "tag": "20260731064152_rich_iron_patriot",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785509849466,
+      "tag": "20260731145729_calm_vivisector",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785519060785,
+      "tag": "20260731173100_worthless_silver_centurion",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785520377629,
+      "tag": "20260731175257_whole_manta",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1785521344297,
+      "tag": "20260731180904_fancy_alex_wilder",
+      "breakpoints": true
     }
   ]
 }

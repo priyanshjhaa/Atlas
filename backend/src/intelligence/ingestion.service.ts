@@ -11,6 +11,8 @@ import type { IngestionSummary } from "./intelligence.types";
 import { ParserService } from "./parser.service";
 import { RelationshipExtractorService } from "./relationship-extractor.service";
 import { SourceDiscoveryService } from "./source-discovery.service";
+import { TypeCheckerService } from "./type-checker.service";
+import { WorkspaceAnalyzerService } from "./workspace-analyzer.service";
 
 export class IngestionCancelledError extends Error {
   constructor() {
@@ -36,6 +38,8 @@ export class IngestionService {
     private readonly github: GitHubAppService,
     private readonly discovery: SourceDiscoveryService,
     private readonly parser: ParserService,
+    private readonly workspaceAnalyzer: WorkspaceAnalyzerService,
+    private readonly typeChecker: TypeCheckerService,
     private readonly relationships: RelationshipExtractorService,
     private readonly embeddings: EmbeddingsService,
     private readonly architecture: ArchitectureBuilderService,
@@ -79,7 +83,16 @@ export class IngestionService {
       await this.checkCancellation(input);
       await input.progress(52, "parsing_symbols_and_chunks");
       const parsedFiles = this.parser.parseFiles(files);
-      const observedRelationships = this.relationships.extract(parsedFiles);
+      const workspaceAnalysis = this.workspaceAnalyzer.analyze(parsedFiles);
+      const typeCheckerAnalysis = this.typeChecker.analyze(
+        parsedFiles,
+        syncPath,
+        workspaceAnalysis,
+      );
+      const observedRelationships = this.relationships.extract(
+        parsedFiles,
+        typeCheckerAnalysis,
+      );
 
       await this.checkCancellation(input);
       await input.progress(72, "generating_retrieval_embeddings");
@@ -106,16 +119,20 @@ export class IngestionService {
         input.repositoryName,
         parsedFiles,
         observedRelationships,
+        typeCheckerAnalysis,
+        workspaceAnalysis,
       );
 
       await this.checkCancellation(input);
       await input.progress(90, "persisting_intelligence_graph");
-      await this.repository.persist({
+      const persistence = await this.repository.persist({
         workspaceId: input.workspaceId,
         repositoryId: input.repositoryId,
         sourceRevision: input.revision,
         files: parsedFiles,
         relationships: observedRelationships,
+        packages: workspaceAnalysis.packages,
+        typeChecker: typeCheckerAnalysis,
         embeddings: embeddingMap,
         architecture: snapshot,
       });
@@ -130,9 +147,57 @@ export class IngestionService {
           (count, file) => count + file.symbols.length,
           0,
         ),
+        callsDetected: parsedFiles.reduce(
+          (count, file) => count + file.calls.length,
+          0,
+        ),
         relationshipsExtracted: observedRelationships.length,
         languages: [...new Set(parsedFiles.map((file) => file.language))].sort(),
         embeddingProvider: this.embeddings.provider(),
+        typeChecker: {
+          filesAnalyzed: typeCheckerAnalysis.filesAnalyzed,
+          importsResolved: typeCheckerAnalysis.importsResolved,
+          pathAliasesResolved:
+            typeCheckerAnalysis.pathAliasesResolved,
+          workspaceImportsResolved:
+            typeCheckerAnalysis.workspaceImportsResolved,
+          publicApiSymbols:
+            typeCheckerAnalysis.publicApiSymbols.length,
+          diagnosticCount: typeCheckerAnalysis.diagnostics.length,
+          configFilePath:
+            typeCheckerAnalysis.configuration.configFilePath,
+          configuredRootFiles:
+            typeCheckerAnalysis.configuration.configuredRootFiles,
+          projectConfigPaths:
+            typeCheckerAnalysis.configuration.projectConfigPaths,
+          projectReferences:
+            typeCheckerAnalysis.configuration.projectReferences,
+        },
+        workspace: {
+          packageCount: workspaceAnalysis.packages.length,
+          packageNames: workspaceAnalysis.packages.map(
+            (item) => item.name,
+          ),
+          warningCount: workspaceAnalysis.warnings.length,
+          relationshipsLinked:
+            persistence.packageRelationshipsPersisted,
+          ambiguousDependencies:
+            persistence.ambiguousPackageDependencies,
+          apiSymbolsLinked:
+            persistence.apiSymbolRelationshipsPersisted,
+          apiCallsLinked:
+            persistence.apiCallRelationshipsPersisted,
+          ambiguousApiImports:
+            persistence.ambiguousApiImports,
+          relationshipObservationsRecorded:
+            persistence.relationshipObservationsPersisted,
+          graphEntitiesProjected:
+            persistence.graphEntitiesProjected,
+          graphRelationshipsProjected:
+            persistence.graphRelationshipsProjected,
+          inferredGraphRelationships:
+            persistence.inferredGraphRelationships,
+        },
       };
     } finally {
       await rm(syncPath, { recursive: true, force: true }).catch(() => undefined);

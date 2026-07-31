@@ -4,6 +4,8 @@ import type {
   ArchitectureSnapshotData,
   ObservedRelationship,
   ParsedFile,
+  TypeCheckerAnalysis,
+  WorkspaceAnalysis,
 } from "./intelligence.types";
 
 interface ModuleNode {
@@ -49,6 +51,8 @@ export class ArchitectureBuilderService {
     repositoryName: string,
     files: ParsedFile[],
     relationships: ObservedRelationship[],
+    typeChecker?: TypeCheckerAnalysis,
+    workspace?: WorkspaceAnalysis,
   ): ArchitectureSnapshotData {
     const moduleIds = [...new Set(files.map((file) => moduleForPath(file.path)))]
       .sort()
@@ -131,11 +135,48 @@ export class ArchitectureBuilderService {
             (count, file) => count + file.symbols.length,
             0,
           ),
+          callsDetected: files.reduce(
+            (count, file) => count + file.calls.length,
+            0,
+          ),
           relationshipsObserved: relationships.length,
           crossModuleEdges: edges.length,
           rootDirectories: [
             ...new Set(files.map((file) => dirname(file.path).split("/")[0])),
           ],
+          typeChecker: typeChecker
+            ? {
+                filesAnalyzed: typeChecker.filesAnalyzed,
+                importsResolved: typeChecker.importsResolved,
+                pathAliasesResolved:
+                  typeChecker.pathAliasesResolved,
+                workspaceImportsResolved:
+                  typeChecker.workspaceImportsResolved,
+                publicApiSymbols:
+                  typeChecker.publicApiSymbols.length,
+                diagnosticCount: typeChecker.diagnostics.length,
+                configFilePath:
+                  typeChecker.configuration.configFilePath,
+                configuredRootFiles:
+                  typeChecker.configuration.configuredRootFiles,
+                projectConfigPaths:
+                  typeChecker.configuration.projectConfigPaths,
+                projectReferences:
+                  typeChecker.configuration.projectReferences,
+              }
+            : null,
+          workspace: workspace
+            ? {
+                packageCount: workspace.packages.length,
+                packages: workspace.packages.map((item) => ({
+                  name: item.name,
+                  rootPath: item.rootPath,
+                  entryPoints: item.entryPoints,
+                  dependencyNames: item.dependencyNames,
+                })),
+                warningCount: workspace.warnings.length,
+              }
+            : null,
         },
       },
     };

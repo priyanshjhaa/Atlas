@@ -228,6 +228,133 @@ describe("EvidencePacketBuilder", () => {
     expect(JSON.stringify(output.packet)).not.toContain("Old source");
   });
 
+  it("includes structurally linked workspace consumers without admitting unrelated evidence", () => {
+    const { input, result } = fixture();
+    const output = new EvidencePacketBuilder().build(
+      { ...input, scope: "workspace" },
+      {
+        ...result,
+        scope: "workspace",
+        downstreamImpacts: [
+          ...result.downstreamImpacts,
+          {
+            id: "workspace-downstream:cross-call",
+            classification: "downstream",
+            kind: "Consumer",
+            title: "atlas/web · src/session-client.ts",
+            detail: "Calls refreshSession across the repository boundary.",
+            repositoryId: "repository-web",
+            repository: "atlas/web",
+            filePath: "src/session-client.ts",
+            symbol: "refreshSession",
+            hop: 1,
+            confidence: 1,
+            provenance: "typescript_public_api_call",
+            evidenceIds: ["workspace-relationship:cross-call"],
+          },
+          {
+            id: "historical-downstream:legacy-call",
+            classification: "downstream",
+            kind: "Consumer",
+            title: "atlas/legacy · src/legacy-client.ts",
+            detail: "Previously called refreshSession.",
+            repositoryId: "repository-legacy",
+            repository: "atlas/legacy",
+            filePath: "src/legacy-client.ts",
+            symbol: "refreshSession",
+            hop: 1,
+            confidence: 0.75,
+            provenance: "historical_relationship",
+            evidenceIds: ["historical-relationship:legacy-call"],
+          },
+        ],
+        evidence: [
+          ...result.evidence,
+          {
+            id: "workspace-relationship:cross-call",
+            repositoryId: "repository-web",
+            repository: "atlas/web",
+            filePath: "src/session-client.ts",
+            lineStart: 8,
+            lineEnd: 8,
+            symbol: "refreshSession",
+            excerpt: "Calls refreshSession from src/session.ts.",
+            provenance: "typescript_public_api_call",
+            sourceRevision: "web-revision-1",
+          },
+          {
+            id: "historical-relationship:legacy-call",
+            repositoryId: "repository-legacy",
+            repository: "atlas/legacy",
+            filePath: "src/legacy-client.ts",
+            lineStart: 12,
+            lineEnd: 12,
+            symbol: "refreshSession",
+            excerpt:
+              "Historically observed typescript_public_api_call from src/legacy-client.ts to src/session.ts.",
+            provenance: "historical_relationship",
+            sourceRevision: "legacy-revision-old",
+          },
+        ],
+        relationshipPath: [
+          ...result.relationshipPath,
+          {
+            repository: "atlas/web",
+            filePath: "src/session-client.ts",
+            hop: 1,
+          },
+          {
+            repository: "atlas/legacy",
+            filePath: "src/legacy-client.ts",
+            hop: 1,
+          },
+        ],
+      },
+    );
+
+    expect(output.status).toBe("ready");
+    if (output.status !== "ready") return;
+    expect(output.packet.downstreamImpacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          repository: "atlas/web",
+          filePath: "src/session-client.ts",
+          provenance: "typescript_public_api_call",
+        }),
+        expect.objectContaining({
+          repository: "atlas/legacy",
+          filePath: "src/legacy-client.ts",
+          provenance: "historical_relationship",
+        }),
+      ]),
+    );
+    expect(output.packet.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          repository: "atlas/web",
+          filePath: "src/session-client.ts",
+          provenance: "typescript_public_api_call",
+        }),
+        expect.objectContaining({
+          repository: "atlas/legacy",
+          filePath: "src/legacy-client.ts",
+          provenance: "historical_relationship",
+          sourceRevision: "legacy-revision-old",
+        }),
+      ]),
+    );
+    expect(output.packet.relationshipPaths).toEqual(
+      expect.arrayContaining([
+        {
+          repository: "atlas/web",
+          filePath: "src/session-client.ts",
+          hop: 1,
+        },
+      ]),
+    );
+    expect(JSON.stringify(output.packet)).not.toContain("other/private");
+  });
+
   it("keeps hostile code, README, and PR text bounded as data while excluding foreign-tenant evidence", () => {
     const { input, result } = fixture();
     const maliciousInput: ImpactReportInput = {

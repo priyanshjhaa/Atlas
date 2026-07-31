@@ -66,8 +66,31 @@ export interface AtlasSyncJob {
     filesIndexed?: number;
     chunksCreated?: number;
     symbolsExtracted?: number;
+    callsDetected?: number;
     relationshipsExtracted?: number;
     languages?: string[];
+    typeChecker?: {
+      filesAnalyzed: number;
+      importsResolved: number;
+      pathAliasesResolved: number;
+      workspaceImportsResolved: number;
+      publicApiSymbols: number;
+      diagnosticCount: number;
+      configFilePath: string | null;
+      configuredRootFiles: number;
+      projectConfigPaths: string[];
+      projectReferences: number;
+    };
+    workspace?: {
+      packageCount: number;
+      packageNames: string[];
+      warningCount: number;
+      relationshipsLinked: number;
+      ambiguousDependencies: number;
+      apiSymbolsLinked: number;
+      apiCallsLinked: number;
+      ambiguousApiImports: number;
+    };
     embeddingProvider?: "local" | "openai";
   } | null;
   errorCode: string | null;
@@ -200,7 +223,13 @@ export interface AtlasImpactCitation {
   lineEnd?: number;
   symbol?: string;
   excerpt: string;
-  provenance: "indexed_source_chunk" | "typescript_static_import";
+  provenance:
+    | "indexed_source_chunk"
+    | "typescript_static_import"
+    | "package_manifest_dependency"
+    | "typescript_public_api_import"
+    | "typescript_public_api_call"
+    | "historical_relationship";
   sourceRevision: string;
 }
 
@@ -219,6 +248,10 @@ export interface AtlasImpactFinding {
   provenance:
     | "indexed_source_chunk"
     | "typescript_static_import"
+    | "package_manifest_dependency"
+    | "typescript_public_api_import"
+    | "typescript_public_api_call"
+    | "historical_relationship"
     | "analysis_gap";
   evidenceIds: string[];
 }

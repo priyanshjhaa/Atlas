@@ -48,6 +48,7 @@ POST /v1/workspaces/:workspaceId/sync-jobs
 POST /v1/workspaces/:workspaceId/sync-jobs/:syncJobId/cancel
 POST /v1/workspaces/:workspaceId/sync-jobs/:syncJobId/retry
 GET /v1/workspaces/:workspaceId/repositories/:repositoryId/intelligence/architecture
+GET /v1/workspaces/:workspaceId/repositories/:repositoryId/intelligence/graph
 POST /v1/workspaces/:workspaceId/repositories/:repositoryId/intelligence/search
 ```
 
@@ -178,9 +179,54 @@ GitHub revision:
 1. Download and safely extract the GitHub App archive into temporary storage.
 2. Discover supported source files within file-count and byte limits.
 3. Parse TypeScript/JavaScript symbols, imports, exports, and citation chunks.
-4. Extract observed local-import relationships with evidence and confidence.
-5. Generate deterministic local embeddings or optional OpenAI embeddings.
-6. Atomically replace the repository index and create an architecture snapshot.
+4. Discover the repository `tsconfig.json`, apply its compiler options and file
+   scope, traverse referenced project configs, build their TypeScript programs,
+   and resolve imported declarations to repository files and symbols.
+   Repositories without a config use safe TypeScript/JavaScript defaults.
+5. Discover npm/Yarn, pnpm, and Lerna workspace packages, exports, entry points,
+   and dependency declarations.
+6. Extract observed local-import and workspace-package relationships with
+   compiler evidence, confidence, configured path-alias support, and a
+   syntax-only fallback for partially compilable repositories.
+7. Persist stable package identities and exact manifest dependency links,
+   including cross-repository links when a package name resolves uniquely
+   inside the workspace. Ambiguous package names are not linked.
+8. Persist line-independent symbol identities, import bindings, public export
+   names, and package API ownership. Named package imports are linked to unique
+   public symbols across repositories, including symbols exposed by re-exports.
+9. Capture direct and namespace API calls, associate them with their containing
+   source symbols, and persist revision-stamped call edges across repositories.
+10. Append a revision-scoped observation for every local import, package
+    dependency, public API import, and public API call so later graph analysis
+    can distinguish current structure from relationships seen historically.
+11. Project stable repository, package, file, and symbol graph entities. Current
+    structural edges are marked observed, removed edges become historical, and
+    compiler-resolved import bindings create lower-confidence inferred symbol
+    references with explicit provenance.
+12. Generate deterministic local embeddings or optional OpenAI embeddings.
+13. Atomically replace the repository index and create an architecture snapshot.
+
+Workspace-scoped impact analysis consumes the indexed package, public API
+import, and public API call edges to report observed consumers in other active
+repositories. Each cross-repository finding keeps the consumer repository,
+source revision, provenance, confidence, and evidence location; runtime,
+event-driven, and external consumers remain explicit limitations.
+When a revision history contains an incoming stable edge that is absent from
+the current graph, impact analysis returns it as historical evidence with
+reduced confidence and an explicit revalidation requirement. Historical edges
+never masquerade as current observed consumers in reports or LLM explanations.
+
+Graph traversal starts from the selected repository node or a graph entity
+owned by that repository. It supports incoming, outgoing, or bidirectional
+walks up to three hops, returns at most 200 nodes and 400 edges, includes
+inferred edges by default, and requires `includeHistorical=true` before
+superseded edges are returned.
+
+Search first ranks direct vector and lexical matches. Only credible direct
+matches seed one-hop graph expansion; related current chunks from active
+workspace repositories receive a bounded boost based on observed versus
+inferred classification and retain their own repository/file citation.
+Historical graph edges are never used to expand live retrieval.
 
 The exact source commit, included concepts, exclusions, and Atlas adaptations
 are recorded in `src/intelligence/CODEMAP_FORK.md`. Atlas does not depend on the
@@ -201,4 +247,5 @@ OPENAI_API_KEY=...
 ```
 
 The index is always tenant-scoped. Static relationships store source revision,
-evidence, `typescript_static_import` provenance, and confidence `1.0`.
+evidence, `typescript_static_import` provenance, confidence `1.0`, and whether
+the target was resolved by the TypeScript type checker or the syntax fallback.
