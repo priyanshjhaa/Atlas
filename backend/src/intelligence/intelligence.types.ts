@@ -11,6 +11,38 @@ export interface ParsedImport {
   line: number;
 }
 
+export interface TypeCheckedImportSymbol {
+  localName: string;
+  exportedName: string;
+  targetName: string;
+  targetKind: string;
+  targetPath: string;
+}
+
+export interface TypeCheckedImport {
+  sourcePath: string;
+  targetPath: string;
+  specifier: string;
+  line: number;
+  symbols: TypeCheckedImportSymbol[];
+}
+
+export interface TypeCheckDiagnostic {
+  code: number;
+  category: "warning" | "error" | "suggestion" | "message";
+  message: string;
+  filePath?: string;
+  line?: number;
+  character?: number;
+}
+
+export interface TypeCheckerAnalysis {
+  filesAnalyzed: number;
+  importsResolved: number;
+  diagnostics: TypeCheckDiagnostic[];
+  resolvedImports: TypeCheckedImport[];
+}
+
 export interface ParsedSymbol {
   stableKey: string;
   name: string;
@@ -49,6 +81,8 @@ export interface ObservedRelationship {
     targetPath: string;
     importSpecifier: string;
     line: number;
+    resolvedBy: "typescript_type_checker" | "syntax_path_fallback";
+    importedSymbols?: TypeCheckedImportSymbol[];
   };
 }
 
@@ -65,4 +99,9 @@ export interface IngestionSummary {
   relationshipsExtracted: number;
   languages: string[];
   embeddingProvider: "local" | "openai";
+  typeChecker: {
+    filesAnalyzed: number;
+    importsResolved: number;
+    diagnosticCount: number;
+  };
 }

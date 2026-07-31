@@ -68,6 +68,11 @@ export interface AtlasSyncJob {
     symbolsExtracted?: number;
     relationshipsExtracted?: number;
     languages?: string[];
+    typeChecker?: {
+      filesAnalyzed: number;
+      importsResolved: number;
+      diagnosticCount: number;
+    };
     embeddingProvider?: "local" | "openai";
   } | null;
   errorCode: string | null;

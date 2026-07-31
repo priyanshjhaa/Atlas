@@ -34,6 +34,8 @@ services from the sibling CodeMap repository.
 - BullMQ jobs use Atlas sync IDs, cancellation, retries, and audit events.
 - Relationships include observed evidence, source revision, provenance, and
   numeric confidence.
+- Atlas creates an in-memory TypeScript program during ingestion and records
+  compiler-resolved import targets and imported symbol identities.
 - Temporary repository archives are deleted after every worker attempt.
 
 This directory is now maintained as Atlas code. Future CodeMap changes are not

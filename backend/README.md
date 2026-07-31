@@ -178,9 +178,12 @@ GitHub revision:
 1. Download and safely extract the GitHub App archive into temporary storage.
 2. Discover supported source files within file-count and byte limits.
 3. Parse TypeScript/JavaScript symbols, imports, exports, and citation chunks.
-4. Extract observed local-import relationships with evidence and confidence.
-5. Generate deterministic local embeddings or optional OpenAI embeddings.
-6. Atomically replace the repository index and create an architecture snapshot.
+4. Build an in-memory TypeScript program, run the type checker, and resolve
+   imported declarations to repository files and symbols.
+5. Extract observed local-import relationships with compiler evidence,
+   confidence, and a syntax-only fallback for partially compilable repositories.
+6. Generate deterministic local embeddings or optional OpenAI embeddings.
+7. Atomically replace the repository index and create an architecture snapshot.
 
 The exact source commit, included concepts, exclusions, and Atlas adaptations
 are recorded in `src/intelligence/CODEMAP_FORK.md`. Atlas does not depend on the
@@ -201,4 +204,5 @@ OPENAI_API_KEY=...
 ```
 
 The index is always tenant-scoped. Static relationships store source revision,
-evidence, `typescript_static_import` provenance, and confidence `1.0`.
+evidence, `typescript_static_import` provenance, confidence `1.0`, and whether
+the target was resolved by the TypeScript type checker or the syntax fallback.

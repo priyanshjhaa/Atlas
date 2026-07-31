@@ -11,6 +11,7 @@ import type { IngestionSummary } from "./intelligence.types";
 import { ParserService } from "./parser.service";
 import { RelationshipExtractorService } from "./relationship-extractor.service";
 import { SourceDiscoveryService } from "./source-discovery.service";
+import { TypeCheckerService } from "./type-checker.service";
 
 export class IngestionCancelledError extends Error {
   constructor() {
@@ -36,6 +37,7 @@ export class IngestionService {
     private readonly github: GitHubAppService,
     private readonly discovery: SourceDiscoveryService,
     private readonly parser: ParserService,
+    private readonly typeChecker: TypeCheckerService,
     private readonly relationships: RelationshipExtractorService,
     private readonly embeddings: EmbeddingsService,
     private readonly architecture: ArchitectureBuilderService,
@@ -79,7 +81,11 @@ export class IngestionService {
       await this.checkCancellation(input);
       await input.progress(52, "parsing_symbols_and_chunks");
       const parsedFiles = this.parser.parseFiles(files);
-      const observedRelationships = this.relationships.extract(parsedFiles);
+      const typeCheckerAnalysis = this.typeChecker.analyze(parsedFiles);
+      const observedRelationships = this.relationships.extract(
+        parsedFiles,
+        typeCheckerAnalysis,
+      );
 
       await this.checkCancellation(input);
       await input.progress(72, "generating_retrieval_embeddings");
@@ -106,6 +112,7 @@ export class IngestionService {
         input.repositoryName,
         parsedFiles,
         observedRelationships,
+        typeCheckerAnalysis,
       );
 
       await this.checkCancellation(input);
@@ -133,6 +140,11 @@ export class IngestionService {
         relationshipsExtracted: observedRelationships.length,
         languages: [...new Set(parsedFiles.map((file) => file.language))].sort(),
         embeddingProvider: this.embeddings.provider(),
+        typeChecker: {
+          filesAnalyzed: typeCheckerAnalysis.filesAnalyzed,
+          importsResolved: typeCheckerAnalysis.importsResolved,
+          diagnosticCount: typeCheckerAnalysis.diagnostics.length,
+        },
       };
     } finally {
       await rm(syncPath, { recursive: true, force: true }).catch(() => undefined);

@@ -10,6 +10,7 @@ import { ParserService } from "./parser.service";
 import { RelationshipExtractorService } from "./relationship-extractor.service";
 import { RetrievalService } from "./retrieval.service";
 import { SourceDiscoveryService } from "./source-discovery.service";
+import { TypeCheckerService } from "./type-checker.service";
 
 @Module({
   controllers: [IntelligenceController],
@@ -24,6 +25,7 @@ import { SourceDiscoveryService } from "./source-discovery.service";
     RelationshipExtractorService,
     RetrievalService,
     SourceDiscoveryService,
+    TypeCheckerService,
   ],
   exports: [IngestionService, RetrievalService],
 })

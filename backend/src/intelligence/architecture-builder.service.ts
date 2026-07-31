@@ -4,6 +4,7 @@ import type {
   ArchitectureSnapshotData,
   ObservedRelationship,
   ParsedFile,
+  TypeCheckerAnalysis,
 } from "./intelligence.types";
 
 interface ModuleNode {
@@ -49,6 +50,7 @@ export class ArchitectureBuilderService {
     repositoryName: string,
     files: ParsedFile[],
     relationships: ObservedRelationship[],
+    typeChecker?: TypeCheckerAnalysis,
   ): ArchitectureSnapshotData {
     const moduleIds = [...new Set(files.map((file) => moduleForPath(file.path)))]
       .sort()
@@ -136,6 +138,13 @@ export class ArchitectureBuilderService {
           rootDirectories: [
             ...new Set(files.map((file) => dirname(file.path).split("/")[0])),
           ],
+          typeChecker: typeChecker
+            ? {
+                filesAnalyzed: typeChecker.filesAnalyzed,
+                importsResolved: typeChecker.importsResolved,
+                diagnosticCount: typeChecker.diagnostics.length,
+              }
+            : null,
         },
       },
     };

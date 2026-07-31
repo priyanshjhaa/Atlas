@@ -3,6 +3,7 @@ import { dirname, join, normalize } from "node:path/posix";
 import type {
   ObservedRelationship,
   ParsedFile,
+  TypeCheckerAnalysis,
 } from "./intelligence.types";
 
 const sourceExtensions = [
@@ -21,13 +22,27 @@ function normalizePath(path: string) {
 
 @Injectable()
 export class RelationshipExtractorService {
-  extract(files: ParsedFile[]): ObservedRelationship[] {
+  extract(
+    files: ParsedFile[],
+    typeChecker?: TypeCheckerAnalysis,
+  ): ObservedRelationship[] {
     const paths = new Set(files.map((file) => file.path));
     const relationships = new Map<string, ObservedRelationship>();
+    const compilerResolutions = new Map(
+      typeChecker?.resolvedImports.map((item) => [
+        `${item.sourcePath}:${item.line}:${item.specifier}`,
+        item,
+      ]) ?? [],
+    );
 
     for (const file of files) {
       for (const imported of file.imports) {
-        const targetPath = this.resolve(file.path, imported.specifier, paths);
+        const compilerResolution = compilerResolutions.get(
+          `${file.path}:${imported.line}:${imported.specifier}`,
+        );
+        const targetPath =
+          compilerResolution?.targetPath ??
+          this.resolve(file.path, imported.specifier, paths);
         if (!targetPath || targetPath === file.path) continue;
         const stableKey = `${file.path}:imports:${targetPath}`;
         const existing = relationships.get(stableKey);
@@ -45,6 +60,12 @@ export class RelationshipExtractorService {
             targetPath,
             importSpecifier: imported.specifier,
             line: imported.line,
+            resolvedBy: compilerResolution
+              ? "typescript_type_checker"
+              : "syntax_path_fallback",
+            ...(compilerResolution?.symbols.length
+              ? { importedSymbols: compilerResolution.symbols }
+              : {}),
           },
         });
       }

@@ -13,13 +13,17 @@ import type { IntelligenceRepository } from "../src/intelligence/intelligence.re
 import { ParserService } from "../src/intelligence/parser.service";
 import { RelationshipExtractorService } from "../src/intelligence/relationship-extractor.service";
 import { SourceDiscoveryService } from "../src/intelligence/source-discovery.service";
+import { TypeCheckerService } from "../src/intelligence/type-checker.service";
+import type { ObservedRelationship } from "../src/intelligence/intelligence.types";
 
 describe("IngestionService", () => {
   it("runs the forked pipeline and persists Atlas-scoped intelligence", async () => {
     const storageRoot = await mkdtemp(
       join(tmpdir(), "atlas-ingestion-test-"),
     );
-    const persist = vi.fn(async () => undefined);
+    const persist = vi.fn(async (input: unknown) => {
+      void input;
+    });
     const config = {
       get: (key: keyof Environment) => {
         if (key === "REPOSITORY_STORAGE_PATH") return storageRoot;
@@ -52,6 +56,7 @@ describe("IngestionService", () => {
       github,
       new SourceDiscoveryService(),
       new ParserService(),
+      new TypeCheckerService(),
       new RelationshipExtractorService(),
       new EmbeddingsService(config),
       new ArchitectureBuilderService(),
@@ -75,20 +80,37 @@ describe("IngestionService", () => {
         symbolsExtracted: 2,
         relationshipsExtracted: 1,
         embeddingProvider: "local",
+        typeChecker: {
+          filesAnalyzed: 2,
+          importsResolved: 1,
+          diagnosticCount: 0,
+        },
       });
-      expect(persist).toHaveBeenCalledWith(
-        expect.objectContaining({
-          workspaceId: "workspace-1",
-          repositoryId: "repository-1",
-          sourceRevision: "abcdef1234567890",
-          relationships: [
-            expect.objectContaining({
-              provenance: "typescript_static_import",
-              confidence: 1,
-            }),
-          ],
-        }),
-      );
+      expect(persist).toHaveBeenCalledOnce();
+      const persisted = persist.mock.calls[0]?.[0] as {
+        workspaceId: string;
+        repositoryId: string;
+        sourceRevision: string;
+        relationships: ObservedRelationship[];
+      };
+      expect(persisted).toMatchObject({
+        workspaceId: "workspace-1",
+        repositoryId: "repository-1",
+        sourceRevision: "abcdef1234567890",
+      });
+      expect(persisted.relationships[0]).toMatchObject({
+        provenance: "typescript_static_import",
+        confidence: 1,
+      });
+      expect(persisted.relationships[0]?.evidence).toMatchObject({
+        resolvedBy: "typescript_type_checker",
+        importedSymbols: [
+          expect.objectContaining({
+            localName: "user",
+            targetPath: "src/user.ts",
+          }),
+        ],
+      });
     } finally {
       await rm(storageRoot, { recursive: true, force: true });
     }
