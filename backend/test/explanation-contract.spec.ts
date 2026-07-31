@@ -88,7 +88,7 @@ describe("impact explanation contract", () => {
     ).toBe(false);
   });
 
-  it("lets the grounding validator enforce remaining questions from packet context", () => {
+  it("requires remaining questions in provider output when packet context has gaps", () => {
     const providerSchema = impactExplanationProviderSchema(
       ["relationship:456", "chunk:123"],
       true,
@@ -99,7 +99,7 @@ describe("impact explanation contract", () => {
         ...providerExplanation,
         remainingQuestions: [],
       }).success,
-    ).toBe(true);
+    ).toBe(false);
     expect(providerSchema.safeParse(providerExplanation).success).toBe(true);
   });
 

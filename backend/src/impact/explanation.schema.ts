@@ -62,7 +62,6 @@ export function impactExplanationProviderSchema(
   _evidenceIds: string[],
   requireRemainingQuestions = false,
 ): z.ZodType<ImpactExplanation> {
-  void requireRemainingQuestions;
   const providerTextSchema = z.string();
   const providerEvidenceIdsSchema = z.array(providerTextSchema).min(1);
 
@@ -71,32 +70,43 @@ export function impactExplanationProviderSchema(
       schemaVersion: z.enum([IMPACT_EXPLANATION_SCHEMA_VERSION]),
       executiveSummary: providerTextSchema,
       answer: providerTextSchema,
-      claims: z.array(
-        z
-          .object({
-            text: providerTextSchema,
-            evidenceIds: providerEvidenceIdsSchema,
-          })
-          .strict(),
-      ),
-      implementationSteps: z.array(
-        z
-          .object({
-            title: providerTextSchema,
-            detail: providerTextSchema,
-            evidenceIds: providerEvidenceIdsSchema,
-          })
-          .strict(),
-      ),
-      verificationSteps: z.array(
-        z
-          .object({
-            text: providerTextSchema,
-            evidenceIds: providerEvidenceIdsSchema,
-          })
-          .strict(),
-      ),
-      remainingQuestions: z.array(providerTextSchema),
+      claims: z
+        .array(
+          z
+            .object({
+              text: providerTextSchema,
+              evidenceIds: providerEvidenceIdsSchema,
+            })
+            .strict(),
+        )
+        .min(3)
+        .max(6),
+      implementationSteps: z
+        .array(
+          z
+            .object({
+              title: providerTextSchema,
+              detail: providerTextSchema,
+              evidenceIds: providerEvidenceIdsSchema,
+            })
+            .strict(),
+        )
+        .min(3)
+        .max(5),
+      verificationSteps: z
+        .array(
+          z
+            .object({
+              text: providerTextSchema,
+              evidenceIds: providerEvidenceIdsSchema,
+            })
+            .strict(),
+        )
+        .min(3)
+        .max(4),
+      remainingQuestions: requireRemainingQuestions
+        ? z.array(providerTextSchema).min(1)
+        : z.array(providerTextSchema),
     })
     .strict();
 }

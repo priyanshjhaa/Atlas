@@ -34,7 +34,7 @@ describe("impact explanation schemas", () => {
 
   it("keeps the provider schema simple for Groq structured output", () => {
     const providerSchema = impactExplanationProviderSchema(["E1"]);
-    expect(providerSchema.safeParse(legacyExplanation).success).toBe(true);
+    expect(providerSchema.safeParse(legacyExplanation).success).toBe(false);
 
     expect(
       providerSchema.safeParse({
@@ -66,6 +66,7 @@ describe("impact explanation schemas", () => {
     expect(responseFormat.json_schema.strict).toBe(true);
     expect(serialized).not.toContain('"const"');
     expect(serialized).not.toContain('"minLength"');
+    expect(serialized).toContain('"minItems":3');
     expect(serialized).toContain('"minItems":1');
   });
 });
