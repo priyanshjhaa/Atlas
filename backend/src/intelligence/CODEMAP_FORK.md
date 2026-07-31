@@ -54,6 +54,9 @@ services from the sibling CodeMap repository.
 - Stable repository, package, file, and symbol graph entities retain their
   identities across index replacement. Graph edges explicitly classify current
   observations, superseded history, and bounded import-binding inferences.
+- Retrieval expands credible direct matches through one-hop current graph
+  context, applies classification-aware score boosts, and preserves the actual
+  repository and file on every expanded citation.
 - Temporary repository archives are deleted after every worker attempt.
 
 This directory is now maintained as Atlas code. Future CodeMap changes are not

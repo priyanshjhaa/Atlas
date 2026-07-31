@@ -222,6 +222,12 @@ walks up to three hops, returns at most 200 nodes and 400 edges, includes
 inferred edges by default, and requires `includeHistorical=true` before
 superseded edges are returned.
 
+Search first ranks direct vector and lexical matches. Only credible direct
+matches seed one-hop graph expansion; related current chunks from active
+workspace repositories receive a bounded boost based on observed versus
+inferred classification and retain their own repository/file citation.
+Historical graph edges are never used to expand live retrieval.
+
 The exact source commit, included concepts, exclusions, and Atlas adaptations
 are recorded in `src/intelligence/CODEMAP_FORK.md`. Atlas does not depend on the
 CodeMap repository at runtime and does not automatically merge later CodeMap

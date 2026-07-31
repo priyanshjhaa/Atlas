@@ -79,10 +79,11 @@ export class ImpactAnalysisService {
     const searchResults = retrieval.results
       .filter(
         (result) =>
-          this.matchesExplicitAnchor(result, input.anchors) ||
-          (result.lexicalMatches ?? 0) > 0 ||
-          (this.isCodePath(result.citation.filePath) &&
-            result.score >= minimumScore),
+          result.citation.repositoryId === input.repositoryId &&
+          (this.matchesExplicitAnchor(result, input.anchors) ||
+            (result.lexicalMatches ?? 0) > 0 ||
+            (this.isCodePath(result.citation.filePath) &&
+              result.score >= minimumScore)),
       )
       .slice(0, 16);
     const explicitPaths = input.anchors.filter((anchor) =>

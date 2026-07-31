@@ -67,6 +67,23 @@ interface RetrievedChunkRow extends Record<string, unknown> {
   distance: number;
 }
 
+interface RetrievedGraphChunkRow {
+  id: string;
+  repositoryId: string;
+  content: string;
+  summary: string | null;
+  metadata: Record<string, unknown>;
+  filePath: string;
+  graphContext: {
+    seedEntityId: string;
+    relatedEntityId: string;
+    kind: string;
+    classification: "observed" | "inferred";
+    provenance: string;
+    confidence: number;
+  };
+}
+
 @Injectable()
 export class IntelligenceRepository {
   constructor(
@@ -720,6 +737,163 @@ export class IntelligenceRepository {
         ),
       )
       .limit(240);
+  }
+
+  async graphContextCandidates(
+    workspaceId: string,
+    repositoryId: string,
+    seedPaths: string[],
+  ): Promise<RetrievedGraphChunkRow[]> {
+    if (!seedPaths.length) return [];
+    const seedEntities = await this.database.client
+      .select({ id: graphEntities.id })
+      .from(graphEntities)
+      .where(
+        and(
+          eq(graphEntities.workspaceId, workspaceId),
+          eq(graphEntities.repositoryId, repositoryId),
+          eq(graphEntities.isCurrent, true),
+          inArray(graphEntities.path, seedPaths),
+          or(
+            eq(graphEntities.entityType, "file"),
+            eq(graphEntities.entityType, "symbol"),
+          ),
+        ),
+      )
+      .limit(40);
+    const seedEntityIds = seedEntities.map((item) => item.id);
+    if (!seedEntityIds.length) return [];
+    const edges = await this.database.client
+      .select({
+        id: graphRelationships.id,
+        sourceEntityId: graphRelationships.sourceEntityId,
+        targetEntityId: graphRelationships.targetEntityId,
+        kind: graphRelationships.kind,
+        classification: graphRelationships.classification,
+        provenance: graphRelationships.provenance,
+        confidence: graphRelationships.confidence,
+      })
+      .from(graphRelationships)
+      .where(
+        and(
+          eq(graphRelationships.workspaceId, workspaceId),
+          eq(graphRelationships.isCurrent, true),
+          or(
+            eq(graphRelationships.classification, "observed"),
+            eq(graphRelationships.classification, "inferred"),
+          ),
+          or(
+            inArray(
+              graphRelationships.sourceEntityId,
+              seedEntityIds,
+            ),
+            inArray(
+              graphRelationships.targetEntityId,
+              seedEntityIds,
+            ),
+          ),
+        ),
+      )
+      .orderBy(desc(graphRelationships.confidence))
+      .limit(200);
+    const seedIds = new Set(seedEntityIds);
+    const contextByEntityId = new Map<
+      string,
+      RetrievedGraphChunkRow["graphContext"]
+    >();
+    for (const edge of edges) {
+      const sourceIsSeed = seedIds.has(edge.sourceEntityId);
+      const targetIsSeed = seedIds.has(edge.targetEntityId);
+      if (sourceIsSeed === targetIsSeed) continue;
+      const seedEntityId = sourceIsSeed
+        ? edge.sourceEntityId
+        : edge.targetEntityId;
+      const relatedEntityId = sourceIsSeed
+        ? edge.targetEntityId
+        : edge.sourceEntityId;
+      const candidate = {
+        seedEntityId,
+        relatedEntityId,
+        kind: edge.kind,
+        classification: edge.classification as "observed" | "inferred",
+        provenance: edge.provenance,
+        confidence: edge.confidence,
+      };
+      const existing = contextByEntityId.get(relatedEntityId);
+      const candidateRank =
+        (candidate.classification === "observed" ? 2 : 1) +
+        candidate.confidence;
+      const existingRank = existing
+        ? (existing.classification === "observed" ? 2 : 1) +
+          existing.confidence
+        : -1;
+      if (candidateRank > existingRank) {
+        contextByEntityId.set(relatedEntityId, candidate);
+      }
+    }
+    const relatedNodes = await this.graphNodes(
+      workspaceId,
+      [...contextByEntityId.keys()],
+    );
+    const contextByLocation = new Map<
+      string,
+      RetrievedGraphChunkRow["graphContext"]
+    >();
+    for (const node of relatedNodes) {
+      if (
+        !node.path ||
+        (node.entityType !== "file" && node.entityType !== "symbol")
+      ) {
+        continue;
+      }
+      const context = contextByEntityId.get(node.id);
+      if (!context) continue;
+      const key = `${node.repositoryId}\u0000${node.path}`;
+      const existing = contextByLocation.get(key);
+      if (
+        !existing ||
+        (context.classification === "observed" &&
+          existing.classification === "inferred") ||
+        context.confidence > existing.confidence
+      ) {
+        contextByLocation.set(key, context);
+      }
+    }
+    if (!contextByLocation.size) return [];
+    const locationFilters = [...contextByLocation.keys()].map((key) => {
+      const [contextRepositoryId, filePath] = key.split("\u0000");
+      return and(
+        eq(codeChunks.repositoryId, contextRepositoryId),
+        eq(codeFiles.path, filePath),
+      )!;
+    });
+    const rows = await this.database.client
+      .select({
+        id: codeChunks.id,
+        repositoryId: codeChunks.repositoryId,
+        content: codeChunks.content,
+        summary: codeChunks.summary,
+        metadata: codeChunks.metadata,
+        filePath: codeFiles.path,
+      })
+      .from(codeChunks)
+      .innerJoin(codeFiles, eq(codeFiles.id, codeChunks.fileId))
+      .innerJoin(repositories, eq(repositories.id, codeChunks.repositoryId))
+      .where(
+        and(
+          eq(codeChunks.workspaceId, workspaceId),
+          eq(repositories.workspaceId, workspaceId),
+          eq(repositories.isActive, true),
+          or(...locationFilters),
+        ),
+      )
+      .limit(160);
+    return rows.flatMap((row) => {
+      const graphContext = contextByLocation.get(
+        `${row.repositoryId}\u0000${row.filePath}`,
+      );
+      return graphContext ? [{ ...row, graphContext }] : [];
+    });
   }
 
   async graphSeed(

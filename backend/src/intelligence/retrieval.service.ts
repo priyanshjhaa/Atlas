@@ -5,12 +5,22 @@ import { expandedQueryTerms } from "./query-terms";
 
 interface RankedChunk {
   id: string;
+  repositoryId: string;
   filePath: string;
   content: string;
   summary: string | null;
   metadata: Record<string, unknown>;
   vectorScore: number;
   lexicalMatches: number;
+  graphScore: number;
+  graphContext?: {
+    seedEntityId: string;
+    relatedEntityId: string;
+    kind: string;
+    classification: "observed" | "inferred";
+    provenance: string;
+    confidence: number;
+  };
 }
 
 @Injectable()
@@ -38,12 +48,14 @@ export class RetrievalService {
     for (const row of vectorRows) {
       ranked.set(row.id, {
         id: row.id,
+        repositoryId,
         filePath: row.filePath,
         content: row.content,
         summary: row.summary,
         metadata: row.metadata,
         vectorScore: Math.max(0, 1 - Number(row.distance)),
         lexicalMatches: 0,
+        graphScore: 0,
       });
     }
     for (const row of lexicalRows) {
@@ -54,12 +66,65 @@ export class RetrievalService {
       const existing = ranked.get(row.id);
       ranked.set(row.id, {
         id: row.id,
+        repositoryId,
         filePath: row.filePath,
         content: row.content,
         summary: row.summary,
         metadata: row.metadata,
         vectorScore: existing?.vectorScore ?? 0,
         lexicalMatches: matches,
+        graphScore: existing?.graphScore ?? 0,
+        graphContext: existing?.graphContext,
+      });
+    }
+    const seedPaths = [
+      ...new Set(
+        [...ranked.values()]
+          .filter(
+            (chunk) =>
+              chunk.vectorScore >= 0.32 || chunk.lexicalMatches > 0,
+          )
+          .sort(
+            (left, right) =>
+              right.vectorScore +
+              right.lexicalMatches * 0.08 -
+              (left.vectorScore + left.lexicalMatches * 0.08),
+          )
+          .slice(0, 8)
+          .map((chunk) => chunk.filePath),
+      ),
+    ];
+    const graphRows = seedPaths.length
+      ? await this.repository.graphContextCandidates(
+          workspaceId,
+          repositoryId,
+          seedPaths,
+        )
+      : [];
+    for (const row of graphRows) {
+      const haystack =
+        `${row.filePath} ${row.summary ?? ""} ${row.content}`.toLowerCase();
+      const matches = terms.filter((term) => haystack.includes(term)).length;
+      const graphScore =
+        row.graphContext.classification === "observed"
+          ? 0.12 + row.graphContext.confidence * 0.06
+          : 0.06 + row.graphContext.confidence * 0.04;
+      const existing = ranked.get(row.id);
+      if (existing && existing.graphScore >= graphScore) continue;
+      ranked.set(row.id, {
+        id: row.id,
+        repositoryId: row.repositoryId,
+        filePath: row.filePath,
+        content: row.content,
+        summary: row.summary,
+        metadata: row.metadata,
+        vectorScore: existing?.vectorScore ?? 0,
+        lexicalMatches: Math.max(
+          existing?.lexicalMatches ?? 0,
+          matches,
+        ),
+        graphScore,
+        graphContext: row.graphContext,
       });
     }
 
@@ -68,7 +133,9 @@ export class RetrievalService {
         ...chunk,
         score: Math.min(
           1,
-          chunk.vectorScore + Math.min(0.35, chunk.lexicalMatches * 0.08),
+          chunk.vectorScore +
+            Math.min(0.35, chunk.lexicalMatches * 0.08) +
+            chunk.graphScore,
         ),
       }))
       .sort((left, right) => right.score - left.score)
@@ -77,10 +144,15 @@ export class RetrievalService {
         id: chunk.id,
         score: chunk.score,
         lexicalMatches: chunk.lexicalMatches,
-        reason: chunk.summary ?? "Code context matched the search.",
+        reason:
+          chunk.summary ??
+          (chunk.graphContext
+            ? `Related through ${chunk.graphContext.classification} ${chunk.graphContext.kind}.`
+            : "Code context matched the search."),
         excerpt: chunk.content.slice(0, 1_000),
+        graphContext: chunk.graphContext,
         citation: {
-          repositoryId,
+          repositoryId: chunk.repositoryId,
           filePath: chunk.filePath,
           lineStart:
             typeof chunk.metadata.lineStart === "number"

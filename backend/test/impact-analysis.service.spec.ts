@@ -165,6 +165,63 @@ describe("ImpactAnalysisService", () => {
     expect(repository.incomingRelationships).toHaveBeenCalledTimes(2);
   });
 
+  it("does not treat cross-repository retrieval expansion as a local change anchor", async () => {
+    const { repository, retrieval, service } = setup();
+    retrieval.search.mockResolvedValue({
+      query: "refresh session",
+      lowConfidence: false,
+      results: [
+        {
+          id: "chunk-cross-repository",
+          score: 1,
+          lexicalMatches: 2,
+          reason: "Graph-related consumer",
+          excerpt: "refreshSession();",
+          citation: {
+            repositoryId: "repository-web",
+            filePath: "src/session-client.ts",
+            symbol: "refreshSession",
+            provenance: "indexed_source_chunk",
+          },
+        },
+        {
+          id: "chunk-session",
+          score: 0.84,
+          lexicalMatches: 2,
+          reason: "Matched refreshSession",
+          excerpt: "export function refreshSession() {}",
+          citation: {
+            repositoryId,
+            filePath: "src/session.ts",
+            symbol: "refreshSession",
+            provenance: "indexed_source_chunk",
+          },
+        },
+      ],
+    });
+
+    const report = await service.analyze(workspaceId, {
+      mode: "planned",
+      repositoryId,
+      description: "Rotate the refresh session contract.",
+      scope: "repository",
+      anchors: ["refreshSession"],
+    });
+
+    expect(repository.filesByPaths).toHaveBeenCalledWith(
+      workspaceId,
+      repositoryId,
+      ["src/session.ts"],
+    );
+    expect(report.evidence).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          filePath: "src/session-client.ts",
+        }),
+      ]),
+    );
+  });
+
   it("reports analysis gaps explicitly instead of inventing consumers", async () => {
     const { repository, retrieval, service } = setup();
     repository.filesByPaths.mockResolvedValue([]);
