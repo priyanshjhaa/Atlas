@@ -41,6 +41,10 @@ export interface TypeCheckerAnalysis {
   importsResolved: number;
   diagnostics: TypeCheckDiagnostic[];
   resolvedImports: TypeCheckedImport[];
+  configuration: {
+    configFilePath: string | null;
+    configuredRootFiles: number;
+  };
 }
 
 export interface ParsedSymbol {
@@ -103,5 +107,7 @@ export interface IngestionSummary {
     filesAnalyzed: number;
     importsResolved: number;
     diagnosticCount: number;
+    configFilePath: string | null;
+    configuredRootFiles: number;
   };
 }

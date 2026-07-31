@@ -143,6 +143,10 @@ export class ArchitectureBuilderService {
                 filesAnalyzed: typeChecker.filesAnalyzed,
                 importsResolved: typeChecker.importsResolved,
                 diagnosticCount: typeChecker.diagnostics.length,
+                configFilePath:
+                  typeChecker.configuration.configFilePath,
+                configuredRootFiles:
+                  typeChecker.configuration.configuredRootFiles,
               }
             : null,
         },

@@ -1,5 +1,12 @@
 import { Injectable } from "@nestjs/common";
-import { dirname, join, normalize, relative } from "node:path/posix";
+import {
+  basename,
+  dirname,
+  join,
+  matchesGlob,
+  normalize,
+  relative,
+} from "node:path/posix";
 import * as ts from "typescript";
 import type {
   ParsedFile,
@@ -23,16 +30,16 @@ function normalizeRepositoryPath(path: string) {
   return normalize(path).replace(/^(\.\.\/|\.\/|\/)+/, "");
 }
 
-function virtualPath(path: string) {
-  return join(virtualRoot, normalizeRepositoryPath(path));
+function absoluteRepositoryPath(rootPath: string, path: string) {
+  return join(rootPath, normalizeRepositoryPath(path));
 }
 
-function repositoryPath(path: string) {
+function repositoryPath(rootPath: string, path: string) {
   const normalized = normalize(path);
-  if (normalized === virtualRoot || !normalized.startsWith(`${virtualRoot}/`)) {
+  if (normalized === rootPath || !normalized.startsWith(`${rootPath}/`)) {
     return null;
   }
-  return relative(virtualRoot, normalized);
+  return relative(rootPath, normalized);
 }
 
 function scriptKind(path: string) {
@@ -41,6 +48,51 @@ function scriptKind(path: string) {
   if (path.endsWith(".json")) return ts.ScriptKind.JSON;
   if (/\.(js|mjs|cjs)$/.test(path)) return ts.ScriptKind.JS;
   return ts.ScriptKind.TS;
+}
+
+function readConfiguredFiles(
+  paths: Iterable<string>,
+  rootPath: string,
+  extensions: readonly string[],
+  excludes: readonly string[] | undefined,
+  includes: readonly string[],
+  depth?: number,
+) {
+  const normalizedRoot = normalize(rootPath);
+  const matchesPattern = (candidate: string, pattern: string) => {
+    const normalizedPattern = normalize(pattern);
+    return matchesGlob(
+      normalizedPattern.startsWith("/")
+        ? candidate
+        : relative(normalizedRoot, candidate),
+      normalizedPattern,
+    );
+  };
+
+  return [...paths].filter((candidate) => {
+    if (!candidate.startsWith(`${normalizedRoot}/`)) return false;
+    if (!extensions.some((extension) => candidate.endsWith(extension))) {
+      return false;
+    }
+    const relativePath = relative(normalizedRoot, candidate);
+    if (
+      depth !== undefined &&
+      relativePath.split("/").length - 1 > depth
+    ) {
+      return false;
+    }
+    if (
+      excludes?.some((pattern) =>
+        matchesPattern(candidate, pattern),
+      )
+    ) {
+      return false;
+    }
+    return (
+      !includes.length ||
+      includes.some((pattern) => matchesPattern(candidate, pattern))
+    );
+  });
 }
 
 function diagnosticCategory(
@@ -83,14 +135,18 @@ function aliasedSymbol(checker: ts.TypeChecker, symbol: ts.Symbol) {
 function targetForSymbol(
   checker: ts.TypeChecker,
   symbol: ts.Symbol | undefined,
+  rootPath: string,
 ) {
   if (!symbol) return null;
   const target = aliasedSymbol(checker, symbol);
   const declaration = target
     .getDeclarations()
-    ?.find((item) => repositoryPath(item.getSourceFile().fileName));
+    ?.find((item) => repositoryPath(rootPath, item.getSourceFile().fileName));
   if (!declaration) return null;
-  const targetPath = repositoryPath(declaration.getSourceFile().fileName);
+  const targetPath = repositoryPath(
+    rootPath,
+    declaration.getSourceFile().fileName,
+  );
   if (!targetPath) return null;
   return { symbol: target, targetPath };
 }
@@ -99,6 +155,7 @@ function importedSymbols(
   checker: ts.TypeChecker,
   node: ts.ImportDeclaration,
   moduleTargetPath: string,
+  rootPath: string,
 ): TypeCheckedImportSymbol[] {
   const clause = node.importClause;
   if (!clause) return [];
@@ -129,6 +186,7 @@ function importedSymbols(
     const resolved = targetForSymbol(
       checker,
       checker.getSymbolAtLocation(localName),
+      rootPath,
     );
     return {
       localName: localName.text,
@@ -142,7 +200,10 @@ function importedSymbols(
 
 @Injectable()
 export class TypeCheckerService {
-  analyze(files: ParsedFile[]): TypeCheckerAnalysis {
+  analyze(
+    files: ParsedFile[],
+    repositoryRoot?: string,
+  ): TypeCheckerAnalysis {
     const compilerFiles = files.filter((file) =>
       supportedLanguages.has(file.language),
     );
@@ -152,13 +213,21 @@ export class TypeCheckerService {
         importsResolved: 0,
         diagnostics: [],
         resolvedImports: [],
+        configuration: {
+          configFilePath: null,
+          configuredRootFiles: 0,
+        },
       };
     }
 
+    const rootPath = normalize(repositoryRoot ?? virtualRoot);
     const sourceByPath = new Map(
-      files.map((file) => [virtualPath(file.path), file]),
+      files.map((file) => [
+        absoluteRepositoryPath(rootPath, file.path),
+        file,
+      ]),
     );
-    const options: ts.CompilerOptions = {
+    const defaultOptions: ts.CompilerOptions = {
       allowJs: true,
       checkJs: false,
       jsx: ts.JsxEmit.Preserve,
@@ -169,16 +238,74 @@ export class TypeCheckerService {
       skipLibCheck: true,
       target: ts.ScriptTarget.ES2022,
     };
+    const configFile = files
+      .filter((file) => /^tsconfig(?:\.[^/]+)?\.json$/.test(basename(file.path)))
+      .sort((left, right) => {
+        const leftDepth = left.path.split("/").length;
+        const rightDepth = right.path.split("/").length;
+        const leftRoot = left.path === "tsconfig.json" ? 0 : 1;
+        const rightRoot = right.path === "tsconfig.json" ? 0 : 1;
+        return (
+          leftRoot - rightRoot ||
+          leftDepth - rightDepth ||
+          left.path.localeCompare(right.path)
+        );
+      })[0];
+    const configDiagnostics: ts.Diagnostic[] = [];
+    const parseHost: ts.ParseConfigFileHost = {
+      useCaseSensitiveFileNames: true,
+      fileExists: (path) => sourceByPath.has(normalize(path)),
+      readFile: (path) => sourceByPath.get(normalize(path))?.content,
+      readDirectory: (path, extensions, excludes, includes, depth) =>
+        readConfiguredFiles(
+          sourceByPath.keys(),
+          path,
+          extensions,
+          excludes,
+          includes,
+          depth,
+        ),
+      onUnRecoverableConfigFileDiagnostic: (diagnostic) => {
+        configDiagnostics.push(diagnostic);
+      },
+      getCurrentDirectory: () => rootPath,
+    };
+    const parsedConfiguration = configFile
+      ? ts.getParsedCommandLineOfConfigFile(
+          absoluteRepositoryPath(rootPath, configFile.path),
+          undefined,
+          parseHost,
+        )
+      : undefined;
+    if (parsedConfiguration) {
+      configDiagnostics.push(...parsedConfiguration.errors);
+    }
+    const options: ts.CompilerOptions = {
+      ...defaultOptions,
+      ...parsedConfiguration?.options,
+      incremental: false,
+      noEmit: true,
+      skipLibCheck: true,
+    };
+    const configuredRootNames =
+      parsedConfiguration?.fileNames.filter((path) =>
+        sourceByPath.has(normalize(path)),
+      ) ?? [];
+    const rootNames = configuredRootNames.length
+      ? configuredRootNames
+      : compilerFiles.map((file) =>
+          absoluteRepositoryPath(rootPath, file.path),
+        );
     const baseHost = ts.createCompilerHost(options, true);
-    const virtualDirectories = new Set<string>([virtualRoot]);
+    const virtualDirectories = new Set<string>([rootPath]);
     for (const path of sourceByPath.keys()) {
       let directory = dirname(path);
       while (
-        directory === virtualRoot ||
-        directory.startsWith(`${virtualRoot}/`)
+        directory === rootPath ||
+        directory.startsWith(`${rootPath}/`)
       ) {
         virtualDirectories.add(directory);
-        if (directory === virtualRoot) break;
+        if (directory === rootPath) break;
         directory = dirname(directory);
       }
     }
@@ -190,7 +317,7 @@ export class TypeCheckerService {
         Boolean(baseHost.directoryExists?.(path)),
       fileExists: (path) =>
         sourceByPath.has(normalize(path)) || baseHost.fileExists(path),
-      getCurrentDirectory: () => virtualRoot,
+      getCurrentDirectory: () => rootPath,
       getDirectories: (path) => {
         const normalized = normalize(path);
         const prefix = `${normalized}/`;
@@ -233,15 +360,20 @@ export class TypeCheckerService {
       writeFile: () => undefined,
     };
     const program = ts.createProgram({
-      rootNames: compilerFiles.map((file) => virtualPath(file.path)),
+      rootNames,
       options,
       host,
     });
     const checker = program.getTypeChecker();
     const resolvedImports: TypeCheckedImport[] = [];
+    const analyzedFiles = compilerFiles.filter((file) =>
+      program.getSourceFile(absoluteRepositoryPath(rootPath, file.path)),
+    );
 
-    for (const file of compilerFiles) {
-      const source = program.getSourceFile(virtualPath(file.path));
+    for (const file of analyzedFiles) {
+      const source = program.getSourceFile(
+        absoluteRepositoryPath(rootPath, file.path),
+      );
       if (!source) continue;
       source.forEachChild((node) => {
         if (
@@ -253,6 +385,7 @@ export class TypeCheckerService {
         const moduleTarget = targetForSymbol(
           checker,
           checker.getSymbolAtLocation(node.moduleSpecifier),
+          rootPath,
         );
         if (!moduleTarget) return;
         const start = source.getLineAndCharacterOfPosition(node.getStart());
@@ -265,13 +398,13 @@ export class TypeCheckerService {
             checker,
             node,
             moduleTarget.targetPath,
+            rootPath,
           ),
         });
       });
     }
 
-    const diagnostics = ts
-      .getPreEmitDiagnostics(program)
+    const diagnostics = [...configDiagnostics, ...ts.getPreEmitDiagnostics(program)]
       .slice(0, 100)
       .map<TypeCheckDiagnostic>((diagnostic) => {
         const location =
@@ -279,7 +412,7 @@ export class TypeCheckerService {
             ? diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start)
             : null;
         const filePath = diagnostic.file
-          ? repositoryPath(diagnostic.file.fileName)
+          ? repositoryPath(rootPath, diagnostic.file.fileName)
           : null;
         return {
           code: diagnostic.code,
@@ -296,10 +429,14 @@ export class TypeCheckerService {
       });
 
     return {
-      filesAnalyzed: compilerFiles.length,
+      filesAnalyzed: analyzedFiles.length,
       importsResolved: resolvedImports.length,
       diagnostics,
       resolvedImports,
+      configuration: {
+        configFilePath: configFile?.path ?? null,
+        configuredRootFiles: configuredRootNames.length,
+      },
     };
   }
 }

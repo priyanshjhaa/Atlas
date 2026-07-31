@@ -178,8 +178,10 @@ GitHub revision:
 1. Download and safely extract the GitHub App archive into temporary storage.
 2. Discover supported source files within file-count and byte limits.
 3. Parse TypeScript/JavaScript symbols, imports, exports, and citation chunks.
-4. Build an in-memory TypeScript program, run the type checker, and resolve
-   imported declarations to repository files and symbols.
+4. Discover the repository `tsconfig.json`, apply its compiler options and file
+   scope, build a TypeScript program, and resolve imported declarations to
+   repository files and symbols. Repositories without a config use safe
+   TypeScript/JavaScript defaults.
 5. Extract observed local-import relationships with compiler evidence,
    confidence, and a syntax-only fallback for partially compilable repositories.
 6. Generate deterministic local embeddings or optional OpenAI embeddings.

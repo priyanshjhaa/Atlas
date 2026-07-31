@@ -72,6 +72,8 @@ export interface AtlasSyncJob {
       filesAnalyzed: number;
       importsResolved: number;
       diagnosticCount: number;
+      configFilePath: string | null;
+      configuredRootFiles: number;
     };
     embeddingProvider?: "local" | "openai";
   } | null;

@@ -67,6 +67,10 @@ describe("forked CodeMap intelligence services", () => {
       filesAnalyzed: 2,
       importsResolved: 1,
       diagnostics: [],
+      configuration: {
+        configFilePath: null,
+        configuredRootFiles: 0,
+      },
     });
   });
 
@@ -94,6 +98,8 @@ describe("forked CodeMap intelligence services", () => {
         filesAnalyzed: 2,
         importsResolved: 1,
         diagnosticCount: 0,
+        configFilePath: null,
+        configuredRootFiles: 0,
       },
     });
   });
@@ -130,6 +136,56 @@ describe("forked CodeMap intelligence services", () => {
           line: 2,
         }),
       ]),
+    );
+  });
+
+  it("applies repository tsconfig compiler options and source scope", () => {
+    const parsed = new ParserService().parseFiles([
+      ...files,
+      {
+        path: "src/untyped.ts",
+        language: "typescript",
+        content: "export function identity(value) { return value; }\n",
+        checksum: "d",
+        sizeBytes: 51,
+      },
+      {
+        path: "tsconfig.json",
+        language: "json",
+        content: JSON.stringify({
+          compilerOptions: { strict: true },
+          include: ["src/**/*.ts"],
+        }),
+        checksum: "e",
+        sizeBytes: 72,
+      },
+      {
+        path: "scripts/ignored.ts",
+        language: "typescript",
+        content: "export function ignored(value) { return value; }\n",
+        checksum: "f",
+        sizeBytes: 50,
+      },
+    ]);
+
+    const analysis = new TypeCheckerService().analyze(parsed);
+
+    expect(analysis.configuration).toEqual({
+      configFilePath: "tsconfig.json",
+      configuredRootFiles: 3,
+    });
+    expect(analysis.filesAnalyzed).toBe(3);
+    expect(
+      analysis.diagnostics.some(
+        (diagnostic) => diagnostic.filePath === "scripts/ignored.ts",
+      ),
+    ).toBe(false);
+    expect(analysis.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: 7006,
+        filePath: "src/untyped.ts",
+        line: 1,
+      }),
     );
   });
 });

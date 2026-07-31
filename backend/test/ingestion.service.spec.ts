@@ -43,6 +43,16 @@ describe("IngestionService", () => {
             join(destinationPath, "src", "user.ts"),
             "export const user = { id: 1 };\n",
           );
+          await writeFile(
+            join(destinationPath, "tsconfig.json"),
+            JSON.stringify({
+              compilerOptions: {
+                strict: true,
+                target: "ES2020",
+              },
+              include: ["src/**/*.ts"],
+            }),
+          );
           return { bytesDownloaded: 100 };
         },
       ),
@@ -76,7 +86,7 @@ describe("IngestionService", () => {
       });
 
       expect(summary).toMatchObject({
-        filesIndexed: 2,
+        filesIndexed: 3,
         symbolsExtracted: 2,
         relationshipsExtracted: 1,
         embeddingProvider: "local",
@@ -84,6 +94,8 @@ describe("IngestionService", () => {
           filesAnalyzed: 2,
           importsResolved: 1,
           diagnosticCount: 0,
+          configFilePath: "tsconfig.json",
+          configuredRootFiles: 2,
         },
       });
       expect(persist).toHaveBeenCalledOnce();

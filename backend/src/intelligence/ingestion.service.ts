@@ -81,7 +81,10 @@ export class IngestionService {
       await this.checkCancellation(input);
       await input.progress(52, "parsing_symbols_and_chunks");
       const parsedFiles = this.parser.parseFiles(files);
-      const typeCheckerAnalysis = this.typeChecker.analyze(parsedFiles);
+      const typeCheckerAnalysis = this.typeChecker.analyze(
+        parsedFiles,
+        syncPath,
+      );
       const observedRelationships = this.relationships.extract(
         parsedFiles,
         typeCheckerAnalysis,
@@ -144,6 +147,10 @@ export class IngestionService {
           filesAnalyzed: typeCheckerAnalysis.filesAnalyzed,
           importsResolved: typeCheckerAnalysis.importsResolved,
           diagnosticCount: typeCheckerAnalysis.diagnostics.length,
+          configFilePath:
+            typeCheckerAnalysis.configuration.configFilePath,
+          configuredRootFiles:
+            typeCheckerAnalysis.configuration.configuredRootFiles,
         },
       };
     } finally {
