@@ -2,7 +2,7 @@ import type {
   ImpactAnalysisStatus,
   ImpactFindingClassification,
   ImpactInputMode,
-  ImpactObservedProvenance,
+  ImpactEvidenceProvenance,
   ImpactRiskLevel,
 } from "./impact.types";
 
@@ -21,7 +21,7 @@ export interface ImpactEvidencePacketFinding {
   hop: number;
   confidence: number;
   provenance:
-    | ImpactObservedProvenance
+    | ImpactEvidenceProvenance
     | "analysis_gap";
   evidenceIds: string[];
 }
@@ -35,7 +35,7 @@ export interface ImpactEvidencePacketCitation {
   lineEnd?: number;
   symbol?: string;
   excerpt: string;
-  provenance: ImpactObservedProvenance;
+  provenance: ImpactEvidenceProvenance;
   sourceRevision: string;
 }
 

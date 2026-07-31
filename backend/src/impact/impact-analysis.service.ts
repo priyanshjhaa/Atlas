@@ -8,6 +8,7 @@ import { RetrievalService } from "../intelligence/retrieval.service";
 import {
   ImpactRepository,
   type ImpactFileCandidate,
+  type ImpactHistoricalRelationshipCandidate,
   type ImpactRelationshipCandidate,
   type ImpactRepositoryDetails,
   type ImpactSymbolCandidate,
@@ -153,6 +154,20 @@ export class ImpactAnalysisService {
       relationships,
     );
     evidence.push(...relationshipOutput.evidence);
+    const historicalRelationships =
+      await this.repository.incomingHistoricalRelationships(
+        workspaceId,
+        input.repositoryId,
+        resolvedEntities
+          .filter((entity) => entity.kind === "symbol")
+          .map((entity) => entity.id),
+        seedFileIds,
+        input.scope,
+      );
+    const historicalOutput = this.historicalRelationshipFindings(
+      historicalRelationships,
+    );
+    evidence.push(...historicalOutput.evidence);
     let workspaceGraphAvailable = false;
     let workspaceOutput: {
       findings: ImpactFinding[];
@@ -176,9 +191,13 @@ export class ImpactAnalysisService {
       );
       evidence.push(...workspaceOutput.evidence);
     }
-    const downstreamFindings = [
+    const currentDownstreamFindings = [
       ...relationshipOutput.findings,
       ...workspaceOutput.findings,
+    ];
+    const downstreamFindings = [
+      ...currentDownstreamFindings,
+      ...historicalOutput.findings,
     ];
 
     const limitations = this.limitations(
@@ -186,12 +205,13 @@ export class ImpactAnalysisService {
       retrieval.lowConfidence,
       resolvedEntities.length,
       workspaceGraphAvailable,
+      historicalOutput.findings.length,
     );
     const unknownImpacts = this.unknownFindings(
       sourceRepository,
       input,
       resolvedEntities.length,
-      downstreamFindings.length,
+      currentDownstreamFindings.length,
       workspaceGraphAvailable,
     );
     const risk = this.risk(
@@ -543,6 +563,52 @@ export class ImpactAnalysisService {
     return { findings, evidence };
   }
 
+  private historicalRelationshipFindings(
+    relationships: ImpactHistoricalRelationshipCandidate[],
+  ): { findings: ImpactFinding[]; evidence: ImpactCitation[] } {
+    const findings: ImpactFinding[] = [];
+    const evidence: ImpactCitation[] = [];
+    for (const relationship of relationships) {
+      const evidenceId = `historical-relationship:${relationship.id}`;
+      const line =
+        typeof relationship.evidence.line === "number"
+          ? relationship.evidence.line
+          : Array.isArray(relationship.evidence.lines) &&
+              typeof relationship.evidence.lines[0] === "number"
+            ? relationship.evidence.lines[0]
+            : undefined;
+      const observedRevision = relationship.observedRevision.slice(0, 12);
+      evidence.push({
+        id: evidenceId,
+        repositoryId: relationship.sourceRepositoryId,
+        repository: relationship.sourceRepository,
+        filePath: relationship.sourcePath,
+        lineStart: line,
+        lineEnd: line,
+        symbol: relationship.targetSymbol ?? undefined,
+        excerpt: `Historically observed ${relationship.originalProvenance} from ${relationship.sourcePath} to ${relationship.targetPath} at revision ${observedRevision}; the same stable edge is absent from the current index.`,
+        provenance: "historical_relationship",
+        sourceRevision: relationship.sourceRevision,
+      });
+      findings.push({
+        id: `historical-downstream:${relationship.id}`,
+        classification: "downstream",
+        kind: "Consumer",
+        title: `${relationship.sourceRepository} · ${relationship.sourcePath}`,
+        detail: `${relationship.sourcePath} was linked to ${relationship.targetSymbol ?? relationship.targetPath} at revision ${observedRevision}. The same stable relationship is not present in the current index and must be revalidated before treating it as a current consumer.`,
+        repositoryId: relationship.sourceRepositoryId,
+        repository: relationship.sourceRepository,
+        filePath: relationship.sourcePath,
+        symbol: relationship.targetSymbol ?? undefined,
+        hop: 1,
+        confidence: Math.min(0.75, relationship.confidence * 0.75),
+        provenance: "historical_relationship",
+        evidenceIds: [evidenceId],
+      });
+    }
+    return { findings, evidence };
+  }
+
   private unknownFindings(
     repository: ImpactRepositoryDetails,
     input: ImpactReportInput,
@@ -572,9 +638,9 @@ export class ImpactAnalysisService {
         id: "unknown:no-observed-consumers",
         classification: "unknown",
         kind: "Unknown",
-        title: "No observed downstream consumers",
+        title: "No current observed downstream consumers",
         detail:
-          "The indexed relationship graph contains no incoming consumer path for the resolved anchors. Runtime and external consumers remain unverified.",
+          "The current indexed relationship graph contains no incoming consumer path for the resolved anchors. Historical, runtime, and external consumers remain unverified.",
         repositoryId: repository.id,
         repository: `${repository.owner}/${repository.name}`,
         hop: 1,
@@ -618,11 +684,18 @@ export class ImpactAnalysisService {
         ],
       };
     }
+    const historicalDownstream = downstream.filter(
+      (item) => item.provenance === "historical_relationship",
+    );
+    const currentDownstream = downstream.filter(
+      (item) => item.provenance !== "historical_relationship",
+    );
     const score = Math.min(
       100,
       direct.length * 6 +
-        downstream.filter((item) => item.hop === 1).length * 12 +
-        downstream.filter((item) => item.hop > 1).length * 7 +
+        currentDownstream.filter((item) => item.hop === 1).length * 12 +
+        currentDownstream.filter((item) => item.hop > 1).length * 7 +
+        historicalDownstream.length * 5 +
         unknowns.length * 8 +
         (lowConfidence ? 15 : 0),
     );
@@ -630,8 +703,13 @@ export class ImpactAnalysisService {
       score >= 60 ? "high" : score >= 30 ? "medium" : "low";
     const reasons = [
       `${direct.length} indexed modification anchor${direct.length === 1 ? "" : "s"} resolved`,
-      `${downstream.length} observed downstream consumer${downstream.length === 1 ? "" : "s"} found`,
+      `${currentDownstream.length} current downstream consumer${currentDownstream.length === 1 ? "" : "s"} found`,
     ];
+    if (historicalDownstream.length) {
+      reasons.push(
+        `${historicalDownstream.length} historical relationship${historicalDownstream.length === 1 ? "" : "s"} require revalidation`,
+      );
+    }
     if (unknowns.length) {
       reasons.push(
         `${unknowns.length} analysis gap${unknowns.length === 1 ? "" : "s"} require verification`,
@@ -655,6 +733,10 @@ export class ImpactAnalysisService {
     const consumers = [
       ...new Set(downstream.map((item) => item.filePath ?? item.title)),
     ];
+    const historicalCount = downstream.filter(
+      (item) => item.provenance === "historical_relationship",
+    ).length;
+    const currentCount = downstream.length - historicalCount;
     if (this.isBetterAuthJwtMigration(description)) {
       const betterAuthPaths = anchors.filter((path) =>
         /^(?:lib\/auth(?:-session|-client)?\.ts|app\/api\/auth\/)/i.test(path),
@@ -667,7 +749,7 @@ export class ImpactAnalysisService {
       }
     }
     return downstream.length
-      ? `The change is most strongly anchored in ${anchors.slice(0, 3).join(", ")}. The indexed relationship graph shows ${downstream.length} downstream consumer${downstream.length === 1 ? "" : "s"}, including ${consumers.slice(0, 3).join(", ")}, whose contracts should be preserved or migrated with the change.`
+      ? `The change is most strongly anchored in ${anchors.slice(0, 3).join(", ")}. The indexed relationship graph shows ${currentCount} current consumer${currentCount === 1 ? "" : "s"} and ${historicalCount} historical relationship${historicalCount === 1 ? "" : "s"}, including ${consumers.slice(0, 3).join(", ")}. Historical relationships require revalidation before they are treated as current contracts.`
       : `The change is most strongly anchored in ${anchors.slice(0, 3).join(", ")}. Atlas found no incoming consumer in the indexed relationship graph, so runtime, configuration, and external integrations still require manual verification.`;
   }
 
@@ -690,12 +772,29 @@ export class ImpactAnalysisService {
           .filter((path): path is string => Boolean(path)),
       ),
     ];
-    const consumerPaths = [
+    const currentConsumerPaths = [
       ...new Set(
         downstream
+          .filter(
+            (item) => item.provenance !== "historical_relationship",
+          )
           .map((item) => item.filePath)
           .filter((path): path is string => Boolean(path)),
       ),
+    ];
+    const historicalConsumerPaths = [
+      ...new Set(
+        downstream
+          .filter(
+            (item) => item.provenance === "historical_relationship",
+          )
+          .map((item) => item.filePath)
+          .filter((path): path is string => Boolean(path)),
+      ),
+    ];
+    const consumerPaths = [
+      ...currentConsumerPaths,
+      ...historicalConsumerPaths,
     ];
     if (this.isBetterAuthJwtMigration(description)) {
       const relevantPaths = [...directPaths, ...consumerPaths];
@@ -717,9 +816,14 @@ export class ImpactAnalysisService {
     const recommendations = [
       `Start the implementation review with ${directPaths.slice(0, 4).join(", ")}.`,
     ];
-    if (consumerPaths.length) {
+    if (currentConsumerPaths.length) {
       recommendations.push(
-        `Preserve or deliberately migrate the contracts used by ${consumerPaths.slice(0, 4).join(", ")}.`,
+        `Preserve or deliberately migrate the contracts used by ${currentConsumerPaths.slice(0, 4).join(", ")}.`,
+      );
+    }
+    if (historicalConsumerPaths.length) {
+      recommendations.push(
+        `Revalidate historical consumers against the current source revision before preserving or migrating former contracts: ${historicalConsumerPaths.slice(0, 4).join(", ")}.`,
       );
     }
     const tests = [...directPaths, ...consumerPaths].filter((path) =>
@@ -772,13 +876,24 @@ export class ImpactAnalysisService {
     downstream: ImpactFinding[],
     scope: ImpactReportInput["scope"],
   ): string[] {
+    const historicalCount = downstream.filter(
+      (item) => item.provenance === "historical_relationship",
+    ).length;
+    const currentCount = downstream.length - historicalCount;
     const plan = [
       `Review the ${direct.length} resolved modification anchor${direct.length === 1 ? "" : "s"} against the intended behavior.`,
       "Run type-checking and focused tests for every directly changed module.",
     ];
-    if (downstream.length) {
+    if (currentCount) {
       plan.push(
-        `Exercise the ${downstream.length} observed consumer${downstream.length === 1 ? "" : "s"} before rollout.`,
+        `Exercise the ${currentCount} observed consumer${currentCount === 1 ? "" : "s"} before rollout.`,
+      );
+    }
+    if (historicalCount) {
+      plan.push(
+        historicalCount === 1
+          ? "Confirm whether the historical relationship still exists before using it as current impact evidence."
+          : `Confirm whether the ${historicalCount} historical relationships still exist before using them as current impact evidence.`,
       );
     }
     if (scope === "workspace") {
@@ -794,6 +909,7 @@ export class ImpactAnalysisService {
     lowConfidence: boolean,
     resolvedCount: number,
     workspaceGraphAvailable: boolean,
+    historicalCount: number,
   ): string[] {
     const limitations = [
       "Results describe indexed source at the recorded revision, not uncommitted working-tree changes.",
@@ -806,6 +922,11 @@ export class ImpactAnalysisService {
     } else if (input.scope === "workspace") {
       limitations.push(
         "Cross-repository traversal covers indexed package manifests and statically observed public API imports and calls; runtime dispatch and external systems remain unverified.",
+      );
+    }
+    if (historicalCount) {
+      limitations.push(
+        "Historical relationships record previously indexed structure and are not proof that the same consumer still exists at the current revision.",
       );
     }
     if (input.mode === "pull-request") {
@@ -838,7 +959,7 @@ export class ImpactAnalysisService {
     downstreamCount: number,
     unknownCount: number,
   ) {
-    return `Atlas resolved ${directCount} candidate change anchor${directCount === 1 ? "" : "s"} in ${repository.owner}/${repository.name} and followed ${downstreamCount} observed downstream relationship${downstreamCount === 1 ? "" : "s"}. ${unknownCount} gap${unknownCount === 1 ? "" : "s"} remain explicitly unverified.`;
+    return `Atlas resolved ${directCount} candidate change anchor${directCount === 1 ? "" : "s"} in ${repository.owner}/${repository.name} and found ${downstreamCount} current or historical downstream relationship${downstreamCount === 1 ? "" : "s"}. ${unknownCount} gap${unknownCount === 1 ? "" : "s"} remain explicitly unverified.`;
   }
 
   private title(description: string) {

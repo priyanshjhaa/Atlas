@@ -206,6 +206,10 @@ import, and public API call edges to report observed consumers in other active
 repositories. Each cross-repository finding keeps the consumer repository,
 source revision, provenance, confidence, and evidence location; runtime,
 event-driven, and external consumers remain explicit limitations.
+When a revision history contains an incoming stable edge that is absent from
+the current graph, impact analysis returns it as historical evidence with
+reduced confidence and an explicit revalidation requirement. Historical edges
+never masquerade as current observed consumers in reports or LLM explanations.
 
 The exact source commit, included concepts, exclusions, and Atlas adaptations
 are recorded in `src/intelligence/CODEMAP_FORK.md`. Atlas does not depend on the

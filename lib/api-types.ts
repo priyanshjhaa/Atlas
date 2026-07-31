@@ -228,7 +228,8 @@ export interface AtlasImpactCitation {
     | "typescript_static_import"
     | "package_manifest_dependency"
     | "typescript_public_api_import"
-    | "typescript_public_api_call";
+    | "typescript_public_api_call"
+    | "historical_relationship";
   sourceRevision: string;
 }
 
@@ -250,6 +251,7 @@ export interface AtlasImpactFinding {
     | "package_manifest_dependency"
     | "typescript_public_api_import"
     | "typescript_public_api_call"
+    | "historical_relationship"
     | "analysis_gap";
   evidenceIds: string[];
 }

@@ -252,6 +252,21 @@ describe("EvidencePacketBuilder", () => {
             provenance: "typescript_public_api_call",
             evidenceIds: ["workspace-relationship:cross-call"],
           },
+          {
+            id: "historical-downstream:legacy-call",
+            classification: "downstream",
+            kind: "Consumer",
+            title: "atlas/legacy · src/legacy-client.ts",
+            detail: "Previously called refreshSession.",
+            repositoryId: "repository-legacy",
+            repository: "atlas/legacy",
+            filePath: "src/legacy-client.ts",
+            symbol: "refreshSession",
+            hop: 1,
+            confidence: 0.75,
+            provenance: "historical_relationship",
+            evidenceIds: ["historical-relationship:legacy-call"],
+          },
         ],
         evidence: [
           ...result.evidence,
@@ -267,12 +282,30 @@ describe("EvidencePacketBuilder", () => {
             provenance: "typescript_public_api_call",
             sourceRevision: "web-revision-1",
           },
+          {
+            id: "historical-relationship:legacy-call",
+            repositoryId: "repository-legacy",
+            repository: "atlas/legacy",
+            filePath: "src/legacy-client.ts",
+            lineStart: 12,
+            lineEnd: 12,
+            symbol: "refreshSession",
+            excerpt:
+              "Historically observed typescript_public_api_call from src/legacy-client.ts to src/session.ts.",
+            provenance: "historical_relationship",
+            sourceRevision: "legacy-revision-old",
+          },
         ],
         relationshipPath: [
           ...result.relationshipPath,
           {
             repository: "atlas/web",
             filePath: "src/session-client.ts",
+            hop: 1,
+          },
+          {
+            repository: "atlas/legacy",
+            filePath: "src/legacy-client.ts",
             hop: 1,
           },
         ],
@@ -288,6 +321,11 @@ describe("EvidencePacketBuilder", () => {
           filePath: "src/session-client.ts",
           provenance: "typescript_public_api_call",
         }),
+        expect.objectContaining({
+          repository: "atlas/legacy",
+          filePath: "src/legacy-client.ts",
+          provenance: "historical_relationship",
+        }),
       ]),
     );
     expect(output.packet.evidence).toEqual(
@@ -296,6 +334,12 @@ describe("EvidencePacketBuilder", () => {
           repository: "atlas/web",
           filePath: "src/session-client.ts",
           provenance: "typescript_public_api_call",
+        }),
+        expect.objectContaining({
+          repository: "atlas/legacy",
+          filePath: "src/legacy-client.ts",
+          provenance: "historical_relationship",
+          sourceRevision: "legacy-revision-old",
         }),
       ]),
     );

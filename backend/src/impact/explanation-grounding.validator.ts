@@ -46,6 +46,10 @@ const PROVENANCE_PATTERNS = [
     pattern: /\b(typescript public api call|public api call)\b/i,
     value: "typescript_public_api_call",
   },
+  {
+    pattern: /\b(historical relationship|historically observed)\b/i,
+    value: "historical_relationship",
+  },
   { pattern: /\banalysis gap\b/i, value: "analysis_gap" },
 ] as const;
 const RELATIONSHIP_PROVENANCES = new Set<
@@ -55,6 +59,7 @@ const RELATIONSHIP_PROVENANCES = new Set<
   "package_manifest_dependency",
   "typescript_public_api_import",
   "typescript_public_api_call",
+  "historical_relationship",
 ]);
 
 interface ExplanationTextUnit {
@@ -339,11 +344,24 @@ export class ExplanationGroundingValidator {
             )
         : relationshipCitations;
       if (unit.evidenceIds.length && scopedCitations.length === 0) return false;
+      const historicalOnly = scopedCitations.every(
+        (citation) => citation.provenance === "historical_relationship",
+      );
+      if (
+        historicalOnly &&
+        !/\b(historical(?:ly)?|previously|former(?:ly)?|used to|prior revision)\b/i.test(
+          unit.text,
+        )
+      ) {
+        return false;
+      }
       if (
         /\bcalls?\b/i.test(unit.text) &&
         !scopedCitations.some(
           (citation) =>
-            citation.provenance === "typescript_public_api_call",
+            citation.provenance === "typescript_public_api_call" ||
+            (citation.provenance === "historical_relationship" &&
+              /\btypescript_public_api_call\b/.test(citation.excerpt)),
         )
       ) {
         return false;

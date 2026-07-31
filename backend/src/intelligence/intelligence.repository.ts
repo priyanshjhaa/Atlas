@@ -337,6 +337,7 @@ export class IntelligenceRepository {
           repositoryId: codePackages.repositoryId,
           name: codePackages.name,
           rootPath: codePackages.rootPath,
+          manifestPath: codePackages.manifestPath,
           sourceRevision: codePackages.sourceRevision,
           dependencies: codePackages.dependencies,
           entryPoints: codePackages.entryPoints,

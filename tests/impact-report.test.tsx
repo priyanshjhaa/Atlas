@@ -290,6 +290,49 @@ describe("ImpactReportPage", () => {
     ).toBeVisible();
   });
 
+  it("visually distinguishes historical relationships from observed findings", () => {
+    const historicalReport: AtlasImpactReport = {
+      ...report,
+      result: {
+        ...report.result,
+        downstreamImpacts: [
+          {
+            ...report.result.downstreamImpacts[0],
+            id: "historical-downstream-1",
+            title: "app/legacy-layout.tsx",
+            filePath: "app/legacy-layout.tsx",
+            confidence: 0.75,
+            provenance: "historical_relationship",
+            evidenceIds: ["historical-relationship-1"],
+          },
+        ],
+        evidence: [
+          {
+            ...report.result.evidence[0],
+            id: "historical-relationship-1",
+            filePath: "app/legacy-layout.tsx",
+            provenance: "historical_relationship",
+            sourceRevision: "old-revision",
+          },
+        ],
+      },
+    };
+    const { container, rerender } = render(
+      <ImpactReportPage report={historicalReport} view="findings" />,
+    );
+
+    expect(container.querySelector(".confidence--historical")).toHaveTextContent(
+      "historical",
+    );
+
+    rerender(
+      <ImpactReportPage report={historicalReport} view="evidence" />,
+    );
+    expect(
+      container.querySelector(".evidence-row--violet"),
+    ).toBeInTheDocument();
+  });
+
   it("retries a failed explanation without hiding the verified report", async () => {
     const failedReport: AtlasImpactReport = {
       ...report,

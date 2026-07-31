@@ -11,6 +11,7 @@ function packageRecord(
   return {
     workspaceId: "workspace-1",
     rootPath: "",
+    manifestPath: "package.json",
     sourceRevision: "revision-1",
     dependencies: [],
     ...input,

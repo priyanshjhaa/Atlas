@@ -57,6 +57,7 @@ function setup() {
       .mockResolvedValueOnce([]),
     hasWorkspaceRelationshipIndex: vi.fn().mockResolvedValue(false),
     incomingWorkspaceRelationships: vi.fn().mockResolvedValue([]),
+    incomingHistoricalRelationships: vi.fn().mockResolvedValue([]),
   };
   const retrieval = {
     search: vi.fn().mockResolvedValue({
@@ -285,6 +286,91 @@ describe("ImpactAnalysisService", () => {
       repositoryId,
       ["symbol-refresh"],
       ["file-session"],
+    );
+  });
+
+  it("keeps historical relationships distinct from current consumers", async () => {
+    const { repository, service } = setup();
+    repository.incomingRelationships.mockReset().mockResolvedValue([]);
+    repository.hasWorkspaceRelationshipIndex.mockResolvedValue(true);
+    repository.incomingWorkspaceRelationships.mockResolvedValue([]);
+    repository.incomingHistoricalRelationships.mockResolvedValue([
+      {
+        id: "historical-call",
+        stableKey: "symbol:historical-call",
+        sourceRepositoryId: "repository-web",
+        sourceRepository: "atlas/web",
+        sourcePath: "src/legacy-session-client.ts",
+        sourceEntityKind: "symbol",
+        targetRepositoryId: repositoryId,
+        targetRepository: "atlas/identity",
+        targetPath: "src/session.ts",
+        targetSymbol: "refreshSession",
+        targetEntityKind: "symbol",
+        kind: "calls_api",
+        originalProvenance: "typescript_public_api_call",
+        confidence: 1,
+        observedRevision: "historical-revision-123",
+        sourceRevision: "web-revision-old",
+        targetRevision: "identity-revision-old",
+        observedAt: new Date("2026-07-01T00:00:00.000Z"),
+        evidence: {
+          importedName: "refreshSession",
+          lines: [11],
+        },
+      },
+    ]);
+
+    const report = await service.analyze(workspaceId, {
+      mode: "planned",
+      repositoryId,
+      description: "Rotate the refresh session contract.",
+      scope: "workspace",
+      anchors: ["refreshSession"],
+    });
+
+    expect(report.downstreamImpacts).toEqual([
+      expect.objectContaining({
+        repository: "atlas/web",
+        filePath: "src/legacy-session-client.ts",
+        provenance: "historical_relationship",
+        confidence: 0.75,
+      }),
+    ]);
+    expect(report.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          repository: "atlas/web",
+          filePath: "src/legacy-session-client.ts",
+          lineStart: 11,
+          provenance: "historical_relationship",
+          sourceRevision: "web-revision-old",
+        }),
+      ]),
+    );
+    expect(report.answer).toContain("0 current consumers");
+    expect(report.answer).toContain("1 historical relationship");
+    expect(report.unknownImpacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "unknown:no-observed-consumers",
+        }),
+      ]),
+    );
+    expect(report.limitations.join("\n")).toContain(
+      "Historical relationships record previously indexed structure",
+    );
+    expect(report.risk.reasons).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("1 historical relationship"),
+      ]),
+    );
+    expect(repository.incomingHistoricalRelationships).toHaveBeenCalledWith(
+      workspaceId,
+      repositoryId,
+      ["symbol-refresh"],
+      ["file-session"],
+      "workspace",
     );
   });
 

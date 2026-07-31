@@ -104,7 +104,11 @@ export class RelationshipObservationBuilder {
         confidence: relationship.confidence,
         sourceRevision: relationship.sourceRevision,
         targetRevision: targetPackage.sourceRevision,
-        evidence: { ...relationship.evidence },
+        evidence: {
+          ...relationship.evidence,
+          sourceManifestPath: sourcePackage.manifestPath,
+          targetManifestPath: targetPackage.manifestPath,
+        },
       });
     }
 

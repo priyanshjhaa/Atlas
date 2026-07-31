@@ -14,6 +14,9 @@ export type ImpactObservedProvenance =
   | "package_manifest_dependency"
   | "typescript_public_api_import"
   | "typescript_public_api_call";
+export type ImpactEvidenceProvenance =
+  | ImpactObservedProvenance
+  | "historical_relationship";
 
 export type CreateImpactReportInput =
   | {
@@ -69,7 +72,7 @@ export interface ImpactCitation {
   lineEnd?: number;
   symbol?: string;
   excerpt: string;
-  provenance: ImpactObservedProvenance;
+  provenance: ImpactEvidenceProvenance;
   sourceRevision: string;
 }
 
@@ -86,7 +89,7 @@ export interface ImpactFinding {
   hop: number;
   confidence: number;
   provenance:
-    | ImpactObservedProvenance
+    | ImpactEvidenceProvenance
     | "analysis_gap";
   evidenceIds: string[];
 }

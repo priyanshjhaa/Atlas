@@ -34,6 +34,7 @@ const packages: PersistedCodePackage[] = [
     repositoryId: "repository-web",
     name: "@atlas/web",
     rootPath: "apps/web",
+    manifestPath: "apps/web/package.json",
     sourceRevision: "web-revision",
     dependencies: [],
   },
@@ -43,6 +44,7 @@ const packages: PersistedCodePackage[] = [
     repositoryId: "repository-core",
     name: "@atlas/core",
     rootPath: "packages/core",
+    manifestPath: "packages/core/package.json",
     sourceRevision: "core-revision",
     dependencies: [],
   },
@@ -177,6 +179,14 @@ describe("RelationshipObservationBuilder", () => {
     expect(
       observations.every((item) => item.workspaceId === "workspace-1"),
     ).toBe(true);
+    expect(
+      observations.find(
+        (item) => item.provenance === "package_manifest_dependency",
+      )?.evidence,
+    ).toMatchObject({
+      sourceManifestPath: "apps/web/package.json",
+      targetManifestPath: "packages/core/package.json",
+    });
   });
 
   it("drops relationships whose persisted endpoints are outside the workspace", () => {

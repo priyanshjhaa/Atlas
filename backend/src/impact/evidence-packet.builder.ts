@@ -51,6 +51,7 @@ const CROSS_REPOSITORY_PROVENANCES = new Set<
   "package_manifest_dependency",
   "typescript_public_api_import",
   "typescript_public_api_call",
+  "historical_relationship",
 ]);
 
 @Injectable()
@@ -309,7 +310,9 @@ export class EvidencePacketBuilder {
     for (const finding of findings
       .filter(
         (item) =>
-          item.repositoryId === result.repository.id ||
+          (item.repositoryId === result.repository.id &&
+            (item.provenance !== "historical_relationship" ||
+              item.evidenceIds.some((id) => selectedEvidenceIds.has(id)))) ||
           (allowCrossRepository &&
             result.scope === "workspace" &&
             CROSS_REPOSITORY_PROVENANCES.has(
@@ -403,7 +406,10 @@ export class EvidencePacketBuilder {
     result: ImpactReportResult,
   ): boolean {
     if (citation.repositoryId === result.repository.id) {
-      return citation.sourceRevision === result.sourceRevision;
+      return citation.provenance === "historical_relationship"
+        ? Boolean(citation.sourceRevision) &&
+            this.citationMatchesFinding(citation, result)
+        : citation.sourceRevision === result.sourceRevision;
     }
     if (
       result.scope !== "workspace" ||
@@ -412,6 +418,13 @@ export class EvidencePacketBuilder {
     ) {
       return false;
     }
+    return this.citationMatchesFinding(citation, result);
+  }
+
+  private citationMatchesFinding(
+    citation: ImpactCitation,
+    result: ImpactReportResult,
+  ): boolean {
     return result.downstreamImpacts.some(
       (finding) =>
         finding.repositoryId === citation.repositoryId &&
