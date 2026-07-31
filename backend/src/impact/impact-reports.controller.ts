@@ -51,4 +51,13 @@ export class ImpactReportsController {
   ) {
     return this.reports.get(workspaceId, reportId);
   }
+
+  @Post(":reportId/explanation/retry")
+  @WorkspaceRoles("owner", "admin", "member")
+  retryExplanation(
+    @Param("workspaceId", ParseUUIDPipe) workspaceId: string,
+    @Param("reportId", ParseUUIDPipe) reportId: string,
+  ) {
+    return this.reports.retryExplanation(workspaceId, reportId);
+  }
 }

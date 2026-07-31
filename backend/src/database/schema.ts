@@ -424,6 +424,7 @@ export const impactReports = pgTable(
       .$type<Record<string, unknown>>()
       .default({})
       .notNull(),
+    explanation: jsonb("explanation").$type<Record<string, unknown>>(),
     ...timestamps,
   },
   (table) => [

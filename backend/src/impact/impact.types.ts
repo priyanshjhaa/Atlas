@@ -1,3 +1,5 @@
+import type { ImpactExplanationState } from "./explanation.types";
+
 export type ImpactScope = "repository" | "workspace";
 export type ImpactInputMode = "planned" | "pull-request";
 export type ImpactRiskLevel = "insufficient" | "low" | "medium" | "high";
@@ -136,6 +138,11 @@ export interface StoredImpactReport {
   sourceRevision: string;
   input: ImpactReportInput;
   result: ImpactReportResult;
+  /**
+   * Kept outside result so generated text cannot replace deterministic
+   * findings. It is optional for reports created before explanations exist.
+   */
+  explanation?: ImpactExplanationState | null;
   createdAt: Date;
   updatedAt: Date;
 }

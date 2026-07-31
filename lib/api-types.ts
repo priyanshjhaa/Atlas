@@ -87,6 +87,110 @@ export interface AtlasWorkspaceData {
 
 export type AtlasImpactScope = "repository" | "workspace";
 
+export const ATLAS_IMPACT_EXPLANATION_SCHEMA_VERSION = "1" as const;
+
+export type AtlasImpactExplanationSchemaVersion =
+  typeof ATLAS_IMPACT_EXPLANATION_SCHEMA_VERSION;
+
+export interface AtlasImpactExplanationClaim {
+  text: string;
+  evidenceIds: string[];
+}
+
+export interface AtlasImpactExplanationImplementationStep {
+  title: string;
+  detail: string;
+  evidenceIds: string[];
+}
+
+export interface AtlasImpactExplanationVerificationStep {
+  text: string;
+  evidenceIds: string[];
+}
+
+export interface AtlasImpactExplanation {
+  schemaVersion: AtlasImpactExplanationSchemaVersion;
+  executiveSummary: string;
+  answer: string;
+  claims: AtlasImpactExplanationClaim[];
+  implementationSteps: AtlasImpactExplanationImplementationStep[];
+  verificationSteps: AtlasImpactExplanationVerificationStep[];
+  remainingQuestions: string[];
+}
+
+export type AtlasImpactExplanationFailureCode =
+  | "configuration_error"
+  | "provider_timeout"
+  | "provider_authentication"
+  | "provider_permission_denied"
+  | "provider_rate_limited"
+  | "provider_request_rejected"
+  | "provider_unavailable"
+  | "provider_refusal"
+  | "provider_incomplete"
+  | "invalid_provider_response"
+  | "provider_error"
+  | "invalid_explanation_schema"
+  | "explanation_too_large"
+  | "prompt_injection_content"
+  | "unknown_evidence_id"
+  | "unknown_file_path"
+  | "unknown_symbol"
+  | "unsupported_relationship"
+  | "altered_risk"
+  | "altered_confidence"
+  | "altered_provenance"
+  | "missing_unknown_impact"
+  | "repository_mismatch"
+  | "no_resolved_evidence"
+  | "no_citable_evidence"
+  | "generation_failed";
+
+export interface AtlasImpactExplanationGenerationMetadata {
+  provider: "openai" | "groq" | null;
+  model: string | null;
+  promptVersion: string;
+  outputSchemaVersion: AtlasImpactExplanationSchemaVersion;
+  evidencePacketHash: string | null;
+  sourceRevision: string;
+  generatedAt: string;
+  latencyMs: number;
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
+  validationStatus: "valid" | "invalid" | "not_run";
+  failureCode: AtlasImpactExplanationFailureCode | null;
+  deterministicFallback: boolean;
+}
+
+export type AtlasImpactExplanationState =
+  | {
+      status: "pending";
+      schemaVersion: AtlasImpactExplanationSchemaVersion;
+      evidencePacketHash?: string;
+      promptVersion?: string;
+      sourceRevision?: string;
+      startedAt?: string;
+    }
+  | {
+      status: "completed";
+      schemaVersion: AtlasImpactExplanationSchemaVersion;
+      explanation: AtlasImpactExplanation;
+      metadata?: AtlasImpactExplanationGenerationMetadata;
+    }
+  | {
+      status: "failed";
+      schemaVersion: AtlasImpactExplanationSchemaVersion;
+      failureCode?: AtlasImpactExplanationFailureCode;
+      metadata?: AtlasImpactExplanationGenerationMetadata;
+    }
+  | {
+      status: "disabled";
+      schemaVersion: AtlasImpactExplanationSchemaVersion;
+    };
+
 export interface AtlasImpactCitation {
   id: string;
   repositoryId: string;
@@ -195,6 +299,11 @@ export interface AtlasImpactReport {
     limitations: string[];
     generatedAt: string;
   };
+  /**
+   * Generated explanation is a sibling of the deterministic result and is
+   * optional so reports created before schema version 1 remain readable.
+   */
+  explanation?: AtlasImpactExplanationState | null;
   createdAt: string;
   updatedAt: string;
 }

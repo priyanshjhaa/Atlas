@@ -1,0 +1,1 @@
+ALTER TABLE "impact_reports" ADD COLUMN "explanation" jsonb;

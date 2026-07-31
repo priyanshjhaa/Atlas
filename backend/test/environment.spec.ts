@@ -9,6 +9,12 @@ describe("validateEnvironment", () => {
     expect(environment.FRONTEND_ORIGIN).toBe("http://localhost:3000");
     expect(environment.DATABASE_URL).toContain("postgresql://");
     expect(environment.REDIS_URL).toContain("redis://");
+    expect(environment.LLM_EXPLANATIONS_ENABLED).toBe(false);
+    expect(environment.LLM_EXPLANATION_TIMEOUT_MS).toBe(15_000);
+    expect(environment.LLM_MAX_PACKET_CHARACTERS).toBe(60_000);
+    expect(environment.LLM_MAX_OUTPUT_TOKENS).toBe(2_000);
+    expect(environment.LLM_REASONING_EFFORT).toBe("low");
+    expect(environment.LLM_MAX_EXPLANATION_CHARACTERS).toBe(20_000);
   });
 
   it("rejects an invalid port", () => {
@@ -40,5 +46,72 @@ describe("validateEnvironment", () => {
     ).toThrow("OPENAI_API_KEY is required");
     expect(validateEnvironment({ EMBEDDINGS_PROVIDER: "local" }))
       .toMatchObject({ EMBEDDINGS_PROVIDER: "local" });
+  });
+
+  it("requires model and API key only when explanations are enabled", () => {
+    expect(() =>
+      validateEnvironment({ LLM_EXPLANATIONS_ENABLED: "true" }),
+    ).toThrow("LLM_EXPLANATION_MODEL is required");
+    expect(() =>
+      validateEnvironment({
+        LLM_EXPLANATIONS_ENABLED: "true",
+        LLM_EXPLANATION_MODEL: "configured-model",
+      }),
+    ).toThrow("OPENAI_API_KEY is required");
+
+    expect(
+      validateEnvironment({
+        LLM_EXPLANATIONS_ENABLED: "true",
+        LLM_EXPLANATION_MODEL: "configured-model",
+        OPENAI_API_KEY: "test-key",
+      }),
+    ).toMatchObject({
+      LLM_EXPLANATIONS_ENABLED: true,
+      LLM_PROVIDER: "openai",
+      LLM_EXPLANATION_MODEL: "configured-model",
+    });
+
+    expect(() =>
+      validateEnvironment({
+        LLM_EXPLANATIONS_ENABLED: "true",
+        LLM_PROVIDER: "groq",
+        LLM_EXPLANATION_MODEL: "openai/gpt-oss-20b",
+      }),
+    ).toThrow("GROQ_API_KEY is required");
+    expect(
+      validateEnvironment({
+        LLM_EXPLANATIONS_ENABLED: "true",
+        LLM_PROVIDER: "groq",
+        LLM_BASE_URL: "https://api.groq.com/openai/v1",
+        LLM_EXPLANATION_MODEL: "openai/gpt-oss-20b",
+        GROQ_API_KEY: "test-key",
+      }),
+    ).toMatchObject({
+      LLM_EXPLANATIONS_ENABLED: true,
+      LLM_PROVIDER: "groq",
+      LLM_BASE_URL: "https://api.groq.com/openai/v1",
+    });
+  });
+
+  it("parses false explicitly and validates evidence limits", () => {
+    expect(
+      validateEnvironment({ LLM_EXPLANATIONS_ENABLED: "false" })
+        .LLM_EXPLANATIONS_ENABLED,
+    ).toBe(false);
+    expect(() =>
+      validateEnvironment({ LLM_MAX_EVIDENCE_ITEMS: "0" }),
+    ).toThrow("LLM_MAX_EVIDENCE_ITEMS");
+    expect(() =>
+      validateEnvironment({ LLM_MAX_EVIDENCE_CHARACTERS: "200001" }),
+    ).toThrow("LLM_MAX_EVIDENCE_CHARACTERS");
+    expect(() =>
+      validateEnvironment({ LLM_MAX_PACKET_CHARACTERS: "200001" }),
+    ).toThrow("LLM_MAX_PACKET_CHARACTERS");
+    expect(() =>
+      validateEnvironment({ LLM_MAX_OUTPUT_TOKENS: "32769" }),
+    ).toThrow("LLM_MAX_OUTPUT_TOKENS");
+    expect(() =>
+      validateEnvironment({ LLM_MAX_EXPLANATION_CHARACTERS: "100001" }),
+    ).toThrow("LLM_MAX_EXPLANATION_CHARACTERS");
   });
 });

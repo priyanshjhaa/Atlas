@@ -100,3 +100,19 @@ export async function getAtlasImpactReport(
   );
   return readApiResponse<AtlasImpactReport>(response);
 }
+
+export async function retryAtlasImpactExplanation(
+  workspaceId: string,
+  reportId: string,
+): Promise<AtlasImpactReport> {
+  const response = await fetchAtlasApi(
+    `/v1/workspaces/${workspaceId}/impact-reports/${reportId}/explanation/retry`,
+    {
+      method: "POST",
+      headers: {
+        "X-Atlas-Workspace-Id": workspaceId,
+      },
+    },
+  );
+  return readApiResponse<AtlasImpactReport>(response);
+}

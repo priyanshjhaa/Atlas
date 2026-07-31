@@ -10,6 +10,7 @@ import {
 import { alias } from "drizzle-orm/pg-core";
 import { DatabaseService } from "../database/database.service";
 import {
+  auditEvents,
   codeFiles,
   codeRelationships,
   codeSymbols,
@@ -17,6 +18,8 @@ import {
   impactReports,
   repositories,
 } from "../database/schema";
+import { explanationAuditEvent } from "./explanation-audit";
+import type { ImpactExplanationState } from "./explanation.types";
 import type {
   ImpactReportInput,
   ImpactReportResult,
@@ -234,5 +237,41 @@ export class ImpactRepository {
       )
       .limit(1);
     return (report as unknown as StoredImpactReport | undefined) ?? null;
+  }
+
+  async updateExplanation(
+    workspaceId: string,
+    reportId: string,
+    explanation: ImpactExplanationState,
+    actorUserId: string | null,
+  ): Promise<StoredImpactReport | null> {
+    return this.database.client.transaction(async (transaction) => {
+      const [updated] = await transaction
+        .update(impactReports)
+        .set({
+          explanation,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(impactReports.workspaceId, workspaceId),
+            eq(impactReports.id, reportId),
+          ),
+        )
+        .returning();
+
+      const audit = explanationAuditEvent(explanation);
+      if (updated && audit) {
+        await transaction.insert(auditEvents).values({
+          workspaceId,
+          actorUserId,
+          action: audit.action,
+          targetType: "impact_report",
+          targetId: reportId,
+          metadata: audit.metadata,
+        });
+      }
+      return (updated as unknown as StoredImpactReport | undefined) ?? null;
+    });
   }
 }

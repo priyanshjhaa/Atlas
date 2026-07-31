@@ -3,6 +3,7 @@
 # Local implementation roadmap
 ATLAS_PLAN.md
 BACKEND_FOUNDATION_PLAN.md
+LLM_EXPLANATION_LAYER_PLAN.md
 
 # dependencies
 node_modules/

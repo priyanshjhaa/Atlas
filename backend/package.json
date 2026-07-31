@@ -19,7 +19,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src test",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "acceptance:llm:planned": "node --env-file=.env --import tsx test/live-explanation.acceptance.ts planned",
+    "acceptance:llm:large-pr": "node --env-file=.env --import tsx test/live-explanation.acceptance.ts large-pr"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.28",
