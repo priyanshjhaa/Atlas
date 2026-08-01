@@ -1820,7 +1820,7 @@ body {
 
 .hero-console {
   right: 4vw;
-  bottom: 6vh;
+  bottom: 94px;
   color: #343b32;
   background:
     linear-gradient(145deg, rgba(255, 252, 240, .97), rgba(238, 225, 199, .94));
@@ -1850,12 +1850,15 @@ body {
 .scroll-cue { color: #5e6456; }
 
 .intelligence-marquee {
-  position: relative;
+  position: absolute;
   z-index: 4;
+  left: 0;
+  bottom: 0;
   width: 100%;
   overflow: hidden;
   color: #3d483e;
   background: transparent;
+  text-shadow: 0 1px rgba(255, 249, 229, .5);
 }
 
 .intelligence-marquee::before,
@@ -2329,18 +2332,17 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .intelligence-marquee {
-    overflow: visible;
+    overflow-x: auto;
+    scrollbar-width: thin;
   }
 
   .intelligence-marquee__track {
-    width: 100%;
+    width: max-content;
   }
 
   .intelligence-marquee__group {
-    width: 100%;
-    flex-wrap: wrap;
-    justify-content: center;
-    padding: 16px 24px;
+    flex-wrap: nowrap;
+    padding: 16px 32px 16px 0;
   }
 
   .intelligence-marquee__group[aria-hidden="true"] {
@@ -2381,7 +2383,7 @@ body {
   .hero-system-bar span:last-child { display: none; }
   .hero h1 { font-size: 51px; }
   .hero-deck { font-size: 16px; }
-  .hero-console { left: 18px; right: 18px; bottom: 38px; }
+  .hero-console { left: 18px; right: 18px; bottom: 78px; }
   .intelligence-marquee__group { gap: 26px; padding-block: 14px; padding-right: 26px; }
   .intelligence-marquee__item {
     grid-template-columns: 29px auto auto 4px auto;

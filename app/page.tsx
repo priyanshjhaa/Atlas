@@ -71,25 +71,24 @@ export default function Home() {
             <div><Network size={14} /><span><b>2</b> cross-repo paths</span></div>
           </div>
         </div>
-        <a href="#story" className="scroll-cue">Explore the system <span>↓</span></a>
-      </section>
 
-      <section className="intelligence-marquee" aria-label="Atlas capabilities">
-        <div className="intelligence-marquee__track">
-          {[0, 1].map((group) => (
-            <div className="intelligence-marquee__group" aria-hidden={group === 1 ? true : undefined} key={group}>
-              {capabilities.map(({ icon: Icon, index, label, title, detail }) => (
-                <article className="intelligence-marquee__item" key={`${group}-${index}`}>
-                  <span className="intelligence-marquee__icon"><Icon size={16} /></span>
-                  <span className="intelligence-marquee__index">{index} / {label}</span>
-                  <b>{title}</b>
-                  <i aria-hidden="true" />
-                  <small>{detail}</small>
-                </article>
-              ))}
-            </div>
-          ))}
-        </div>
+        <section className="intelligence-marquee" aria-label="Atlas capabilities">
+          <div className="intelligence-marquee__track">
+            {[0, 1].map((group) => (
+              <div className="intelligence-marquee__group" aria-hidden={group === 1 ? true : undefined} key={group}>
+                {capabilities.map(({ icon: Icon, index, label, title, detail }) => (
+                  <article className="intelligence-marquee__item" key={`${group}-${index}`}>
+                    <span className="intelligence-marquee__icon"><Icon size={16} /></span>
+                    <span className="intelligence-marquee__index">{index} / {label}</span>
+                    <b>{title}</b>
+                    <i aria-hidden="true" />
+                    <small>{detail}</small>
+                  </article>
+                ))}
+              </div>
+            ))}
+          </div>
+        </section>
       </section>
 
       <section className="statement" id="story">
