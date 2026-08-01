@@ -57,6 +57,10 @@ services from the sibling CodeMap repository.
 - Retrieval expands credible direct matches through one-hop current graph
   context, applies classification-aware score boosts, and preserves the actual
   repository and file on every expanded citation.
+- Incremental synchronization captures a bounded GitHub comparison from the
+  last indexed revision to the new HEAD. Commits are upserted by repository and
+  SHA; aggregate file changes are replaced idempotently for each stable
+  base-to-head history range.
 - Temporary repository archives are deleted after every worker attempt.
 
 This directory is now maintained as Atlas code. Future CodeMap changes are not

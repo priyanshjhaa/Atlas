@@ -138,6 +138,7 @@ describe("SyncWorkerService", () => {
         workspaceId: "workspace-1",
         repositoryId: "repository-1",
         revision: "sha-new",
+        previousRevision: "sha-old",
       }),
     );
     expect(complete).toHaveBeenCalledWith(

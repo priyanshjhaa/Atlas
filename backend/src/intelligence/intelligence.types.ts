@@ -168,6 +168,18 @@ export interface IngestionSummary {
   relationshipsExtracted: number;
   languages: string[];
   embeddingProvider: "local" | "openai";
+  history: {
+    baseRevision: string | null;
+    headRevision: string;
+    status: string;
+    totalCommits: number;
+    commitsCaptured: number;
+    filesCaptured: number;
+    commitsPersisted: number;
+    filesPersisted: number;
+    commitsTruncated: boolean;
+    filesTruncated: boolean;
+  };
   typeChecker: {
     filesAnalyzed: number;
     importsResolved: number;

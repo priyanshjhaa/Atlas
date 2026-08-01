@@ -116,6 +116,7 @@ export class SyncWorkerService implements OnModuleDestroy {
         owner: context.owner,
         installationId: context.installationId,
         revision,
+        previousRevision: context.lastSyncedRevision,
         progress: (percent, stage) => this.progress(job, percent, stage),
         cancellationRequested: () =>
           this.jobs.cancellationRequested(job.data.syncJobId),

@@ -786,6 +786,112 @@ export const graphRelationships = pgTable(
   ],
 );
 
+export const repositoryCommits = pgTable(
+  "repository_commits",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    repositoryId: uuid("repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    sha: text("sha").notNull(),
+    message: text("message").notNull(),
+    authorName: text("author_name"),
+    authorLogin: text("author_login"),
+    authoredAt: timestamp("authored_at", { withTimezone: true }),
+    committedAt: timestamp("committed_at", { withTimezone: true }),
+    parentShas: jsonb("parent_shas").$type<string[]>().default([]).notNull(),
+    htmlUrl: text("html_url").notNull(),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("repository_commits_repository_sha_unique").on(
+      table.repositoryId,
+      table.sha,
+    ),
+    index("repository_commits_workspace_id_idx").on(table.workspaceId),
+    index("repository_commits_repository_id_idx").on(table.repositoryId),
+    index("repository_commits_committed_at_idx").on(table.committedAt),
+  ],
+);
+
+export const repositoryHistoryRanges = pgTable(
+  "repository_history_ranges",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    repositoryId: uuid("repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    stableKey: text("stable_key").notNull(),
+    baseRevision: text("base_revision"),
+    headRevision: text("head_revision").notNull(),
+    status: text("status").notNull(),
+    aheadBy: integer("ahead_by").notNull(),
+    behindBy: integer("behind_by").notNull(),
+    totalCommits: integer("total_commits").notNull(),
+    commitsCaptured: integer("commits_captured").notNull(),
+    filesCaptured: integer("files_captured").notNull(),
+    commitsTruncated: boolean("commits_truncated").default(false).notNull(),
+    filesTruncated: boolean("files_truncated").default(false).notNull(),
+    capturedAt: timestamp("captured_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("repository_history_ranges_repository_stable_key_unique").on(
+      table.repositoryId,
+      table.stableKey,
+    ),
+    index("repository_history_ranges_workspace_id_idx").on(table.workspaceId),
+    index("repository_history_ranges_repository_id_idx").on(
+      table.repositoryId,
+    ),
+    index("repository_history_ranges_captured_at_idx").on(table.capturedAt),
+  ],
+);
+
+export const repositoryFileChanges = pgTable(
+  "repository_file_changes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    repositoryId: uuid("repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    historyRangeId: uuid("history_range_id")
+      .notNull()
+      .references(() => repositoryHistoryRanges.id, { onDelete: "cascade" }),
+    path: text("path").notNull(),
+    previousPath: text("previous_path"),
+    status: text("status").notNull(),
+    additions: integer("additions").notNull(),
+    deletions: integer("deletions").notNull(),
+    changes: integer("changes").notNull(),
+  },
+  (table) => [
+    uniqueIndex("repository_file_changes_range_path_unique").on(
+      table.historyRangeId,
+      table.path,
+    ),
+    index("repository_file_changes_workspace_id_idx").on(table.workspaceId),
+    index("repository_file_changes_repository_id_idx").on(table.repositoryId),
+    index("repository_file_changes_history_range_id_idx").on(
+      table.historyRangeId,
+    ),
+    index("repository_file_changes_path_idx").on(table.path),
+  ],
+);
+
 export const architectureSnapshots = pgTable(
   "architecture_snapshots",
   {

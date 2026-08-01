@@ -4,6 +4,44 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Environment } from "../src/config/environment";
 import { GitHubAppService } from "../src/connectors/github-app.service";
 
+function githubService() {
+  const { privateKey } = generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    privateKeyEncoding: {
+      format: "pem",
+      type: "pkcs1",
+    },
+    publicKeyEncoding: {
+      format: "pem",
+      type: "spki",
+    },
+  });
+  const config = new ConfigService<Environment>({
+    GITHUB_APP_ID: "123",
+    GITHUB_APP_PRIVATE_KEY: Buffer.from(privateKey).toString("base64"),
+  });
+  return new GitHubAppService(
+    config as unknown as ConfigService<Environment, true>,
+  );
+}
+
+function commitResponse(index: number) {
+  return {
+    sha: `sha-${index}`,
+    html_url: `https://github.com/atlas/web/commit/sha-${index}`,
+    commit: {
+      message: `Commit ${index}`,
+      author: {
+        name: "Atlas Engineer",
+        date: "2026-08-01T00:00:00.000Z",
+      },
+      committer: { date: "2026-08-01T00:01:00.000Z" },
+    },
+    author: { login: "atlas-engineer" },
+    parents: [{ sha: `parent-${index}` }],
+  };
+}
+
 describe("GitHubAppService", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -126,5 +164,160 @@ describe("GitHubAppService", () => {
         return url.includes("per_page=100&page=2");
       }),
     ).toBe(true);
+  });
+
+  it("captures a bounded three-page comparison with aggregate file changes", async () => {
+    const commits = Array.from({ length: 300 }, (_, index) =>
+      commitResponse(index),
+    );
+    const files = Array.from({ length: 305 }, (_, index) => ({
+      filename: `src/file-${index}.ts`,
+      status: "modified",
+      additions: 1,
+      deletions: 1,
+      changes: 2,
+    }));
+    const fetchMock = vi.fn<typeof fetch>(async (request) => {
+      const url =
+        request instanceof Request ? request.url : request.toString();
+      if (url.endsWith("/app/installations/456/access_tokens")) {
+        return new Response(JSON.stringify({ token: "installation-token" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 201,
+        });
+      }
+      const page = Number(new URL(url).searchParams.get("page"));
+      const offset = (page - 1) * 100;
+      return new Response(
+        JSON.stringify({
+          status: "ahead",
+          ahead_by: 350,
+          behind_by: 0,
+          total_commits: 350,
+          commits: commits.slice(offset, offset + 100),
+          files: page === 1 ? files : undefined,
+        }),
+        { headers: { "Content-Type": "application/json" }, status: 200 },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await githubService().getRepositoryHistory({
+      installationId: "456",
+      owner: "atlas",
+      repository: "web",
+      baseRevision: "base-sha",
+      headRevision: "head-sha",
+    });
+
+    expect(result).toMatchObject({
+      baseRevision: "base-sha",
+      headRevision: "head-sha",
+      status: "ahead",
+      aheadBy: 350,
+      totalCommits: 350,
+      commitsTruncated: true,
+      filesTruncated: true,
+    });
+    expect(result.commits).toHaveLength(300);
+    expect(result.files).toHaveLength(300);
+    expect(result.commits[0]).toMatchObject({
+      sha: "sha-0",
+      authorLogin: "atlas-engineer",
+      parentShas: ["parent-0"],
+    });
+    expect(
+      fetchMock.mock.calls.filter(([request]) => {
+        const url =
+          request instanceof Request ? request.url : request.toString();
+        return url.includes("/compare/");
+      }),
+    ).toHaveLength(3);
+  });
+
+  it("falls back to bounded recent commits when a revision comparison is unavailable", async () => {
+    const recentCommits = [commitResponse(1), commitResponse(2)];
+    const fetchMock = vi.fn<typeof fetch>(async (request) => {
+      const url =
+        request instanceof Request ? request.url : request.toString();
+      if (url.endsWith("/app/installations/456/access_tokens")) {
+        return new Response(JSON.stringify({ token: "installation-token" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 201,
+        });
+      }
+      if (url.includes("/compare/")) {
+        return new Response(JSON.stringify({ message: "Not Found" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 404,
+        });
+      }
+      return new Response(JSON.stringify(recentCommits), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await githubService().getRepositoryHistory({
+      installationId: "456",
+      owner: "atlas",
+      repository: "web",
+      baseRevision: "deleted-base",
+      headRevision: "head-sha",
+    });
+
+    expect(result).toMatchObject({
+      baseRevision: "deleted-base",
+      headRevision: "head-sha",
+      status: "comparison_unavailable",
+      aheadBy: 2,
+      totalCommits: 2,
+      commitsTruncated: false,
+      files: [],
+    });
+    expect(result.commits.map((commit) => commit.sha)).toEqual([
+      "sha-1",
+      "sha-2",
+    ]);
+  });
+
+  it("uses recent history directly for a repository's initial synchronization", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (request) => {
+      const url =
+        request instanceof Request ? request.url : request.toString();
+      if (url.endsWith("/app/installations/456/access_tokens")) {
+        return new Response(JSON.stringify({ token: "installation-token" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 201,
+        });
+      }
+      return new Response(JSON.stringify([commitResponse(1)]), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await githubService().getRepositoryHistory({
+      installationId: "456",
+      owner: "atlas",
+      repository: "web",
+      headRevision: "head-sha",
+    });
+
+    expect(result).toMatchObject({
+      baseRevision: null,
+      headRevision: "head-sha",
+      status: "recent",
+      commitsTruncated: false,
+    });
+    expect(
+      fetchMock.mock.calls.some(([request]) => {
+        const url =
+          request instanceof Request ? request.url : request.toString();
+        return url.includes("/compare/");
+      }),
+    ).toBe(false);
   });
 });

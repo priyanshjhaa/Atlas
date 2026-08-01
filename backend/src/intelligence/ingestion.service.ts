@@ -3,7 +3,10 @@ import { ConfigService } from "@nestjs/config";
 import { mkdir, rm } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import type { Environment } from "../config/environment";
-import { GitHubAppService } from "../connectors/github-app.service";
+import {
+  GitHubAppService,
+  type GitHubRepositoryHistory,
+} from "../connectors/github-app.service";
 import { ArchitectureBuilderService } from "./architecture-builder.service";
 import { EmbeddingsService } from "./embeddings.service";
 import { IntelligenceRepository } from "./intelligence.repository";
@@ -27,6 +30,7 @@ interface IngestionInput {
   owner: string;
   installationId: string;
   revision: string;
+  previousRevision?: string | null;
   progress: (percent: number, stage: string) => Promise<void>;
   cancellationRequested: () => Promise<boolean>;
 }
@@ -66,7 +70,17 @@ export class IngestionService {
 
     try {
       await this.checkCancellation(input);
-      await input.progress(12, "downloading_repository_archive");
+      await input.progress(8, "fetching_repository_history");
+      const history = await this.github.getRepositoryHistory({
+        installationId: input.installationId,
+        owner: input.owner,
+        repository: input.repositoryName,
+        baseRevision: input.previousRevision,
+        headRevision: input.revision,
+      });
+
+      await this.checkCancellation(input);
+      await input.progress(15, "downloading_repository_archive");
       await mkdir(syncPath, { recursive: true });
       await this.github.downloadRepositoryArchive({
         installationId: input.installationId,
@@ -135,6 +149,7 @@ export class IngestionService {
         typeChecker: typeCheckerAnalysis,
         embeddings: embeddingMap,
         architecture: snapshot,
+        history,
       });
 
       return {
@@ -154,6 +169,11 @@ export class IngestionService {
         relationshipsExtracted: observedRelationships.length,
         languages: [...new Set(parsedFiles.map((file) => file.language))].sort(),
         embeddingProvider: this.embeddings.provider(),
+        history: {
+          ...this.historySummary(history),
+          commitsPersisted: persistence.historyCommitsPersisted,
+          filesPersisted: persistence.historyFilesPersisted,
+        },
         typeChecker: {
           filesAnalyzed: typeCheckerAnalysis.filesAnalyzed,
           importsResolved: typeCheckerAnalysis.importsResolved,
@@ -208,5 +228,18 @@ export class IngestionService {
     if (await input.cancellationRequested()) {
       throw new IngestionCancelledError();
     }
+  }
+
+  private historySummary(history: GitHubRepositoryHistory) {
+    return {
+      baseRevision: history.baseRevision,
+      headRevision: history.headRevision,
+      status: history.status,
+      totalCommits: history.totalCommits,
+      commitsCaptured: history.commits.length,
+      filesCaptured: history.files.length,
+      commitsTruncated: history.commitsTruncated,
+      filesTruncated: history.filesTruncated,
+    };
   }
 }

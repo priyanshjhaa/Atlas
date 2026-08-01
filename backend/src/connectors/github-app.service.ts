@@ -46,6 +46,57 @@ export interface GitHubPullRequestFile {
   previous_filename?: string;
 }
 
+export interface GitHubCommitHistoryItem {
+  sha: string;
+  message: string;
+  htmlUrl: string;
+  authorName: string | null;
+  authorLogin: string | null;
+  authoredAt: string | null;
+  committedAt: string | null;
+  parentShas: string[];
+}
+
+export interface GitHubHistoryFile {
+  path: string;
+  previousPath: string | null;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+}
+
+export interface GitHubRepositoryHistory {
+  baseRevision: string | null;
+  headRevision: string;
+  status: string;
+  aheadBy: number;
+  behindBy: number;
+  totalCommits: number;
+  commits: GitHubCommitHistoryItem[];
+  files: GitHubHistoryFile[];
+  commitsTruncated: boolean;
+  filesTruncated: boolean;
+}
+
+interface GitHubCommitResponse {
+  sha: string;
+  html_url: string;
+  commit: {
+    message: string;
+    author: { name: string; date: string } | null;
+    committer: { date: string } | null;
+  };
+  author: { login: string } | null;
+  parents: Array<{ sha: string }>;
+}
+
+const GITHUB_HISTORY_PAGE_SIZE = 100;
+const GITHUB_HISTORY_MAX_PAGES = 3;
+const GITHUB_HISTORY_MAX_COMMITS =
+  GITHUB_HISTORY_PAGE_SIZE * GITHUB_HISTORY_MAX_PAGES;
+const GITHUB_HISTORY_MAX_FILES = 300;
+
 @Injectable()
 export class GitHubAppService {
   private readonly apiVersion = "2026-03-10";
@@ -125,6 +176,99 @@ export class GitHubAppService {
     };
   }
 
+  async getRepositoryHistory(input: {
+    installationId: string;
+    owner: string;
+    repository: string;
+    baseRevision?: string | null;
+    headRevision: string;
+  }): Promise<GitHubRepositoryHistory> {
+    const token = await this.createInstallationToken(input.installationId);
+    if (!input.baseRevision) {
+      return this.recentRepositoryHistory(input, token, "recent");
+    }
+    try {
+      const commitsBySha = new Map<string, GitHubCommitResponse>();
+      let files: GitHubHistoryFile[] = [];
+      let filesTruncated = false;
+      let status = "unknown";
+      let aheadBy = 0;
+      let behindBy = 0;
+      let totalCommits = 0;
+      for (let page = 1; page <= GITHUB_HISTORY_MAX_PAGES; page += 1) {
+        const response = await this.request<{
+          status: string;
+          ahead_by: number;
+          behind_by: number;
+          total_commits: number;
+          commits: GitHubCommitResponse[];
+          files?: GitHubPullRequestFile[];
+        }>(
+          `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}/compare/${encodeURIComponent(input.baseRevision)}...${encodeURIComponent(input.headRevision)}?per_page=${GITHUB_HISTORY_PAGE_SIZE}&page=${page}`,
+          token,
+        );
+        status = response.status;
+        aheadBy = response.ahead_by;
+        behindBy = response.behind_by;
+        totalCommits = response.total_commits;
+        for (const commit of response.commits) {
+          if (!commitsBySha.has(commit.sha)) {
+            commitsBySha.set(commit.sha, commit);
+          }
+        }
+        if (page === 1) {
+          filesTruncated =
+            (response.files?.length ?? 0) >= GITHUB_HISTORY_MAX_FILES;
+          files = [
+            ...new Map(
+              (response.files ?? [])
+                .slice(0, GITHUB_HISTORY_MAX_FILES)
+                .map((file) => [
+                  file.filename,
+                  {
+                    path: file.filename,
+                    previousPath: file.previous_filename ?? null,
+                    status: file.status,
+                    additions: file.additions,
+                    deletions: file.deletions,
+                    changes: file.changes,
+                  },
+                ]),
+            ).values(),
+          ];
+        }
+        if (
+          response.commits.length < GITHUB_HISTORY_PAGE_SIZE ||
+          commitsBySha.size >= totalCommits
+        ) {
+          break;
+        }
+      }
+      const commits = [...commitsBySha.values()].slice(
+        0,
+        GITHUB_HISTORY_MAX_COMMITS,
+      );
+      return {
+        baseRevision: input.baseRevision,
+        headRevision: input.headRevision,
+        status,
+        aheadBy,
+        behindBy,
+        totalCommits,
+        commits: commits.map((commit) => this.commitHistoryItem(commit)),
+        files,
+        commitsTruncated: totalCommits > commits.length,
+        filesTruncated,
+      };
+    } catch {
+      return this.recentRepositoryHistory(
+        input,
+        token,
+        "comparison_unavailable",
+      );
+    }
+  }
+
   async downloadRepositoryArchive(input: {
     installationId: string;
     owner: string;
@@ -191,6 +335,52 @@ export class GitHubAppService {
       { method: "POST" },
     );
     return response.token;
+  }
+
+  private async recentRepositoryHistory(
+    input: {
+      owner: string;
+      repository: string;
+      baseRevision?: string | null;
+      headRevision: string;
+    },
+    token: string,
+    status: "recent" | "comparison_unavailable",
+  ): Promise<GitHubRepositoryHistory> {
+    const commits = await this.request<GitHubCommitResponse[]>(
+      `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}/commits?sha=${encodeURIComponent(input.headRevision)}&per_page=${GITHUB_HISTORY_PAGE_SIZE}&page=1`,
+      token,
+    );
+    const uniqueCommits = [
+      ...new Map(commits.map((commit) => [commit.sha, commit])).values(),
+    ].slice(0, GITHUB_HISTORY_PAGE_SIZE);
+    return {
+      baseRevision: input.baseRevision ?? null,
+      headRevision: input.headRevision,
+      status,
+      aheadBy: uniqueCommits.length,
+      behindBy: 0,
+      totalCommits: uniqueCommits.length,
+      commits: uniqueCommits.map((commit) => this.commitHistoryItem(commit)),
+      files: [],
+      commitsTruncated: commits.length === GITHUB_HISTORY_PAGE_SIZE,
+      filesTruncated: false,
+    };
+  }
+
+  private commitHistoryItem(
+    commit: GitHubCommitResponse,
+  ): GitHubCommitHistoryItem {
+    return {
+      sha: commit.sha,
+      message: commit.commit.message,
+      htmlUrl: commit.html_url,
+      authorName: commit.commit.author?.name ?? null,
+      authorLogin: commit.author?.login ?? null,
+      authoredAt: commit.commit.author?.date ?? null,
+      committedAt: commit.commit.committer?.date ?? null,
+      parentShas: commit.parents.map((parent) => parent.sha),
+    };
   }
 
   private async createAppJwt(): Promise<string> {

@@ -176,35 +176,40 @@ Worker command: npm run start:worker
 The worker now runs the Atlas-owned CodeMap service fork after detecting a new
 GitHub revision:
 
-1. Download and safely extract the GitHub App archive into temporary storage.
-2. Discover supported source files within file-count and byte limits.
-3. Parse TypeScript/JavaScript symbols, imports, exports, and citation chunks.
-4. Discover the repository `tsconfig.json`, apply its compiler options and file
+1. Capture a bounded GitHub history range from the previously synchronized
+   revision to the new HEAD. Atlas stores at most 300 unique commits and 300
+   aggregate file changes per range, and falls back to the latest 100 commits
+   when GitHub can no longer compare the previous revision.
+2. Download and safely extract the GitHub App archive into temporary storage.
+3. Discover supported source files within file-count and byte limits.
+4. Parse TypeScript/JavaScript symbols, imports, exports, and citation chunks.
+5. Discover the repository `tsconfig.json`, apply its compiler options and file
    scope, traverse referenced project configs, build their TypeScript programs,
    and resolve imported declarations to repository files and symbols.
    Repositories without a config use safe TypeScript/JavaScript defaults.
-5. Discover npm/Yarn, pnpm, and Lerna workspace packages, exports, entry points,
+6. Discover npm/Yarn, pnpm, and Lerna workspace packages, exports, entry points,
    and dependency declarations.
-6. Extract observed local-import and workspace-package relationships with
+7. Extract observed local-import and workspace-package relationships with
    compiler evidence, confidence, configured path-alias support, and a
    syntax-only fallback for partially compilable repositories.
-7. Persist stable package identities and exact manifest dependency links,
+8. Persist stable package identities and exact manifest dependency links,
    including cross-repository links when a package name resolves uniquely
    inside the workspace. Ambiguous package names are not linked.
-8. Persist line-independent symbol identities, import bindings, public export
+9. Persist line-independent symbol identities, import bindings, public export
    names, and package API ownership. Named package imports are linked to unique
    public symbols across repositories, including symbols exposed by re-exports.
-9. Capture direct and namespace API calls, associate them with their containing
+10. Capture direct and namespace API calls, associate them with their containing
    source symbols, and persist revision-stamped call edges across repositories.
-10. Append a revision-scoped observation for every local import, package
+11. Append a revision-scoped observation for every local import, package
     dependency, public API import, and public API call so later graph analysis
     can distinguish current structure from relationships seen historically.
-11. Project stable repository, package, file, and symbol graph entities. Current
+12. Project stable repository, package, file, and symbol graph entities. Current
     structural edges are marked observed, removed edges become historical, and
     compiler-resolved import bindings create lower-confidence inferred symbol
     references with explicit provenance.
-12. Generate deterministic local embeddings or optional OpenAI embeddings.
-13. Atomically replace the repository index and create an architecture snapshot.
+13. Generate deterministic local embeddings or optional OpenAI embeddings.
+14. Atomically replace the repository index, history range, file changes, and
+    architecture snapshot.
 
 Workspace-scoped impact analysis consumes the indexed package, public API
 import, and public API call edges to report observed consumers in other active

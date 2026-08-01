@@ -35,6 +35,8 @@ describe("IngestionService", () => {
         graphEntitiesProjected: 5,
         graphRelationshipsProjected: 4,
         inferredGraphRelationships: 1,
+        historyCommitsPersisted: 1,
+        historyFilesPersisted: 1,
       };
     });
     const config = {
@@ -44,7 +46,41 @@ describe("IngestionService", () => {
         return undefined;
       },
     } as unknown as ConfigService<Environment, true>;
+    const getRepositoryHistory = vi.fn(async () => ({
+        baseRevision: "previous-sha",
+        headRevision: "abcdef1234567890",
+        status: "ahead",
+        aheadBy: 1,
+        behindBy: 0,
+        totalCommits: 1,
+        commits: [
+          {
+            sha: "abcdef1234567890",
+            message: "Update API",
+            htmlUrl:
+              "https://github.com/atlas/api/commit/abcdef1234567890",
+            authorName: "Atlas Engineer",
+            authorLogin: "atlas-engineer",
+            authoredAt: "2026-08-01T00:00:00.000Z",
+            committedAt: "2026-08-01T00:00:00.000Z",
+            parentShas: ["previous-sha"],
+          },
+        ],
+        files: [
+          {
+            path: "src/api.ts",
+            previousPath: null,
+            status: "modified",
+            additions: 2,
+            deletions: 1,
+            changes: 3,
+          },
+        ],
+        commitsTruncated: false,
+        filesTruncated: false,
+      }));
     const github = {
+      getRepositoryHistory,
       downloadRepositoryArchive: vi.fn(
         async ({ destinationPath }: { destinationPath: string }) => {
           await mkdir(join(destinationPath, "src"), { recursive: true });
@@ -103,6 +139,7 @@ describe("IngestionService", () => {
         owner: "atlas",
         installationId: "42",
         revision: "abcdef1234567890",
+        previousRevision: "previous-sha",
         progress: vi.fn(async () => undefined),
         cancellationRequested: vi.fn(async () => false),
       });
@@ -113,6 +150,18 @@ describe("IngestionService", () => {
         callsDetected: 0,
         relationshipsExtracted: 1,
         embeddingProvider: "local",
+        history: {
+          baseRevision: "previous-sha",
+          headRevision: "abcdef1234567890",
+          status: "ahead",
+          totalCommits: 1,
+          commitsCaptured: 1,
+          filesCaptured: 1,
+          commitsPersisted: 1,
+          filesPersisted: 1,
+          commitsTruncated: false,
+          filesTruncated: false,
+        },
         typeChecker: {
           filesAnalyzed: 2,
           importsResolved: 1,
@@ -145,6 +194,7 @@ describe("IngestionService", () => {
         sourceRevision: string;
         relationships: ObservedRelationship[];
         packages: Array<{ name: string; stableKey?: string }>;
+        history: { baseRevision: string | null; headRevision: string };
       };
       expect(persisted).toMatchObject({
         workspaceId: "workspace-1",
@@ -169,6 +219,17 @@ describe("IngestionService", () => {
           name: "@atlas/api",
         }),
       ]);
+      expect(persisted.history).toMatchObject({
+        baseRevision: "previous-sha",
+        headRevision: "abcdef1234567890",
+      });
+      expect(getRepositoryHistory).toHaveBeenCalledWith({
+        installationId: "42",
+        owner: "atlas",
+        repository: "api",
+        baseRevision: "previous-sha",
+        headRevision: "abcdef1234567890",
+      });
     } finally {
       await rm(storageRoot, { recursive: true, force: true });
     }

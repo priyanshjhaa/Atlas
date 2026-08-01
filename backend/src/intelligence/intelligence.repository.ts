@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { DatabaseService } from "../database/database.service";
+import type { GitHubRepositoryHistory } from "../connectors/github-app.service";
 import {
   architectureSnapshots,
   codeCalls,
@@ -14,6 +15,9 @@ import {
   graphRelationships,
   packageRelationships,
   relationshipObservations,
+  repositoryCommits,
+  repositoryFileChanges,
+  repositoryHistoryRanges,
   repositories,
   symbolRelationships,
 } from "../database/schema";
@@ -31,6 +35,7 @@ import {
 } from "./graph-projection.builder";
 import { PackageLinkerService } from "./package-linker.service";
 import { RelationshipObservationBuilder } from "./relationship-observation.builder";
+import { boundRepositoryHistory } from "./repository-history";
 
 interface PersistInput {
   workspaceId: string;
@@ -42,6 +47,7 @@ interface PersistInput {
   typeChecker: TypeCheckerAnalysis;
   embeddings: Map<string, number[]>;
   architecture: ArchitectureSnapshotData;
+  history: GitHubRepositoryHistory;
 }
 
 interface PersistSummary {
@@ -55,6 +61,8 @@ interface PersistSummary {
   graphEntitiesProjected: number;
   graphRelationshipsProjected: number;
   inferredGraphRelationships: number;
+  historyCommitsPersisted: number;
+  historyFilesPersisted: number;
 }
 
 interface RetrievedChunkRow extends Record<string, unknown> {
@@ -96,6 +104,104 @@ export class IntelligenceRepository {
 
   async persist(input: PersistInput): Promise<PersistSummary> {
     return this.database.client.transaction(async (transaction) => {
+      const history = boundRepositoryHistory(input.history);
+      const historyCommits = history.commits;
+      const historyFiles = history.files;
+      const persistedCommits = historyCommits.length
+        ? await transaction
+            .insert(repositoryCommits)
+            .values(
+              historyCommits.map((commit) => ({
+                workspaceId: input.workspaceId,
+                repositoryId: input.repositoryId,
+                sha: commit.sha,
+                message: commit.message.slice(0, 10_000),
+                authorName: commit.authorName?.slice(0, 500) ?? null,
+                authorLogin: commit.authorLogin?.slice(0, 500) ?? null,
+                authoredAt: this.historyDate(commit.authoredAt),
+                committedAt: this.historyDate(commit.committedAt),
+                parentShas: commit.parentShas.slice(0, 16),
+                htmlUrl: commit.htmlUrl.slice(0, 2_000),
+              })),
+            )
+            .onConflictDoUpdate({
+              target: [
+                repositoryCommits.repositoryId,
+                repositoryCommits.sha,
+              ],
+              set: {
+                message: sql`excluded.message`,
+                authorName: sql`excluded.author_name`,
+                authorLogin: sql`excluded.author_login`,
+                authoredAt: sql`excluded.authored_at`,
+                committedAt: sql`excluded.committed_at`,
+                parentShas: sql`excluded.parent_shas`,
+                htmlUrl: sql`excluded.html_url`,
+                updatedAt: new Date(),
+              },
+            })
+            .returning({ id: repositoryCommits.id })
+        : [];
+      const historyStableKey = `${history.baseRevision ?? "initial"}...${history.headRevision}`;
+      const [historyRange] = await transaction
+        .insert(repositoryHistoryRanges)
+        .values({
+          workspaceId: input.workspaceId,
+          repositoryId: input.repositoryId,
+          stableKey: historyStableKey,
+          baseRevision: history.baseRevision,
+          headRevision: history.headRevision,
+          status: history.status.slice(0, 100),
+          aheadBy: history.aheadBy,
+          behindBy: history.behindBy,
+          totalCommits: history.totalCommits,
+          commitsCaptured: historyCommits.length,
+          filesCaptured: historyFiles.length,
+          commitsTruncated: history.commitsTruncated,
+          filesTruncated: history.filesTruncated,
+        })
+        .onConflictDoUpdate({
+          target: [
+            repositoryHistoryRanges.repositoryId,
+            repositoryHistoryRanges.stableKey,
+          ],
+          set: {
+            status: sql`excluded.status`,
+            aheadBy: sql`excluded.ahead_by`,
+            behindBy: sql`excluded.behind_by`,
+            totalCommits: sql`excluded.total_commits`,
+            commitsCaptured: sql`excluded.commits_captured`,
+            filesCaptured: sql`excluded.files_captured`,
+            commitsTruncated: sql`excluded.commits_truncated`,
+            filesTruncated: sql`excluded.files_truncated`,
+            capturedAt: new Date(),
+          },
+        })
+        .returning({ id: repositoryHistoryRanges.id });
+      if (!historyRange) {
+        throw new Error("Repository history range was not persisted.");
+      }
+      await transaction
+        .delete(repositoryFileChanges)
+        .where(eq(repositoryFileChanges.historyRangeId, historyRange.id));
+      const persistedFileChanges = historyFiles.length
+        ? await transaction
+            .insert(repositoryFileChanges)
+            .values(
+              historyFiles.map((file) => ({
+                workspaceId: input.workspaceId,
+                repositoryId: input.repositoryId,
+                historyRangeId: historyRange.id,
+                path: file.path.slice(0, 4_096),
+                previousPath: file.previousPath?.slice(0, 4_096) ?? null,
+                status: file.status.slice(0, 100),
+                additions: file.additions,
+                deletions: file.deletions,
+                changes: file.changes,
+              })),
+            )
+            .returning({ id: repositoryFileChanges.id })
+        : [];
       await transaction
         .delete(codeFiles)
         .where(eq(codeFiles.repositoryId, input.repositoryId));
@@ -662,6 +768,8 @@ export class IntelligenceRepository {
         inferredGraphRelationships: graphRelationshipValues.filter(
           (item) => item.classification === "inferred",
         ).length,
+        historyCommitsPersisted: persistedCommits.length,
+        historyFilesPersisted: persistedFileChanges.length,
       };
     });
   }
@@ -1066,5 +1174,11 @@ export class IntelligenceRepository {
 
   embeddingKey(path: string, chunkIndex: number) {
     return `${path}:${chunkIndex}`;
+  }
+
+  private historyDate(value: string | null): Date | null {
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
   }
 }
