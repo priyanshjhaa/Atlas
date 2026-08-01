@@ -1,2 +1,13 @@
 import { SearchPage } from "@/components/features/explore";
-export default function Page() { return <SearchPage />; }
+import { getAtlasWorkspaceData } from "@/lib/workspace-api";
+
+export default async function Page() {
+  const { activeWorkspace, repositories } =
+    await getAtlasWorkspaceData();
+  return (
+    <SearchPage
+      workspace={activeWorkspace}
+      repositories={repositories}
+    />
+  );
+}

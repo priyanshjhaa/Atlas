@@ -31,6 +31,87 @@ export interface AtlasRepository {
   lastSyncedAt: string | null;
 }
 
+export interface AtlasGraphNode {
+  id: string;
+  repositoryId: string;
+  repositoryOwner: string;
+  repositoryName: string;
+  entityType: string;
+  stableKey: string;
+  name: string;
+  path: string | null;
+  sourceRevision: string;
+  metadata: Record<string, unknown>;
+  isCurrent: boolean;
+}
+
+export interface AtlasGraphEdge {
+  id: string;
+  sourceEntityId: string;
+  targetEntityId: string;
+  kind: string;
+  classification: "observed" | "historical" | "inferred";
+  provenance: string;
+  confidence: number;
+  sourceRevision: string;
+  targetRevision: string;
+  evidence: Record<string, unknown>;
+  isCurrent: boolean;
+  hop: number;
+}
+
+export interface AtlasGraph {
+  rootEntityId: string;
+  depth: number;
+  direction: "incoming" | "outgoing" | "both";
+  includeHistorical: boolean;
+  includeInferred: boolean;
+  truncated: boolean;
+  nodes: AtlasGraphNode[];
+  edges: AtlasGraphEdge[];
+}
+
+export interface AtlasArchitectureSnapshot {
+  id: string;
+  workspaceId: string;
+  repositoryId: string;
+  sourceRevision: string;
+  summary: string;
+  moduleMap: Record<string, unknown>;
+  diagram: string;
+  generatedAt: string;
+}
+
+export interface AtlasIntelligenceSearchResult {
+  id: string;
+  score: number;
+  lexicalMatches: number;
+  reason: string;
+  excerpt: string;
+  graphContext?: {
+    seedEntityId: string;
+    relatedEntityId: string;
+    kind: string;
+    classification: "observed" | "inferred";
+    provenance: string;
+    confidence: number;
+  };
+  citation: {
+    repositoryId: string;
+    filePath: string;
+    lineStart?: number;
+    lineEnd?: number;
+    symbol?: string;
+    provenance: "indexed_source_chunk";
+  };
+}
+
+export interface AtlasIntelligenceSearchResponse {
+  query: string;
+  results: AtlasIntelligenceSearchResult[];
+  lowConfidence: boolean;
+}
+
 export interface AtlasGitHubConnector {
   id: string;
   status: "pending" | "active" | "failed" | "revoked";
@@ -69,6 +150,18 @@ export interface AtlasSyncJob {
     callsDetected?: number;
     relationshipsExtracted?: number;
     languages?: string[];
+    history?: {
+      baseRevision: string | null;
+      headRevision: string;
+      status: string;
+      totalCommits: number;
+      commitsCaptured: number;
+      filesCaptured: number;
+      commitsPersisted: number;
+      filesPersisted: number;
+      commitsTruncated: boolean;
+      filesTruncated: boolean;
+    };
     typeChecker?: {
       filesAnalyzed: number;
       importsResolved: number;

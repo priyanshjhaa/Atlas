@@ -1,149 +1,431 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { ArrowRight, BookOpen, Check, FileCode2, Filter, Network, Plus, RefreshCw, Search, ShieldCheck } from "lucide-react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import {
+  ArrowRight,
+  FileCode2,
+  Filter,
+  Network,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+} from "lucide-react";
 import { AtlasGraph } from "@/components/atlas-graph";
 import { ConfidenceBadge } from "@/components/brand";
 import { PageHeader } from "@/components/app/shared";
-import { searchGroups } from "@/lib/mock-data";
+import type {
+  AtlasArchitectureSnapshot,
+  AtlasGraph as AtlasGraphData,
+  AtlasIntelligenceSearchResponse,
+  AtlasRepository,
+  AtlasWorkspace,
+} from "@/lib/api-types";
 
-const graphFilters = ["All entities", "Services", "Code", "Data", "Knowledge"];
+function readable(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
 
-export function GraphPage({ architecture = false }: { architecture?: boolean }) {
-  const [filter, setFilter] = useState("All entities");
+export function GraphPage({
+  workspace,
+  repositories,
+  graph,
+  architectureSnapshot = null,
+  architecture = false,
+}: {
+  workspace: AtlasWorkspace;
+  repositories: AtlasRepository[];
+  graph: AtlasGraphData | null;
+  architectureSnapshot?: AtlasArchitectureSnapshot | null;
+  architecture?: boolean;
+}) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
+  const [entityType, setEntityType] = useState("all");
+  const [classification, setClassification] = useState<
+    "all" | "observed" | "historical" | "inferred"
+  >("all");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [confidence, setConfidence] = useState("Observed");
-  const [saved, setSaved] = useState(false);
-  const [updatedLabel, setUpdatedLabel] = useState("Updated 4m ago");
+  const [isRefreshing, startRefresh] = useTransition();
 
-  function refresh() {
-    setUpdatedLabel("Updated just now");
-  }
+  const entityTypes = useMemo(
+    () => [
+      "all",
+      ...new Set((graph?.nodes ?? []).map((node) => node.entityType)),
+    ],
+    [graph],
+  );
+  const visibleGraph = useMemo(() => {
+    if (!graph) return null;
+    const normalized = query.trim().toLowerCase();
+    const nodes = graph.nodes.filter(
+      (node) =>
+        (entityType === "all" || node.entityType === entityType) &&
+        (!normalized ||
+          `${node.name} ${node.path ?? ""} ${node.repositoryOwner}/${node.repositoryName}`
+            .toLowerCase()
+            .includes(normalized)),
+    );
+    const nodeIds = new Set(nodes.map((node) => node.id));
+    return {
+      ...graph,
+      nodes,
+      edges: graph.edges.filter(
+        (edge) =>
+          nodeIds.has(edge.sourceEntityId) &&
+          nodeIds.has(edge.targetEntityId) &&
+          (classification === "all" ||
+            edge.classification === classification),
+      ),
+    };
+  }, [classification, entityType, graph, query]);
+  const selectedNode =
+    visibleGraph?.nodes.find((node) => node.id === graph?.rootEntityId) ??
+    visibleGraph?.nodes[0] ??
+    null;
+  const selectedRelationships = selectedNode
+    ? (visibleGraph?.edges ?? []).filter(
+        (edge) =>
+          edge.sourceEntityId === selectedNode.id ||
+          edge.targetEntityId === selectedNode.id,
+      )
+    : [];
+  const lastGenerated = architectureSnapshot?.generatedAt
+    ? new Intl.DateTimeFormat("en", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date(architectureSnapshot.generatedAt))
+    : null;
 
   return (
     <>
       <PageHeader
-        eyebrow={architecture ? "System architecture" : "Engineering knowledge graph"}
-        title={architecture ? "How Northstar fits together" : "Explore every relationship"}
-        detail={architecture ? "A live, source-backed view of services, data stores, queues, and system boundaries." : "Navigate repositories, code, ownership, history, and documentation as one connected system."}
+        eyebrow={
+          architecture
+            ? "System architecture"
+            : "Engineering knowledge graph"
+        }
+        title={
+          architecture
+            ? `How ${workspace.name} fits together`
+            : `Explore ${workspace.name}`
+        }
+        detail={
+          architectureSnapshot?.summary ??
+          (graph
+            ? `${graph.nodes.length} indexed entities and ${graph.edges.length} relationships from synchronized source.`
+            : "Synchronize a repository to build a source-backed engineering graph.")
+        }
         action={
-          <div className="view-actions">
-            <button className="button button--ghost" onClick={refresh}><RefreshCw size={14} /> {updatedLabel}</button>
-            <button className="button button--primary" onClick={() => setSaved((current) => !current)}>
-              {saved ? <Check size={14} /> : <Plus size={14} />} {saved ? "View saved" : "Save view"}
-            </button>
-          </div>
+          <button
+            className="button button--ghost"
+            onClick={() => startRefresh(() => router.refresh())}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={isRefreshing ? "spin" : ""} size={14} />
+            {isRefreshing
+              ? "Refreshing…"
+              : lastGenerated
+                ? `Generated ${lastGenerated}`
+                : "Refresh"}
+          </button>
         }
       />
 
       <div className="graph-toolbar">
         <label className="search-input">
           <Search size={15} />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Find graph entity" placeholder="Find a service, symbol, endpoint…" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            aria-label="Find graph entity"
+            placeholder="Find an indexed repository, package, file, or symbol…"
+          />
         </label>
         <div className="filter-pills" aria-label="Graph entity filters">
-          {graphFilters.map((item) => <button className={filter === item ? "active" : ""} onClick={() => setFilter(item)} key={item}>{item}</button>)}
+          {entityTypes.map((item) => (
+            <button
+              className={entityType === item ? "active" : ""}
+              onClick={() => setEntityType(item)}
+              key={item}
+            >
+              {item === "all" ? "All entities" : readable(item)}
+            </button>
+          ))}
         </div>
-        <button className="button button--ghost" onClick={() => setFiltersOpen((current) => !current)} aria-expanded={filtersOpen}><Filter size={14} /> Filters</button>
+        <button
+          className="button button--ghost"
+          onClick={() => setFiltersOpen((current) => !current)}
+          aria-expanded={filtersOpen}
+        >
+          <Filter size={14} /> Relationships
+        </button>
       </div>
 
       {filtersOpen && (
         <div className="inline-filter-panel">
-          <span>Relationship confidence</span>
-          {["Observed", "Historical", "Inferred"].map((item) => <button className={confidence === item ? "active" : ""} onClick={() => setConfidence(item)} key={item}>{item}</button>)}
+          <span>Relationship classification</span>
+          {(["all", "observed", "historical", "inferred"] as const).map(
+            (item) => (
+              <button
+                className={classification === item ? "active" : ""}
+                onClick={() => setClassification(item)}
+                key={item}
+              >
+                {readable(item)}
+              </button>
+            ),
+          )}
         </div>
       )}
 
-      {(query || filter !== "All entities" || saved) && (
-        <p className="action-notice" aria-live="polite">
-          {saved ? "This view is saved locally for the frontend prototype. " : ""}
-          Showing {filter.toLowerCase()}{query ? ` matching “${query}”` : ""} with {confidence.toLowerCase()} confidence.
-        </p>
-      )}
-
       <div className="graph-layout">
-        <section className="panel graph-canvas"><AtlasGraph /></section>
+        <section className="panel graph-canvas">
+          <AtlasGraph
+            graph={visibleGraph}
+            repositories={repositories.filter(
+              (repository) => repository.isActive,
+            )}
+          />
+        </section>
         <aside className="panel entity-inspector">
-          <div className="entity-icon"><ShieldCheck size={20} /></div>
-          <span>Service · observed</span>
-          <h2>Identity Service</h2>
-          <p>Owns user authentication, rotating sessions, and account recovery.</p>
-          <div className="entity-meta">
-            <div><span>Repository</span><b>identity-service</b></div>
-            <div><span>Owner</span><b>Identity team</b></div>
-            <div><span>Last indexed</span><b>{updatedLabel.replace("Updated ", "")}</b></div>
-          </div>
-          <h3>Key relationships</h3>
-          <div className="relationship-list">
-            <div><span>called by</span><b>API Gateway</b></div>
-            <div><span>stores in</span><b>Session Redis</b></div>
-            <div><span>exports</span><b>12 endpoints</b></div>
-            <div><span>documented by</span><b>ADR-024</b></div>
-          </div>
-          <Link href="/app/impact/new" className="button button--primary">Analyze a change here <ArrowRight size={15} /></Link>
+          {selectedNode ? (
+            <>
+              <div className="entity-icon">
+                <ShieldCheck size={20} />
+              </div>
+              <span>
+                {readable(selectedNode.entityType)} ·{" "}
+                {selectedNode.isCurrent ? "current" : "historical"}
+              </span>
+              <h2>{selectedNode.name}</h2>
+              <p>
+                {selectedNode.path ??
+                  `${selectedNode.repositoryOwner}/${selectedNode.repositoryName}`}
+              </p>
+              <div className="entity-meta">
+                <div>
+                  <span>Repository</span>
+                  <b>
+                    {selectedNode.repositoryOwner}/
+                    {selectedNode.repositoryName}
+                  </b>
+                </div>
+                <div>
+                  <span>Revision</span>
+                  <b>{selectedNode.sourceRevision.slice(0, 12)}</b>
+                </div>
+                <div>
+                  <span>Relationships</span>
+                  <b>{selectedRelationships.length}</b>
+                </div>
+              </div>
+              <h3>Connected relationships</h3>
+              <div className="relationship-list">
+                {selectedRelationships.slice(0, 6).map((edge) => (
+                  <div key={edge.id}>
+                    <span>{readable(edge.kind)}</span>
+                    <b>{readable(edge.classification)}</b>
+                  </div>
+                ))}
+                {!selectedRelationships.length && (
+                  <p>No relationships match the current filters.</p>
+                )}
+              </div>
+              <Link
+                href="/app/impact/new"
+                className="button button--primary"
+              >
+                Analyze a change here <ArrowRight size={15} />
+              </Link>
+            </>
+          ) : (
+            <div className="empty-state">
+              <Network size={20} />
+              <h2>No matching graph entity</h2>
+              <p>Change the filters or synchronize an active repository.</p>
+            </div>
+          )}
         </aside>
       </div>
     </>
   );
 }
 
-export function SearchPage() {
-  const [query, setQuery] = useState("authentication refresh tokens");
-  const [category, setCategory] = useState("All");
-  const [filtersOpen, setFiltersOpen] = useState(false);
+export function SearchPage({
+  workspace,
+  repositories,
+}: {
+  workspace: AtlasWorkspace;
+  repositories: AtlasRepository[];
+}) {
+  const searchableRepositories = repositories.filter(
+    (repository) => repository.isActive && repository.lastSyncedAt,
+  );
+  const [repositoryId, setRepositoryId] = useState(
+    searchableRepositories[0]?.id ?? "",
+  );
+  const [query, setQuery] = useState("");
+  const [response, setResponse] =
+    useState<AtlasIntelligenceSearchResponse | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [error, setError] = useState("");
+  const repositoryById = new Map(
+    repositories.map((repository) => [repository.id, repository]),
+  );
 
-  const groups = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    return searchGroups
-      .filter((group) => category === "All" || group.label === category)
-      .map((group) => ({
-        ...group,
-        items: group.items.filter((item) => !normalized || `${item.title} ${item.detail} ${item.meta}`.toLowerCase().includes(normalized)),
-      }))
-      .filter((group) => group.items.length > 0);
-  }, [category, query]);
-
-  const resultCount = groups.reduce((total, group) => total + group.items.length, 0);
+  async function search() {
+    if (!repositoryId || query.trim().length < 2) return;
+    setSearching(true);
+    setError("");
+    const result = await fetch("/api/intelligence/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: workspace.id,
+        repositoryId,
+        query: query.trim(),
+      }),
+    });
+    const body = (await result.json()) as
+      | AtlasIntelligenceSearchResponse
+      | { message?: string };
+    if (result.ok && "results" in body) {
+      setResponse(body);
+    } else {
+      setResponse(null);
+      setError(
+        "message" in body && body.message
+          ? body.message
+          : "Atlas could not search this repository.",
+      );
+    }
+    setSearching(false);
+  }
 
   return (
     <>
-      <PageHeader eyebrow="Engineering search" title="Find the system, not just the file" detail="Search across code, architecture, pull requests, and technical decisions." />
-      <label className="search-hero"><Search size={20} /><input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Engineering search" /><kbd>⌘ K</kbd></label>
-      {filtersOpen && (
-        <div className="inline-filter-panel search-filter-panel">
-          {["All", ...searchGroups.map((group) => group.label)].map((item) => <button className={category === item ? "active" : ""} onClick={() => setCategory(item)} key={item}>{item}</button>)}
-        </div>
+      <PageHeader
+        eyebrow="Engineering search"
+        title={`Search ${workspace.name}`}
+        detail="Search synchronized source, symbols, and graph-connected code with repository-scoped citations."
+      />
+      <div className="search-hero">
+        <Search size={20} />
+        <select
+          value={repositoryId}
+          onChange={(event) => setRepositoryId(event.target.value)}
+          aria-label="Repository to search"
+        >
+          {searchableRepositories.map((repository) => (
+            <option value={repository.id} key={repository.id}>
+              {repository.owner}/{repository.name}
+            </option>
+          ))}
+        </select>
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") void search();
+          }}
+          aria-label="Engineering search"
+          placeholder={
+            searchableRepositories.length
+              ? "Search indexed source…"
+              : "Synchronize a repository to search"
+          }
+          disabled={!searchableRepositories.length}
+        />
+        <button
+          className="button button--primary"
+          onClick={() => void search()}
+          disabled={
+            searching || !repositoryId || query.trim().length < 2
+          }
+        >
+          {searching ? "Searching…" : "Search"}
+        </button>
+      </div>
+      {error && (
+        <p className="action-notice" role="alert">
+          {error}
+        </p>
       )}
       <div className="search-layout">
         <main>
           <div className="search-summary">
-            <span>{resultCount} results for “{query}”</span>
-            <button onClick={() => setFiltersOpen((current) => !current)} aria-expanded={filtersOpen}><Filter size={14} /> Filter</button>
+            <span>
+              {response
+                ? `${response.results.length} results for “${response.query}”`
+                : "Run a search against synchronized repository intelligence"}
+            </span>
           </div>
-          {groups.map((group) => (
-            <section className="search-group" key={group.label}>
-              <h2>{group.label}<span>{group.items.length}</span></h2>
-              {group.items.map((item) => (
-                <Link href={item.meta.includes("Notion") ? "/app/sources" : "/app/graph"} key={item.title}>
-                  <div className="search-result-icon">{group.label === "Code" ? <FileCode2 size={17} /> : group.label === "Knowledge" ? <BookOpen size={17} /> : <Network size={17} />}</div>
-                  <div><span>{item.meta}</span><h3>{item.title}</h3><p>{item.detail}</p></div>
-                  <ArrowRight size={15} />
-                </Link>
-              ))}
-            </section>
-          ))}
-          {resultCount === 0 && <div className="empty-state"><Search size={20} /><h2>No matching context</h2><p>Try a broader system, service, or decision name.</p></div>}
+          {response?.results.map((item) => {
+            const repository = repositoryById.get(
+              item.citation.repositoryId,
+            );
+            return (
+              <Link href="/app/graph" key={item.id}>
+                <div className="search-result-icon">
+                  <FileCode2 size={17} />
+                </div>
+                <div>
+                  <span>
+                    {repository
+                      ? `${repository.owner}/${repository.name} · `
+                      : ""}
+                    {item.citation.filePath}
+                    {item.citation.lineStart
+                      ? `:${item.citation.lineStart}`
+                      : ""}
+                  </span>
+                  <h3>{item.citation.symbol ?? item.citation.filePath}</h3>
+                  <p>{item.reason}</p>
+                </div>
+                <ArrowRight size={15} />
+              </Link>
+            );
+          })}
+          {response && !response.results.length && (
+            <div className="empty-state">
+              <Search size={20} />
+              <h2>No matching indexed context</h2>
+              <p>Try a broader file, symbol, package, or system term.</p>
+            </div>
+          )}
         </main>
         <aside className="panel search-aside">
-          <span>Atlas understood this as</span>
-          <h3>{query || "Everything"}</h3>
-          <p>Prioritizing services and code paths related to the current search.</p>
-          <div><ConfidenceBadge type="observed" /> <span>Structural results</span></div>
-          <div><ConfidenceBadge type="historical" /> <span>Historical results</span></div>
-          <div><ConfidenceBadge type="inferred" /> <span>Inferred results</span></div>
-          <Link href="/app/impact/new" className="button button--primary">Analyze a related change</Link>
+          <span>Search scope</span>
+          <h3>
+            {repositoryId
+              ? repositoryById.get(repositoryId)?.name
+              : "No synchronized repository"}
+          </h3>
+          <p>
+            {response
+              ? response.lowConfidence
+                ? "Atlas found only low-confidence matches."
+                : "Results are ranked from indexed source and current graph context."
+              : "Select a synchronized repository and enter a query."}
+          </p>
+          <div>
+            <ConfidenceBadge type="observed" />{" "}
+            <span>Indexed source</span>
+          </div>
+          <div>
+            <ConfidenceBadge type="inferred" />{" "}
+            <span>Graph-expanded context</span>
+          </div>
+          <Link
+            href="/app/impact/new"
+            className="button button--primary"
+          >
+            Analyze a related change
+          </Link>
         </aside>
       </div>
     </>

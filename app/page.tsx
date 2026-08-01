@@ -10,7 +10,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { AtlasMark, ConfidenceBadge } from "../components/brand";
-import { AtlasGraph } from "../components/atlas-graph";
+import { MarketingGraph } from "../components/marketing-graph";
 import { MarketingNav } from "../components/marketing/marketing-nav";
 
 export const metadata = {
@@ -78,7 +78,7 @@ export default function Home() {
         </div>
         <div className="story-visual graph-window">
           <div className="window-title"><span>Northstar Labs</span><small>Live architecture · updated 4m ago</small></div>
-          <AtlasGraph compact />
+          <MarketingGraph />
         </div>
       </section>
 

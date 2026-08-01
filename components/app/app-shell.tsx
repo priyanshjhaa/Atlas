@@ -38,6 +38,17 @@ export function AppShell({ workspaceData, children }: { workspaceData: AtlasWork
   const [switchingWorkspace, setSwitchingWorkspace] = useState(false);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(workspaceData.activeWorkspace.id);
   const activeWorkspace = me.workspaces.find((item) => item.id === activeWorkspaceId) ?? workspaceData.activeWorkspace;
+  const activeRepositories = workspaceData.repositories.filter(
+    (repository) => repository.isActive,
+  );
+  const synchronizedRepositories = activeRepositories.filter(
+    (repository) => repository.lastSyncedAt,
+  );
+  const indexCoverage = activeRepositories.length
+    ? Math.round(
+        (synchronizedRepositories.length / activeRepositories.length) * 100,
+      )
+    : 0;
 
   async function signOut() {
     setSigningOut(true);
@@ -77,11 +88,11 @@ export function AppShell({ workspaceData, children }: { workspaceData: AtlasWork
         </div>
         <nav aria-label="Workspace">{navItems.map((item) => { const Icon = item.icon; const active = item.href === "/app" ? pathname === "/app" : pathname.startsWith(item.href.replace("/new", "")); return <Link className={active ? "active" : ""} href={item.href} key={item.href} onClick={() => setMobileOpen(false)}><Icon size={17} /><span>{item.label}</span>{item.label === "Impact analysis" && <i>NEW</i>}</Link>; })}</nav>
         <nav className="sidebar-utility" aria-label="Workspace utilities">{utilityItems.map((item) => { const Icon = item.icon; return <Link className={pathname.startsWith(item.href) ? "active" : ""} href={item.href} key={item.href} onClick={() => setMobileOpen(false)}><Icon size={17} /><span>{item.label}</span></Link>; })}</nav>
-        <div className="index-card"><div><span>Index coverage</span><b>96%</b></div><div className="mini-progress"><i style={{ width: "96%" }} /></div><p><StatusDot /> Preview intelligence</p></div>
+        <div className="index-card"><div><span>Index coverage</span><b>{indexCoverage}%</b></div><div className="mini-progress"><i style={{ width: `${indexCoverage}%` }} /></div><p><StatusDot state={indexCoverage === 100 ? "ready" : indexCoverage > 0 ? "running" : "warning"} /> {synchronizedRepositories.length} of {activeRepositories.length} synchronized</p></div>
         <div className="sidebar-user"><i>{initials(me.user.name)}</i><div><b>{me.user.name}</b><span>{me.user.email}</span></div><button onClick={signOut} disabled={signingOut} aria-label="Sign out"><LogOut size={15} /></button></div>
       </aside>
       {mobileOpen && <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
-      <main className="app-main"><div className="app-topbar"><Link href="/app/search" className="global-search"><Search size={15} /><span>Search {activeWorkspace.name}…</span><kbd>⌘ K</kbd></Link><div><Link href="/app/activity" className="topbar-icon" aria-label="Notifications"><Bell size={17} /><i /></Link><span className="freshness"><StatusDot /> Graph current</span></div></div><div className="page-content">{children}</div></main>
+      <main className="app-main"><div className="app-topbar"><Link href="/app/search" className="global-search"><Search size={15} /><span>Search {activeWorkspace.name}…</span><kbd>⌘ K</kbd></Link><div><Link href="/app/activity" className="topbar-icon" aria-label="Synchronization activity"><Bell size={17} />{indexCoverage < 100 && <i />}</Link><span className="freshness"><StatusDot state={indexCoverage === 100 ? "ready" : indexCoverage > 0 ? "running" : "warning"} /> {indexCoverage === 100 ? "Graph current" : "Index incomplete"}</span></div></div><div className="page-content">{children}</div></main>
     </div>
   );
 }

@@ -5,6 +5,8 @@ import { cache } from "react";
 import type {
   AtlasMe,
   AtlasGitHubConnector,
+  AtlasGraph,
+  AtlasArchitectureSnapshot,
   AtlasImpactReport,
   AtlasRepository,
   AtlasSyncJob,
@@ -99,6 +101,38 @@ export async function getAtlasImpactReport(
     },
   );
   return readApiResponse<AtlasImpactReport>(response);
+}
+
+export async function getAtlasGraph(
+  workspaceId: string,
+  repositoryId: string,
+): Promise<AtlasGraph> {
+  const response = await fetchAtlasApi(
+    `/v1/workspaces/${workspaceId}/repositories/${repositoryId}/intelligence/graph?depth=3&direction=both&includeInferred=true`,
+    {
+      cache: "no-store",
+      headers: {
+        "X-Atlas-Workspace-Id": workspaceId,
+      },
+    },
+  );
+  return readApiResponse<AtlasGraph>(response);
+}
+
+export async function getAtlasArchitecture(
+  workspaceId: string,
+  repositoryId: string,
+): Promise<AtlasArchitectureSnapshot> {
+  const response = await fetchAtlasApi(
+    `/v1/workspaces/${workspaceId}/repositories/${repositoryId}/intelligence/architecture`,
+    {
+      cache: "no-store",
+      headers: {
+        "X-Atlas-Workspace-Id": workspaceId,
+      },
+    },
+  );
+  return readApiResponse<AtlasArchitectureSnapshot>(response);
 }
 
 export async function retryAtlasImpactExplanation(

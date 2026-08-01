@@ -28,9 +28,8 @@ export function SourcesPage({
   repositories: AtlasRepository[];
   workspace: AtlasWorkspace;
 }) {
-  const [notionConnected, setNotionConnected] = useState(true);
   const [query, setQuery] = useState("");
-  const [dialog, setDialog] = useState<"connect" | "github" | "notion" | null>(null);
+  const [dialog, setDialog] = useState<"connect" | "github" | null>(null);
   const [notice, setNotice] = useState("");
 
   const visibleRepositories = useMemo(
@@ -41,17 +40,18 @@ export function SourcesPage({
     (connector) => connector.status === "active",
   );
   const canManageGitHub = ["owner", "admin"].includes(workspace.role);
+  const synchronizedRepositories = repositories.filter(
+    (repository) => repository.lastSyncedAt,
+  );
+  const lastSynchronizedAt = synchronizedRepositories
+    .map((repository) => repository.lastSyncedAt as string)
+    .sort()
+    .at(-1) ?? null;
 
-  function connect(source: "github" | "notion") {
-    if (source === "github") {
-      window.location.assign(
-        `/api/github/install?workspaceId=${encodeURIComponent(workspace.id)}`,
-      );
-      return;
-    }
-    setNotionConnected(true);
-    setNotice("Notion is ready for preview configuration.");
-    setDialog("notion");
+  function connectGitHub() {
+    window.location.assign(
+      `/api/github/install?workspaceId=${encodeURIComponent(workspace.id)}`,
+    );
   }
 
   return (
@@ -64,15 +64,15 @@ export function SourcesPage({
           <div className="connector-top"><i><GitBranch size={22} /></i><ConfidenceBadge type="observed" /></div>
           <h2>GitHub</h2>
           <p>Code, pull requests, commits, authors, and reviews from {workspace.name}.</p>
-          <div className="connector-stats"><div><b>{repositories.length}</b><span>repositories</span></div><div><b>—</b><span>pull requests</span></div><div><b>—</b><span>last sync</span></div></div>
-          <div className="connector-footer"><StatusDot state={githubConnector ? "ready" : "running"} /><b>{githubConnector ? `Connected to ${githubConnector.configuration.account ?? "GitHub"}` : "Not connected"}</b><button onClick={() => githubConnector ? setDialog("github") : connect("github")} disabled={!canManageGitHub}>{githubConnector ? "Manage" : "Connect"}</button></div>
+          <div className="connector-stats"><div><b>{repositories.length}</b><span>repositories</span></div><div><b>{synchronizedRepositories.length}</b><span>synchronized</span></div><div><b>{lastSynchronizedAt ? formatLastSync(lastSynchronizedAt) : "—"}</b><span>last sync</span></div></div>
+          <div className="connector-footer"><StatusDot state={githubConnector ? "ready" : "warning"} /><b>{githubConnector ? `Connected to ${githubConnector.configuration.account ?? "GitHub"}` : "Not connected"}</b><button onClick={() => githubConnector ? setDialog("github") : connectGitHub()} disabled={!canManageGitHub}>{githubConnector ? "Manage" : "Connect"}</button></div>
         </article>
         <article className="connector-card">
           <div className="connector-top"><i className="notion-icon">N</i><ConfidenceBadge type="observed" /></div>
           <h2>Notion</h2>
           <p>Architecture decisions, runbooks, and technical design documents.</p>
-          <div className="connector-stats"><div><b>86</b><span>pages</span></div><div><b>6</b><span>databases</span></div><div><b>12m</b><span>last sync</span></div></div>
-          <div className="connector-footer"><label><input type="checkbox" checked={notionConnected} onChange={(event) => setNotionConnected(event.target.checked)} /><span /></label><b>{notionConnected ? "Connected" : "Paused"}</b><button onClick={() => setDialog("notion")}>Manage</button></div>
+          <div className="connector-stats"><div><b>—</b><span>pages</span></div><div><b>—</b><span>databases</span></div><div><b>—</b><span>last sync</span></div></div>
+          <div className="connector-footer"><StatusDot state="warning" /><b>Not connected</b><button disabled>Coming next</button></div>
         </article>
         <article className="connector-card connector-card--add">
           <Plus size={23} /><h2>Add another source</h2><p>Operational context is coming after the Atlas pilot.</p>
@@ -97,13 +97,13 @@ export function SourcesPage({
             {dialog === "connect" ? (
               <>
                 <span>Connect context</span><h2>Choose a source</h2><p>GitHub uses a dedicated App installation so you control exactly which repositories Atlas can access.</p>
-                <div className="dialog-actions"><button className="button button--primary" onClick={() => connect("github")} disabled={!canManageGitHub}><GitBranch size={15} /> {githubConnector ? "Update GitHub access" : "Connect GitHub"}</button><button className="button button--ghost" onClick={() => connect("notion")}>N · Notion preview</button></div>
+                <div className="dialog-actions"><button className="button button--primary" onClick={connectGitHub} disabled={!canManageGitHub}><GitBranch size={15} /> {githubConnector ? "Update GitHub access" : "Connect GitHub"}</button><button className="button button--ghost" disabled>N · Notion coming next</button></div>
               </>
             ) : (
               <>
-                <span>Source settings</span><h2>{dialog === "github" ? "GitHub" : "Notion"}</h2><p>{dialog === "github" ? `Atlas is connected to ${githubConnector?.configuration.account ?? "this GitHub installation"}. Repository access is managed on GitHub.` : "Notion remains a frontend preview and will be connected in a later phase."}</p>
+                <span>Source settings</span><h2>GitHub</h2><p>{`Atlas is connected to ${githubConnector?.configuration.account ?? "this GitHub installation"}. Repository access is managed on GitHub.`}</p>
                 <label className="field"><span>Sync cadence</span><select defaultValue="automatic"><option value="automatic">Automatic</option><option value="hourly">Every hour</option><option value="manual">Manual only</option></select></label>
-                {dialog === "github" ? <button className="button button--primary" onClick={() => connect("github")} disabled={!canManageGitHub}>Manage repositories on GitHub</button> : <button className="button button--primary" onClick={() => { setNotice("Notion source preferences saved locally."); setDialog(null); }}>Save preview preferences</button>}
+                <button className="button button--primary" onClick={connectGitHub} disabled={!canManageGitHub}>Manage repositories on GitHub</button>
               </>
             )}
           </section>
@@ -115,6 +115,7 @@ export function SourcesPage({
 
 const syncStages = [
   "fetching_source_revision",
+  "fetching_repository_history",
   "downloading_repository_archive",
   "discovering_source_files",
   "parsing_and_embedding",
@@ -247,7 +248,7 @@ export function ActivityPage({
         <section className="panel active-sync">
           <div className="panel-heading"><div><span>{activeJob ? "Current synchronization" : "Queue status"}</span><h2>{activeJob ? `${activeJob.repositoryOwner}/${activeJob.repositoryName}` : "No active jobs"}</h2></div>{activeJob && <span className="running-badge"><RefreshCw className={activeJob.status === "running" ? "spin" : ""} size={13} /> {activeJob.cancelRequestedAt ? "Cancelling" : syncStageLabel(activeJob.status)}</span>}</div>
           <div className="sync-progress"><div><span>{activeJob ? syncStageLabel(activeJob.stage) : "Ready for the next repository update"}</span><b>{activeJob?.progress ?? 0}%</b></div><div className="progress-track"><i style={{ width: `${activeJob?.progress ?? 0}%` }} /></div><p>{activeJob ? `Attempt ${Math.max(activeJob.attempt, 1)} · queued ${syncTime(activeJob.createdAt)}` : "Synchronization jobs will appear here as soon as they are queued."}</p></div>
-          <div className="sync-stages">{syncStages.map((step, index) => { const progress = activeJob?.progress ?? -1; const currentIndex = progress >= 90 ? 4 : progress >= 52 ? 3 : progress >= 32 ? 2 : progress >= 12 ? 1 : progress >= 0 ? 0 : -1; return <div className={index < currentIndex ? "done" : index === currentIndex ? "current" : ""} key={step}><i>{index < currentIndex ? <Check size={12} /> : index + 1}</i><span>{syncStageLabel(step)}</span></div>; })}</div>
+          <div className="sync-stages">{syncStages.map((step, index) => { const progress = activeJob?.progress ?? -1; const currentIndex = progress >= 90 ? 5 : progress >= 52 ? 4 : progress >= 32 ? 3 : progress >= 15 ? 2 : progress >= 8 ? 1 : progress >= 0 ? 0 : -1; return <div className={index < currentIndex ? "done" : index === currentIndex ? "current" : ""} key={step}><i>{index < currentIndex ? <Check size={12} /> : index + 1}</i><span>{syncStageLabel(step)}</span></div>; })}</div>
           {activeJob && canSynchronize && <div className="settings-actions"><button className="button button--ghost" onClick={() => void jobAction(activeJob.id, "cancel")} disabled={Boolean(activeJob.cancelRequestedAt)}>Cancel synchronization</button></div>}
         </section>
         <section className="panel activity-stats"><div><span>Successful syncs</span><strong>{successfulJobs}</strong><p>{jobs.length ? `${Math.round((successfulJobs / jobs.length) * 100)}% of recent jobs` : "No jobs yet"}</p></div><div><span>Median duration</span><strong>{medianDuration}s</strong><p>across completed jobs</p></div><div><span>No-change syncs</span><strong>{noChangeJobs}</strong><p>work safely skipped</p></div></section>
@@ -261,27 +262,21 @@ export function ActivityPage({
   );
 }
 
-const settingsSections = ["Workspace", "Members", "Access & roles", "Notifications", "Data & privacy"];
-
-export function SettingsPage() {
-  const [section, setSection] = useState("Workspace");
-  const [saved, setSaved] = useState(false);
-
+export function SettingsPage({
+  workspace,
+}: {
+  workspace: AtlasWorkspace;
+}) {
   return (
     <>
-      <PageHeader eyebrow="Workspace administration" title="Settings" detail="Manage Northstar Labs, its members, access, and Atlas preferences." />
-      {saved && <p className="action-notice" aria-live="polite">{section} settings saved locally.</p>}
+      <PageHeader eyebrow="Workspace administration" title="Settings" detail={`Review the live configuration and access level for ${workspace.name}.`} />
       <div className="settings-layout">
-        <aside>{settingsSections.map((item) => <button className={section === item ? "active" : ""} onClick={() => { setSection(item); setSaved(false); }} key={item}>{item === "Members" ? <Users size={15} /> : item === "Access & roles" ? <ShieldCheck size={15} /> : item === "Notifications" ? <Bell size={15} /> : item === "Data & privacy" ? <Database size={15} /> : <Settings size={15} />}{item}</button>)}</aside>
+        <aside><button className="active"><Settings size={15} />Workspace</button><button disabled><Users size={15} />Members</button><button disabled><ShieldCheck size={15} />Access & roles</button><button disabled><Bell size={15} />Notifications</button><button disabled><Database size={15} />Data & privacy</button></aside>
         <main className="panel settings-panel">
-          <span>Configuration</span><h2>{section}</h2><p>Configure how this part of the Atlas workspace behaves for your engineering team.</p>
+          <span>Live configuration</span><h2>{workspace.name}</h2><p>Workspace values are loaded from Atlas rather than frontend fixtures.</p>
           <div className="settings-form">
-            <label className="field"><span>{section} name</span><input defaultValue={section === "Workspace" ? "Northstar Labs" : `${section} preferences`} /></label>
-            <label className="field"><span>Default analysis scope</span><select defaultValue="workspace"><option value="workspace">Entire workspace</option><option value="repository">Current repository</option><option value="team">Owned by my team</option></select></label>
-            <div className="setting-toggle"><div><b>Show inferred relationships</b><p>Include low-confidence semantic relationships in graph views.</p></div><label><input type="checkbox" defaultChecked /><span /></label></div>
-            <div className="setting-toggle"><div><b>Weekly intelligence digest</b><p>Send architecture and knowledge changes every Monday.</p></div><label><input type="checkbox" defaultChecked /><span /></label></div>
+            <div className="entity-meta"><div><span>Name</span><b>{workspace.name}</b></div><div><span>Slug</span><b>{workspace.slug}</b></div><div><span>Your role</span><b>{workspace.role}</b></div><div><span>Repositories</span><b>{workspace.repositoryCount}</b></div></div>
           </div>
-          <div className="settings-actions"><button className="button button--primary" onClick={() => setSaved(true)}>Save changes</button></div>
         </main>
       </div>
     </>
