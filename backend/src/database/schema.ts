@@ -29,7 +29,10 @@ export const workspaceRole = pgEnum("workspace_role", [
   "member",
   "viewer",
 ]);
-export const connectorProvider = pgEnum("connector_provider", ["github"]);
+export const connectorProvider = pgEnum("connector_provider", [
+  "github",
+  "notion",
+]);
 export const connectorStatus = pgEnum("connector_status", [
   "pending",
   "active",
@@ -228,6 +231,42 @@ export const repositories = pgTable(
     ),
     index("repositories_workspace_id_idx").on(table.workspaceId),
     index("repositories_connector_id_idx").on(table.connectorId),
+  ],
+);
+
+export const notionResources = pgTable(
+  "notion_resources",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    connectorId: uuid("connector_id")
+      .notNull()
+      .references(() => connectors.id, { onDelete: "cascade" }),
+    providerResourceId: text("provider_resource_id").notNull(),
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    url: text("url"),
+    parentId: text("parent_id"),
+    isSelected: boolean("is_selected").default(true).notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    lastEditedAt: timestamp("last_edited_at", { withTimezone: true }),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("notion_resources_connector_provider_id_unique").on(
+      table.connectorId,
+      table.providerResourceId,
+    ),
+    index("notion_resources_workspace_id_idx").on(table.workspaceId),
+    index("notion_resources_connector_id_idx").on(table.connectorId),
+    index("notion_resources_selected_active_idx").on(
+      table.connectorId,
+      table.isSelected,
+      table.isActive,
+    ),
   ],
 );
 

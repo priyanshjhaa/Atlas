@@ -124,6 +124,27 @@ GitHub installation access tokens are created only when needed and are not
 stored. Installation metadata is encrypted with AES-256-GCM, webhook signatures
 are verified against the raw request body, and delivery IDs are deduplicated.
 
+## Notion connector
+
+Atlas uses a public Notion OAuth connection for documentation access. Create a
+Notion connection with read-content capability and register this redirect URI:
+
+```text
+http://localhost:3000/api/notion/callback
+```
+
+Configure `NOTION_CLIENT_ID`, `NOTION_CLIENT_SECRET`, and
+`NOTION_REDIRECT_URI` in `backend/.env`; configure the client ID and redirect
+URI in the web application's `.env.local`. The existing
+`CONNECTOR_ENCRYPTION_KEY` protects the Notion access and refresh tokens at
+rest.
+
+After authorization, Atlas uses Notion API version `2026-03-11` and performs a
+bounded search of at most 500 pages and data sources shared with the
+connection. Workspace owners and administrators can select the resources Atlas
+will index or disconnect the integration. Disconnecting clears the encrypted
+credential payload and deactivates every discovered Notion resource.
+
 ## Groq explanation budget
 
 Groq's published free-plan limit for `openai/gpt-oss-120b` is currently 8,000

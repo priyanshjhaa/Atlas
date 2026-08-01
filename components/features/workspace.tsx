@@ -6,6 +6,8 @@ import { ConfidenceBadge } from "@/components/brand";
 import { PageHeader, StatusDot } from "@/components/app/shared";
 import type {
   AtlasGitHubConnector,
+  AtlasNotionConnector,
+  AtlasNotionResource,
   AtlasRepository,
   AtlasSyncJob,
   AtlasWorkspace,
@@ -21,16 +23,28 @@ function formatLastSync(value: string | null) {
 
 export function SourcesPage({
   githubConnectors,
+  notionConnectors,
+  notionResources,
   repositories,
   workspace,
 }: {
   githubConnectors: AtlasGitHubConnector[];
+  notionConnectors: AtlasNotionConnector[];
+  notionResources: AtlasNotionResource[];
   repositories: AtlasRepository[];
   workspace: AtlasWorkspace;
 }) {
   const [query, setQuery] = useState("");
-  const [dialog, setDialog] = useState<"connect" | "github" | null>(null);
+  const [dialog, setDialog] = useState<
+    "connect" | "github" | "notion" | null
+  >(null);
   const [notice, setNotice] = useState("");
+  const [selectedNotionResources, setSelectedNotionResources] = useState(
+    notionResources
+      .filter((resource) => resource.isSelected && resource.isActive)
+      .map((resource) => resource.id),
+  );
+  const [savingNotion, setSavingNotion] = useState(false);
 
   const visibleRepositories = useMemo(
     () => repositories.filter((repo) => repo.name.toLowerCase().includes(query.toLowerCase())),
@@ -39,7 +53,26 @@ export function SourcesPage({
   const githubConnector = githubConnectors.find(
     (connector) => connector.status === "active",
   );
+  const notionConnector = notionConnectors.find(
+    (connector) => connector.status === "active",
+  );
   const canManageGitHub = ["owner", "admin"].includes(workspace.role);
+  const canManageNotion = canManageGitHub;
+  const activeNotionResources = notionResources.filter(
+    (resource) => resource.isActive,
+  );
+  const notionPages = activeNotionResources.filter(
+    (resource) => resource.kind === "page",
+  );
+  const notionDataSources = activeNotionResources.filter(
+    (resource) => resource.kind !== "page",
+  );
+  const notionLastEditedAt =
+    activeNotionResources
+      .map((resource) => resource.lastEditedAt)
+      .filter((value): value is string => Boolean(value))
+      .sort()
+      .at(-1) ?? null;
   const synchronizedRepositories = repositories.filter(
     (repository) => repository.lastSyncedAt,
   );
@@ -52,6 +85,45 @@ export function SourcesPage({
     window.location.assign(
       `/api/github/install?workspaceId=${encodeURIComponent(workspace.id)}`,
     );
+  }
+
+  function connectNotion() {
+    window.location.assign(
+      `/api/notion/install?workspaceId=${encodeURIComponent(workspace.id)}`,
+    );
+  }
+
+  async function saveNotionSelection() {
+    setSavingNotion(true);
+    const response = await fetch("/api/notion/resources", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: workspace.id,
+        resourceIds: selectedNotionResources,
+      }),
+    });
+    setNotice(
+      response.ok
+        ? `${selectedNotionResources.length} Notion resource${selectedNotionResources.length === 1 ? "" : "s"} selected for indexing.`
+        : "Atlas could not update the Notion selection.",
+    );
+    setSavingNotion(false);
+    if (response.ok) setDialog(null);
+  }
+
+  async function disconnectNotion() {
+    setSavingNotion(true);
+    const response = await fetch("/api/notion/disconnect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceId: workspace.id }),
+    });
+    if (response.ok) window.location.reload();
+    else {
+      setNotice("Atlas could not disconnect Notion.");
+      setSavingNotion(false);
+    }
   }
 
   return (
@@ -71,8 +143,8 @@ export function SourcesPage({
           <div className="connector-top"><i className="notion-icon">N</i><ConfidenceBadge type="observed" /></div>
           <h2>Notion</h2>
           <p>Architecture decisions, runbooks, and technical design documents.</p>
-          <div className="connector-stats"><div><b>—</b><span>pages</span></div><div><b>—</b><span>databases</span></div><div><b>—</b><span>last sync</span></div></div>
-          <div className="connector-footer"><StatusDot state="warning" /><b>Not connected</b><button disabled>Coming next</button></div>
+          <div className="connector-stats"><div><b>{notionPages.length}</b><span>pages</span></div><div><b>{notionDataSources.length}</b><span>data sources</span></div><div><b>{notionLastEditedAt ? formatLastSync(notionLastEditedAt) : "—"}</b><span>last edited</span></div></div>
+          <div className="connector-footer"><StatusDot state={notionConnector ? "ready" : "warning"} /><b>{notionConnector ? `Connected to ${notionConnector.configuration.workspaceName ?? "Notion"}` : "Not connected"}</b><button onClick={() => notionConnector ? setDialog("notion") : connectNotion()} disabled={!canManageNotion}>{notionConnector ? "Manage" : "Connect"}</button></div>
         </article>
         <article className="connector-card connector-card--add">
           <Plus size={23} /><h2>Add another source</h2><p>Operational context is coming after the Atlas pilot.</p>
@@ -96,14 +168,42 @@ export function SourcesPage({
             <button className="dialog-close" onClick={() => setDialog(null)} aria-label="Close"><X size={17} /></button>
             {dialog === "connect" ? (
               <>
-                <span>Connect context</span><h2>Choose a source</h2><p>GitHub uses a dedicated App installation so you control exactly which repositories Atlas can access.</p>
-                <div className="dialog-actions"><button className="button button--primary" onClick={connectGitHub} disabled={!canManageGitHub}><GitBranch size={15} /> {githubConnector ? "Update GitHub access" : "Connect GitHub"}</button><button className="button button--ghost" disabled>N · Notion coming next</button></div>
+                <span>Connect context</span><h2>Choose a source</h2><p>GitHub and Notion use dedicated authorization flows so you control exactly what Atlas can access.</p>
+                <div className="dialog-actions"><button className="button button--primary" onClick={connectGitHub} disabled={!canManageGitHub}><GitBranch size={15} /> {githubConnector ? "Update GitHub access" : "Connect GitHub"}</button><button className="button button--ghost" onClick={connectNotion} disabled={!canManageNotion}>N · {notionConnector ? "Update Notion access" : "Connect Notion"}</button></div>
               </>
-            ) : (
+            ) : dialog === "github" ? (
               <>
                 <span>Source settings</span><h2>GitHub</h2><p>{`Atlas is connected to ${githubConnector?.configuration.account ?? "this GitHub installation"}. Repository access is managed on GitHub.`}</p>
                 <label className="field"><span>Sync cadence</span><select defaultValue="automatic"><option value="automatic">Automatic</option><option value="hourly">Every hour</option><option value="manual">Manual only</option></select></label>
                 <button className="button button--primary" onClick={connectGitHub} disabled={!canManageGitHub}>Manage repositories on GitHub</button>
+              </>
+            ) : (
+              <>
+                <span>Source settings</span><h2>Notion</h2><p>{`Atlas can access ${activeNotionResources.length} resources in ${notionConnector?.configuration.workspaceName ?? "this Notion workspace"}. Choose which ones should be indexed.`}</p>
+                <div className="notion-resource-list">
+                  {activeNotionResources.map((resource) => (
+                    <label className="notion-resource-option" key={resource.id}>
+                      <input
+                        type="checkbox"
+                        checked={selectedNotionResources.includes(resource.id)}
+                        onChange={(event) =>
+                          setSelectedNotionResources((current) =>
+                            event.target.checked
+                              ? [...current, resource.id]
+                              : current.filter((id) => id !== resource.id),
+                          )
+                        }
+                      />
+                      <span><b>{resource.title}</b><small>{resource.kind.replace("_", " ")}</small></span>
+                    </label>
+                  ))}
+                  {activeNotionResources.length === 0 && <p>No shared Notion pages are visible yet. Share a page with the Atlas connection, then reconnect.</p>}
+                </div>
+                <div className="dialog-actions">
+                  <button className="button button--primary" onClick={saveNotionSelection} disabled={savingNotion || !canManageNotion}>{savingNotion ? "Saving…" : "Save selection"}</button>
+                  <button className="button button--ghost" onClick={connectNotion} disabled={savingNotion || !canManageNotion}>Refresh access</button>
+                  <button className="button button--ghost" onClick={disconnectNotion} disabled={savingNotion || !canManageNotion}>Disconnect</button>
+                </div>
               </>
             )}
           </section>

@@ -99,6 +99,13 @@
       "when": 1785590264671,
       "tag": "20260801131744_stale_bedlam",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1785593330811,
+      "tag": "20260801140850_equal_tempest",
+      "breakpoints": true
     }
   ]
 }

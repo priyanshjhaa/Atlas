@@ -40,6 +40,30 @@ describe("validateEnvironment", () => {
     expect(environment.GITHUB_APP_ID).toBe("12345");
   });
 
+  it("requires complete Notion OAuth and encryption configuration", () => {
+    expect(() =>
+      validateEnvironment({ NOTION_CLIENT_ID: "notion-client" }),
+    ).toThrow("NOTION_CLIENT_ID and NOTION_CLIENT_SECRET");
+    expect(() =>
+      validateEnvironment({
+        NOTION_CLIENT_ID: "notion-client",
+        NOTION_CLIENT_SECRET: "notion-secret",
+      }),
+    ).toThrow("CONNECTOR_ENCRYPTION_KEY is required when Notion is configured");
+
+    expect(
+      validateEnvironment({
+        NOTION_CLIENT_ID: "notion-client",
+        NOTION_CLIENT_SECRET: "notion-secret",
+        NOTION_REDIRECT_URI: "http://localhost:3000/api/notion/callback",
+        CONNECTOR_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64"),
+      }),
+    ).toMatchObject({
+      NOTION_CLIENT_ID: "notion-client",
+      NOTION_REDIRECT_URI: "http://localhost:3000/api/notion/callback",
+    });
+  });
+
   it("requires an API key only for remote embeddings", () => {
     expect(() =>
       validateEnvironment({ EMBEDDINGS_PROVIDER: "openai" }),
