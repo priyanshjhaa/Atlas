@@ -6,7 +6,6 @@ import {
   Code2,
   Database,
   GitPullRequest,
-  History,
   Network,
   Search,
   ShieldCheck,
@@ -18,8 +17,15 @@ import { MarketingNav } from "../components/marketing/marketing-nav";
 
 export const metadata = {
   title: "Atlas — Engineering intelligence for every change",
-  description: "Understand what changes before you change it. Atlas maps code, architecture, history, and decisions across your engineering system.",
+  description: "Atlas connects GitHub code and change history with Notion decisions to map dependencies and explain the impact of every proposed change.",
 };
+
+const capabilities = [
+  { icon: GitPullRequest, index: "01", label: "GitHub", title: "Code and change history", detail: "Repositories, commits, pull requests, and reviews" },
+  { icon: Database, index: "02", label: "Notion", title: "Decisions and documentation", detail: "Selected pages, data sources, specifications, and ADRs" },
+  { icon: Network, index: "03", label: "Map", title: "Connected engineering graph", detail: "Files, symbols, dependencies, and cross-repository paths" },
+  { icon: ShieldCheck, index: "04", label: "Explain", title: "Evidence-backed impact", detail: "Risk level, affected components, unknowns, and next actions" },
+];
 
 export default function Home() {
   return (
@@ -32,20 +38,20 @@ export default function Home() {
         <div className="hero-orbit hero-orbit--two" aria-hidden="true" />
         <div className="hero-copy reveal">
           <div className="hero-system-bar">
-            <span>A LIVING MAP OF YOUR ENGINEERING SYSTEM</span>
-            <span><i /> GENTLY SYNCHRONIZED</span>
+            <span>CODE, CHANGE HISTORY, AND TEAM CONTEXT — ONE MAP</span>
+            <span><i /> GITHUB + NOTION SYNCHRONIZED</span>
           </div>
-          <p className="eyebrow"><Sparkles size={14} /> Engineering intelligence, connected</p>
-          <h1>Understand what changes<br /><span>before you change it.</span></h1>
-          <p className="hero-deck">Atlas maps the code, architecture, history, and decisions behind your systems—so every change begins with the full picture.</p>
+          <p className="eyebrow"><Sparkles size={14} /> Engineering context, connected</p>
+          <h1>Know what a change touches<br /><span>before your team ships it.</span></h1>
+          <p className="hero-deck">Atlas connects GitHub repositories, commits, pull requests, and reviews with the decisions and documentation your team keeps in Notion. It maps how the system fits together, then explains the impact of a proposed change with evidence you can verify.</p>
           <div className="hero-actions">
-            <Link href="/app/impact/new" className="button button--primary">Analyze a change <ArrowRight size={17} /></Link>
+            <Link href="/app/impact/new" className="button button--primary">Run an impact analysis <ArrowRight size={17} /></Link>
             <a href="#story" className="button button--glass">See how it works</a>
           </div>
           <div className="hero-readouts">
-            <span><b>GRAPH</b> Cross-repository relationships</span>
-            <span><b>EVIDENCE</b> Source-backed answers</span>
-            <span><b>SYNC</b> GitHub + Notion context</span>
+            <span><b>GITHUB</b> Code, commits, pull requests, reviews</span>
+            <span><b>NOTION</b> Specs, ADRs, documentation, decisions</span>
+            <span><b>IMPACT</b> Dependencies, risk, evidence, next steps</span>
           </div>
         </div>
 
@@ -56,7 +62,7 @@ export default function Home() {
             <strong>Replace persistent session tokens with rotating refresh tokens.</strong>
           </div>
           <div className="console-progress">
-            <i /><span>Tracing 31 relationships across 5 repositories</span><b>96%</b>
+            <i /><span>Tracing code, GitHub history, and Notion decisions</span><b>96%</b>
           </div>
           <div className="console-results">
             <div><CircleDot size={14} /><span><b>7</b> affected components</span></div>
@@ -64,39 +70,49 @@ export default function Home() {
             <div><Network size={14} /><span><b>2</b> cross-repo paths</span></div>
           </div>
         </div>
-        <a href="#story" className="scroll-cue">Explore the system <span>↓</span></a>
-      </section>
 
-      <section className="intelligence-strip" aria-label="Atlas capabilities">
-        <article><Network size={16} /><span>01 / MAP</span><b>Engineering graph</b><p>Resolve code, packages, APIs, calls, and dependencies across repositories.</p></article>
-        <article><History size={16} /><span>02 / TRACE</span><b>Change history</b><p>Connect commits and pull requests to the architecture they changed.</p></article>
-        <article><Database size={16} /><span>03 / SYNC</span><b>Living context</b><p>Keep GitHub and Notion knowledge synchronized with bounded history.</p></article>
-        <article><ShieldCheck size={16} /><span>04 / EXPLAIN</span><b>Verified impact</b><p>Explain risk with explicit evidence, provenance, and uncertainty.</p></article>
+        <section className="intelligence-marquee" aria-label="Atlas capabilities">
+          <div className="intelligence-marquee__track">
+            {[0, 1].map((group) => (
+              <div className="intelligence-marquee__group" aria-hidden={group === 1 ? true : undefined} key={group}>
+                {capabilities.map(({ icon: Icon, index, label, title, detail }) => (
+                  <article className="intelligence-marquee__item" key={`${group}-${index}`}>
+                    <span className="intelligence-marquee__icon"><Icon size={16} /></span>
+                    <span className="intelligence-marquee__index">{index} / {label}</span>
+                    <b>{title}</b>
+                    <i aria-hidden="true" />
+                    <small>{detail}</small>
+                  </article>
+                ))}
+              </div>
+            ))}
+          </div>
+        </section>
       </section>
 
       <section className="statement" id="story">
-        <p className="section-number">01 — THE PROBLEM</p>
-        <h2>Your codebase is documented everywhere.<br /><span>Understood nowhere.</span></h2>
+        <p className="section-number">01 — WHY ATLAS</p>
+        <h2>The answer is split between your code<br /><span>and the decisions around it.</span></h2>
         <div className="statement-grid">
-          <p>Repository chat can find a file. It cannot tell you why the file exists, which team depends on it, or what happened the last time it changed.</p>
-          <p>Atlas continuously turns repositories, pull requests, and technical decisions into one living model of how your engineering system actually works.</p>
+          <p>GitHub shows what changed and who reviewed it. Notion preserves specifications, architecture decisions, and operational knowledge. Neither source alone shows the complete blast radius of the next change.</p>
+          <p>Atlas synchronizes the sources you approve, connects code to history and documentation, and builds a living model your team can search, explore, and use for source-backed impact analysis.</p>
         </div>
       </section>
 
       <section className="product-story" id="product">
         <div className="story-copy">
-          <p className="section-number">02 — REPOSITORY INTELLIGENCE</p>
-          <h2>From files and folders<br />to systems and flows.</h2>
-          <p>Atlas includes a CodeMap-derived intelligence engine that parses TypeScript, resolves symbols and dependencies, and reconstructs architecture across repositories.</p>
+          <p className="section-number">02 — CONNECTED SOURCES</p>
+          <h2>GitHub shows what changed.<br />Notion explains why.</h2>
+          <p>Atlas indexes selected GitHub repositories and bounded change history, resolves symbols and dependencies across the codebase, and connects that structure to the Notion pages and data sources your workspace chooses to share.</p>
           <ul className="feature-list">
-            <li><Check size={15} /> Cross-repository dependency mapping</li>
-            <li><Check size={15} /> Symbol-level evidence and citations</li>
-            <li><Check size={15} /> Architecture that stays current</li>
+            <li><Check size={15} /> GitHub code, commits, pull requests, authors, and reviews</li>
+            <li><Check size={15} /> Notion specifications, ADRs, documentation, and data sources</li>
+            <li><Check size={15} /> Incremental synchronization with source-level citations</li>
           </ul>
-          <Link href="/app/graph" className="text-link">Explore the engineering graph <ArrowRight size={15} /></Link>
+          <Link href="/app/sources" className="text-link">Explore connected sources <ArrowRight size={15} /></Link>
         </div>
         <div className="story-visual graph-window">
-          <div className="window-title"><span>Atlas demo workspace</span><small><i /> Live architecture · synchronized</small></div>
+          <div className="window-title"><span>GitHub + Notion context graph</span><small><i /> Sources synchronized</small></div>
           <MarketingGraph />
         </div>
       </section>
@@ -104,7 +120,8 @@ export default function Home() {
       <section className="impact-section" id="intelligence">
         <div className="impact-heading">
           <p className="section-number">03 — CHANGE INTELLIGENCE</p>
-          <h2>Think through the blast radius<br />before the first line changes.</h2>
+          <h2>Ask what a change affects.<br />Get a report grounded in your sources.</h2>
+          <p className="impact-heading__copy">Analyze a proposed change or GitHub pull request. Atlas traces the relevant code paths, brings in related commits and reviews, checks connected Notion decisions, and separates observed evidence from historical patterns and unknowns.</p>
         </div>
         <div className="impact-demo">
           <div className="impact-rail">
@@ -132,7 +149,7 @@ export default function Home() {
         <div>
           <p className="section-number">04 — TRUST BY DESIGN</p>
           <h2>Every answer carries<br />its evidence.</h2>
-          <p>Observed facts, historical patterns, and inferred relationships never look the same. Atlas shows exactly where an answer came from—and where the system is uncertain.</p>
+          <p>Every finding links back to synchronized code, GitHub history, or Notion context. Atlas keeps observed facts, historical patterns, and inferred relationships distinct—and calls out the areas your connected sources cannot verify.</p>
         </div>
         <div className="evidence-stack">
           <article className="evidence-card"><span>CODE · OBSERVED</span><b>SessionController.refresh</b><p>identity-service/src/session/session.controller.ts</p><code>return this.sessions.rotate(refreshTokenId);</code></article>
@@ -144,12 +161,12 @@ export default function Home() {
       <section className="closing-cta">
         <span className="cta-glow" aria-hidden="true" />
         <AtlasMark />
-        <h2>Your engineering system<br />already knows the answer.</h2>
-        <p>Atlas connects the evidence so your team can act on it.</p>
-        <Link href="/app" className="button button--primary">Enter the demo workspace <ArrowRight size={17} /></Link>
+        <h2>Bring GitHub and Notion<br />into one engineering map.</h2>
+        <p>Connect the sources your team already uses, then understand the impact before you ship.</p>
+        <Link href="/app" className="button button--primary">Open the workspace <ArrowRight size={17} /></Link>
       </section>
 
-      <footer><AtlasMark /><p>Engineering intelligence for every change.</p><span>© 2026 Atlas</span></footer>
+      <footer><AtlasMark /><p>GitHub code and Notion context, connected for every change.</p><span>© 2026 Atlas</span></footer>
     </main>
   );
 }
