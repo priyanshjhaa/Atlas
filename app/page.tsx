@@ -32,8 +32,8 @@ export default function Home() {
         <div className="hero-orbit hero-orbit--two" aria-hidden="true" />
         <div className="hero-copy reveal">
           <div className="hero-system-bar">
-            <span>ATLAS ENGINEERING INTELLIGENCE</span>
-            <span><i /> SYSTEM ONLINE</span>
+            <span>A LIVING MAP OF YOUR ENGINEERING SYSTEM</span>
+            <span><i /> GENTLY SYNCHRONIZED</span>
           </div>
           <p className="eyebrow"><Sparkles size={14} /> Engineering intelligence, connected</p>
           <h1>Understand what changes<br /><span>before you change it.</span></h1>

@@ -123,8 +123,8 @@ export function DashboardPage({
     <>
       <section className="dashboard-command">
         <div className="command-coordinates">
-          <span>SYS.OVERVIEW / {workspace.slug.toUpperCase()}</span>
-          <span>GRAPH COVERAGE {String(coverage).padStart(3, "0")}%</span>
+          <span>LIVING SYSTEM / {workspace.slug.toUpperCase()}</span>
+          <span>MAP COVERAGE {String(coverage).padStart(3, "0")}%</span>
         </div>
         <PageHeader
           eyebrow="Workspace command center"
@@ -138,8 +138,8 @@ export function DashboardPage({
             </Link>
           }
         />
-        <div className="command-signal" aria-hidden="true">
-          <i /><i /><i /><i /><i /><i /><i /><i /><i /><i /><i /><i />
+        <div className="command-path" aria-hidden="true">
+          <i /><span /><span /><span /><span />
         </div>
       </section>
       <div className="metrics-grid">
