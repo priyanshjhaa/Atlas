@@ -5,6 +5,9 @@ import { cache } from "react";
 import type {
   AtlasMe,
   AtlasGitHubConnector,
+  AtlasNotionConnector,
+  AtlasNotionResource,
+  AtlasNotionSyncJob,
   AtlasGraph,
   AtlasArchitectureSnapshot,
   AtlasImpactReport,
@@ -72,6 +75,32 @@ export async function getAtlasGitHubConnectors(
   return readApiResponse<AtlasGitHubConnector[]>(response);
 }
 
+export async function getAtlasNotionConnectors(
+  workspaceId: string,
+): Promise<AtlasNotionConnector[]> {
+  const response = await fetchAtlasApi(
+    `/v1/workspaces/${workspaceId}/connectors/notion`,
+    {
+      cache: "no-store",
+      headers: { "X-Atlas-Workspace-Id": workspaceId },
+    },
+  );
+  return readApiResponse<AtlasNotionConnector[]>(response);
+}
+
+export async function getAtlasNotionResources(
+  workspaceId: string,
+): Promise<AtlasNotionResource[]> {
+  const response = await fetchAtlasApi(
+    `/v1/workspaces/${workspaceId}/connectors/notion/resources`,
+    {
+      cache: "no-store",
+      headers: { "X-Atlas-Workspace-Id": workspaceId },
+    },
+  );
+  return readApiResponse<AtlasNotionResource[]>(response);
+}
+
 export async function getAtlasSyncJobs(
   workspaceId: string,
 ): Promise<AtlasSyncJob[]> {
@@ -85,6 +114,19 @@ export async function getAtlasSyncJobs(
     },
   );
   return readApiResponse<AtlasSyncJob[]>(response);
+}
+
+export async function getAtlasNotionSyncJobs(
+  workspaceId: string,
+): Promise<AtlasNotionSyncJob[]> {
+  const response = await fetchAtlasApi(
+    `/v1/workspaces/${workspaceId}/connectors/notion/sync-jobs`,
+    {
+      cache: "no-store",
+      headers: { "X-Atlas-Workspace-Id": workspaceId },
+    },
+  );
+  return readApiResponse<AtlasNotionSyncJob[]>(response);
 }
 
 export async function getAtlasImpactReport(

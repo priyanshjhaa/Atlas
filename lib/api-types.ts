@@ -125,6 +125,33 @@ export interface AtlasGitHubConnector {
   updatedAt: string;
 }
 
+export interface AtlasNotionConnector {
+  id: string;
+  status: "pending" | "active" | "failed" | "revoked";
+  configuration: {
+    workspaceId?: string;
+    workspaceName?: string | null;
+    workspaceIcon?: string | null;
+    botId?: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AtlasNotionResource {
+  id: string;
+  connectorId: string;
+  providerResourceId: string;
+  kind: "page" | "data_source" | "database";
+  title: string;
+  url: string | null;
+  parentId: string | null;
+  isSelected: boolean;
+  isActive: boolean;
+  lastEditedAt: string | null;
+  lastSyncedAt: string | null;
+}
+
 export type AtlasSyncJobStatus =
   | "queued"
   | "running"
@@ -189,6 +216,32 @@ export interface AtlasSyncJob {
   errorCode: string | null;
   errorMessage: string | null;
   cancelRequestedAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AtlasNotionSyncJob {
+  id: string;
+  connectorId: string;
+  configuration: {
+    workspaceName?: string | null;
+  };
+  status: AtlasSyncJobStatus;
+  attempt: number;
+  progress: number;
+  stage: string;
+  result: {
+    outcome?: "updated" | "no_change";
+    documentsUpdated?: number;
+    documentsSkipped?: number;
+    resourcesRemoved?: number;
+    versionsCreated?: number;
+    truncatedDocuments?: number;
+  } | null;
+  errorCode: string | null;
+  errorMessage: string | null;
   startedAt: string | null;
   completedAt: string | null;
   createdAt: string;

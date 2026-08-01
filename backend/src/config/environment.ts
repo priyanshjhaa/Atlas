@@ -22,6 +22,9 @@ const environmentSchema = z.object({
   GITHUB_APP_ID: z.string().min(1).optional(),
   GITHUB_APP_PRIVATE_KEY: z.string().min(1).optional(),
   GITHUB_APP_WEBHOOK_SECRET: z.string().min(16).optional(),
+  NOTION_CLIENT_ID: z.string().min(1).optional(),
+  NOTION_CLIENT_SECRET: z.string().min(1).optional(),
+  NOTION_REDIRECT_URI: z.url().optional(),
   CONNECTOR_ENCRYPTION_KEY: z.string().min(1).optional(),
   SYNC_WORKER_CONCURRENCY: z.coerce.number().int().positive().max(20).default(2),
   REPOSITORY_STORAGE_PATH: z.string().min(1).default("/tmp/atlas-repositories"),
@@ -75,14 +78,35 @@ const environmentSchema = z.object({
     environment.GITHUB_APP_ID,
     environment.GITHUB_APP_PRIVATE_KEY,
     environment.GITHUB_APP_WEBHOOK_SECRET,
-    environment.CONNECTOR_ENCRYPTION_KEY,
   ];
   const configured = githubValues.filter(Boolean).length;
-  if (configured > 0 && configured < githubValues.length) {
+  if (
+    configured > 0 &&
+    (configured < githubValues.length || !environment.CONNECTOR_ENCRYPTION_KEY)
+  ) {
     context.addIssue({
       code: "custom",
       message: "All GitHub App and connector encryption values are required together.",
       path: ["GITHUB_APP_ID"],
+    });
+  }
+  const notionValues = [
+    environment.NOTION_CLIENT_ID,
+    environment.NOTION_CLIENT_SECRET,
+  ];
+  const notionConfigured = notionValues.filter(Boolean).length;
+  if (notionConfigured > 0 && notionConfigured < notionValues.length) {
+    context.addIssue({
+      code: "custom",
+      message: "NOTION_CLIENT_ID and NOTION_CLIENT_SECRET are required together.",
+      path: ["NOTION_CLIENT_ID"],
+    });
+  }
+  if (notionConfigured === notionValues.length && !environment.CONNECTOR_ENCRYPTION_KEY) {
+    context.addIssue({
+      code: "custom",
+      message: "CONNECTOR_ENCRYPTION_KEY is required when Notion is configured.",
+      path: ["CONNECTOR_ENCRYPTION_KEY"],
     });
   }
   if (environment.EMBEDDINGS_PROVIDER === "openai" && !environment.OPENAI_API_KEY) {

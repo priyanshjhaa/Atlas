@@ -23,9 +23,9 @@ The web application is prepared for a native Next.js deployment on Vercel. No cu
 - Start command: `npm run start`
 - Node.js: 22 or newer
 
-Configure the Better Auth, GitHub OAuth, database, backend URL, and GitHub App
-values in the deployment environment. The NestJS API is deployed separately to
-Railway.
+Configure the Better Auth, GitHub OAuth, database, backend URL, GitHub App, and
+optional Notion OAuth values in the deployment environment. The NestJS API is
+deployed separately to Railway.
 
 ## Authentication
 

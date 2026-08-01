@@ -29,7 +29,10 @@ export const workspaceRole = pgEnum("workspace_role", [
   "member",
   "viewer",
 ]);
-export const connectorProvider = pgEnum("connector_provider", ["github"]);
+export const connectorProvider = pgEnum("connector_provider", [
+  "github",
+  "notion",
+]);
 export const connectorStatus = pgEnum("connector_status", [
   "pending",
   "active",
@@ -228,6 +231,149 @@ export const repositories = pgTable(
     ),
     index("repositories_workspace_id_idx").on(table.workspaceId),
     index("repositories_connector_id_idx").on(table.connectorId),
+  ],
+);
+
+export const notionResources = pgTable(
+  "notion_resources",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    connectorId: uuid("connector_id")
+      .notNull()
+      .references(() => connectors.id, { onDelete: "cascade" }),
+    providerResourceId: text("provider_resource_id").notNull(),
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    url: text("url"),
+    parentId: text("parent_id"),
+    isSelected: boolean("is_selected").default(true).notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    lastEditedAt: timestamp("last_edited_at", { withTimezone: true }),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("notion_resources_connector_provider_id_unique").on(
+      table.connectorId,
+      table.providerResourceId,
+    ),
+    index("notion_resources_workspace_id_idx").on(table.workspaceId),
+    index("notion_resources_connector_id_idx").on(table.connectorId),
+    index("notion_resources_selected_active_idx").on(
+      table.connectorId,
+      table.isSelected,
+      table.isActive,
+    ),
+  ],
+);
+
+export const notionDocuments = pgTable(
+  "notion_documents",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    connectorId: uuid("connector_id")
+      .notNull()
+      .references(() => connectors.id, { onDelete: "cascade" }),
+    resourceId: uuid("resource_id")
+      .notNull()
+      .references(() => notionResources.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    content: text("content").notNull(),
+    contentHash: text("content_hash").notNull(),
+    sourceRevision: text("source_revision").notNull(),
+    citation: jsonb("citation")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    truncated: boolean("truncated").default(false).notNull(),
+    syncedAt: timestamp("synced_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("notion_documents_resource_id_unique").on(table.resourceId),
+    index("notion_documents_workspace_id_idx").on(table.workspaceId),
+    index("notion_documents_connector_id_idx").on(table.connectorId),
+    index("notion_documents_content_hash_idx").on(table.contentHash),
+  ],
+);
+
+export const notionDocumentVersions = pgTable(
+  "notion_document_versions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => notionDocuments.id, { onDelete: "cascade" }),
+    contentHash: text("content_hash").notNull(),
+    sourceRevision: text("source_revision").notNull(),
+    content: text("content").notNull(),
+    citation: jsonb("citation")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    truncated: boolean("truncated").default(false).notNull(),
+    capturedAt: timestamp("captured_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("notion_document_versions_document_hash_unique").on(
+      table.documentId,
+      table.contentHash,
+    ),
+    index("notion_document_versions_workspace_id_idx").on(table.workspaceId),
+    index("notion_document_versions_document_id_idx").on(table.documentId),
+    index("notion_document_versions_captured_at_idx").on(table.capturedAt),
+  ],
+);
+
+export const notionSyncJobs = pgTable(
+  "notion_sync_jobs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    connectorId: uuid("connector_id")
+      .notNull()
+      .references(() => connectors.id, { onDelete: "cascade" }),
+    requestedByUserId: text("requested_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    status: syncJobStatus("status").default("queued").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    attempt: integer("attempt").default(0).notNull(),
+    progress: integer("progress").default(0).notNull(),
+    stage: text("stage").default("queued").notNull(),
+    result: jsonb("result").$type<Record<string, unknown>>(),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("notion_sync_jobs_workspace_idempotency_unique").on(
+      table.workspaceId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex("notion_sync_jobs_connector_active_unique")
+      .on(table.workspaceId, table.connectorId)
+      .where(sql`${table.status} in ('queued', 'running')`),
+    index("notion_sync_jobs_workspace_id_idx").on(table.workspaceId),
+    index("notion_sync_jobs_connector_id_idx").on(table.connectorId),
+    index("notion_sync_jobs_status_idx").on(table.status),
   ],
 );
 
