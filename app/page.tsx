@@ -4,9 +4,12 @@ import {
   Check,
   CircleDot,
   Code2,
+  Database,
   GitPullRequest,
+  History,
   Network,
   Search,
+  ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import { AtlasMark, ConfidenceBadge } from "../components/brand";
@@ -28,12 +31,21 @@ export default function Home() {
         <div className="hero-orbit hero-orbit--one" aria-hidden="true" />
         <div className="hero-orbit hero-orbit--two" aria-hidden="true" />
         <div className="hero-copy reveal">
+          <div className="hero-system-bar">
+            <span>A LIVING MAP OF YOUR ENGINEERING SYSTEM</span>
+            <span><i /> GENTLY SYNCHRONIZED</span>
+          </div>
           <p className="eyebrow"><Sparkles size={14} /> Engineering intelligence, connected</p>
-          <h1>Understand what changes<br />before you change it.</h1>
+          <h1>Understand what changes<br /><span>before you change it.</span></h1>
           <p className="hero-deck">Atlas maps the code, architecture, history, and decisions behind your systems—so every change begins with the full picture.</p>
           <div className="hero-actions">
             <Link href="/app/impact/new" className="button button--primary">Analyze a change <ArrowRight size={17} /></Link>
             <a href="#story" className="button button--glass">See how it works</a>
+          </div>
+          <div className="hero-readouts">
+            <span><b>GRAPH</b> Cross-repository relationships</span>
+            <span><b>EVIDENCE</b> Source-backed answers</span>
+            <span><b>SYNC</b> GitHub + Notion context</span>
           </div>
         </div>
 
@@ -53,6 +65,13 @@ export default function Home() {
           </div>
         </div>
         <a href="#story" className="scroll-cue">Explore the system <span>↓</span></a>
+      </section>
+
+      <section className="intelligence-strip" aria-label="Atlas capabilities">
+        <article><Network size={16} /><span>01 / MAP</span><b>Engineering graph</b><p>Resolve code, packages, APIs, calls, and dependencies across repositories.</p></article>
+        <article><History size={16} /><span>02 / TRACE</span><b>Change history</b><p>Connect commits and pull requests to the architecture they changed.</p></article>
+        <article><Database size={16} /><span>03 / SYNC</span><b>Living context</b><p>Keep GitHub and Notion knowledge synchronized with bounded history.</p></article>
+        <article><ShieldCheck size={16} /><span>04 / EXPLAIN</span><b>Verified impact</b><p>Explain risk with explicit evidence, provenance, and uncertainty.</p></article>
       </section>
 
       <section className="statement" id="story">
@@ -77,7 +96,7 @@ export default function Home() {
           <Link href="/app/graph" className="text-link">Explore the engineering graph <ArrowRight size={15} /></Link>
         </div>
         <div className="story-visual graph-window">
-          <div className="window-title"><span>Northstar Labs</span><small>Live architecture · updated 4m ago</small></div>
+          <div className="window-title"><span>Atlas demo workspace</span><small><i /> Live architecture · synchronized</small></div>
           <MarketingGraph />
         </div>
       </section>

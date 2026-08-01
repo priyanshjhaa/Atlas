@@ -121,18 +121,27 @@ export function DashboardPage({
 
   return (
     <>
-      <PageHeader
-        eyebrow="Workspace overview"
-        title={`${greeting}, ${firstName}.`}
-        detail={`${workspace.name} has ${repositories.length} ${
-          repositories.length === 1 ? "repository" : "repositories"
-        }, with ${indexedRepositories.length} synchronized and ready for analysis.`}
-        action={
-          <Link className="button button--primary" href="/app/impact/new">
-            <Zap size={16} /> Analyze a change
-          </Link>
-        }
-      />
+      <section className="dashboard-command">
+        <div className="command-coordinates">
+          <span>LIVING SYSTEM / {workspace.slug.toUpperCase()}</span>
+          <span>MAP COVERAGE {String(coverage).padStart(3, "0")}%</span>
+        </div>
+        <PageHeader
+          eyebrow="Workspace command center"
+          title={`${greeting}, ${firstName}.`}
+          detail={`${workspace.name} has ${repositories.length} ${
+            repositories.length === 1 ? "repository" : "repositories"
+          }, with ${indexedRepositories.length} synchronized and ready for analysis.`}
+          action={
+            <Link className="button button--primary" href="/app/impact/new">
+              <Zap size={16} /> Analyze a change
+            </Link>
+          }
+        />
+        <div className="command-path" aria-hidden="true">
+          <i /><span /><span /><span /><span />
+        </div>
+      </section>
       <div className="metrics-grid">
         {metrics.map((metric) => (
           <MetricCard key={metric.label} metric={metric} />

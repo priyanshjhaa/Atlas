@@ -9,13 +9,13 @@ export const metadata: Metadata = {
     title: "Atlas — Engineering intelligence",
     description: "Understand what changes before you change it.",
     type: "website",
-    images: [{ url: "/og.png", width: 1733, height: 907, alt: "Atlas engineering intelligence graph" }],
+    images: [{ url: "/atlas-valley.png", width: 1821, height: 864, alt: "A warm illustrated valley connected by paths of light" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Atlas — Engineering intelligence",
     description: "Understand what changes before you change it.",
-    images: ["/og.png"],
+    images: ["/atlas-valley.png"],
   },
 };
 
