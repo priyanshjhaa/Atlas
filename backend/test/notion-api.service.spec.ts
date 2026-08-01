@@ -116,4 +116,42 @@ describe("NotionApiService", () => {
       JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string),
     ).toMatchObject({ start_cursor: "next-page" });
   });
+
+  it("retrieves page Markdown and expands unknown child blocks", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            markdown: "# Architecture",
+            truncated: true,
+            unknown_block_ids: ["child-1"],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            markdown: "Child decision",
+            truncated: false,
+            unknown_block_ids: [],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      service().retrievePageMarkdown("access-token", "page-1"),
+    ).resolves.toEqual({
+      markdown: "# Architecture\n\nChild decision",
+      truncated: true,
+      unknownBlockIdsVisited: 1,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "https://api.notion.com/v1/pages/child-1/markdown",
+    );
+  });
 });

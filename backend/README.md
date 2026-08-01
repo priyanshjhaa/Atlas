@@ -145,6 +145,15 @@ connection. Workspace owners and administrators can select the resources Atlas
 will index or disconnect the integration. Disconnecting clears the encrypted
 credential payload and deactivates every discovered Notion resource.
 
+Selected pages are synchronized through the dedicated `atlas-notion-sync`
+BullMQ queue. Atlas retrieves bounded Markdown, stores citation metadata, and
+keeps at most 50 content versions per page. A page whose Notion
+`last_edited_time` matches its persisted revision is skipped without fetching
+its content again. Missing pages are deactivated, while a rejected or revoked
+workspace token marks the connector unavailable and deactivates its resources.
+Notion synchronization jobs and their outcomes appear alongside GitHub jobs on
+the Activity page.
+
 ## Groq explanation budget
 
 Groq's published free-plan limit for `openai/gpt-oss-120b` is currently 8,000

@@ -22,6 +22,11 @@ import { NotionConnectorsService } from "./notion-connectors.service";
     NotionConnectorsRepository,
     NotionConnectorsService,
   ],
-  exports: [GitHubAppService],
+  exports: [
+    ConnectorEncryptionService,
+    GitHubAppService,
+    NotionApiService,
+    NotionConnectorsRepository,
+  ],
 })
 export class ConnectorsModule {}

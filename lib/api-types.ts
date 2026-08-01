@@ -222,6 +222,32 @@ export interface AtlasSyncJob {
   updatedAt: string;
 }
 
+export interface AtlasNotionSyncJob {
+  id: string;
+  connectorId: string;
+  configuration: {
+    workspaceName?: string | null;
+  };
+  status: AtlasSyncJobStatus;
+  attempt: number;
+  progress: number;
+  stage: string;
+  result: {
+    outcome?: "updated" | "no_change";
+    documentsUpdated?: number;
+    documentsSkipped?: number;
+    resourcesRemoved?: number;
+    versionsCreated?: number;
+    truncatedDocuments?: number;
+  } | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AtlasWorkspaceData {
   me: AtlasMe;
   activeWorkspace: AtlasWorkspace;

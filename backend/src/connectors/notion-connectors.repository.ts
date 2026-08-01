@@ -211,7 +211,59 @@ export class NotionConnectorsRepository {
     });
   }
 
-  private async findActive(workspaceId: string) {
+  async refreshResources(
+    connector: typeof connectors.$inferSelect,
+    resources: AccessibleNotionResource[],
+  ) {
+    await this.database.client.transaction((transaction) =>
+      this.replaceResources(
+        transaction,
+        connector.workspaceId,
+        connector.id,
+        resources,
+        false,
+      ),
+    );
+  }
+
+  async markAccessLost(
+    connector: typeof connectors.$inferSelect,
+    status: "failed" | "revoked",
+    reason: string,
+  ) {
+    await this.database.client.transaction(async (transaction) => {
+      await transaction
+        .update(connectors)
+        .set({
+          status,
+          encryptedCredentials: status === "revoked"
+            ? null
+            : connector.encryptedCredentials,
+          updatedAt: new Date(),
+        })
+        .where(eq(connectors.id, connector.id));
+      await transaction
+        .update(notionResources)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(eq(notionResources.connectorId, connector.id));
+      await transaction.insert(auditEvents).values({
+        workspaceId: connector.workspaceId,
+        action: `connector.notion.${status}`,
+        targetType: "connector",
+        targetId: connector.id,
+        metadata: { reason },
+      });
+    });
+  }
+
+  async markResourceInactive(resourceId: string) {
+    await this.database.client
+      .update(notionResources)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(notionResources.id, resourceId));
+  }
+
+  async findActive(workspaceId: string) {
     const [connector] = await this.database.client
       .select()
       .from(connectors)
@@ -233,6 +285,7 @@ export class NotionConnectorsRepository {
     workspaceId: string,
     connectorId: string,
     resources: AccessibleNotionResource[],
+    selectNewResources = true,
   ) {
     await transaction
       .update(notionResources)
@@ -242,7 +295,12 @@ export class NotionConnectorsRepository {
     for (const resource of resources) {
       await transaction
         .insert(notionResources)
-        .values({ workspaceId, connectorId, ...resource })
+        .values({
+          workspaceId,
+          connectorId,
+          ...resource,
+          isSelected: selectNewResources,
+        })
         .onConflictDoUpdate({
           target: [
             notionResources.connectorId,

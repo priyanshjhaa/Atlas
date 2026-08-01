@@ -7,6 +7,7 @@ import type {
   AtlasGitHubConnector,
   AtlasNotionConnector,
   AtlasNotionResource,
+  AtlasNotionSyncJob,
   AtlasGraph,
   AtlasArchitectureSnapshot,
   AtlasImpactReport,
@@ -113,6 +114,19 @@ export async function getAtlasSyncJobs(
     },
   );
   return readApiResponse<AtlasSyncJob[]>(response);
+}
+
+export async function getAtlasNotionSyncJobs(
+  workspaceId: string,
+): Promise<AtlasNotionSyncJob[]> {
+  const response = await fetchAtlasApi(
+    `/v1/workspaces/${workspaceId}/connectors/notion/sync-jobs`,
+    {
+      cache: "no-store",
+      headers: { "X-Atlas-Workspace-Id": workspaceId },
+    },
+  );
+  return readApiResponse<AtlasNotionSyncJob[]>(response);
 }
 
 export async function getAtlasImpactReport(

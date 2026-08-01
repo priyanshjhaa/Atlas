@@ -8,6 +8,19 @@ import type { Environment } from "../config/environment";
 
 const NOTION_API_VERSION = "2026-03-11";
 const MAX_ACCESSIBLE_RESOURCES = 500;
+const MAX_MARKDOWN_CHARACTERS = 200_000;
+const MAX_UNKNOWN_SUBTREES = 25;
+
+export class NotionApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: string | null,
+  ) {
+    super(message);
+    this.name = "NotionApiRequestError";
+  }
+}
 
 interface NotionRichText {
   plain_text?: string;
@@ -41,6 +54,12 @@ interface NotionSearchResponse {
   next_cursor: string | null;
 }
 
+interface NotionMarkdownResponse {
+  markdown: string;
+  truncated: boolean;
+  unknown_block_ids: string[];
+}
+
 export interface NotionOAuthToken {
   access_token: string;
   token_type: "bearer";
@@ -60,6 +79,12 @@ export interface AccessibleNotionResource {
   url: string | null;
   parentId: string | null;
   lastEditedAt: Date | null;
+}
+
+export interface NotionPageContent {
+  markdown: string;
+  truncated: boolean;
+  unknownBlockIdsVisited: number;
 }
 
 @Injectable()
@@ -135,6 +160,56 @@ export class NotionApiService {
     return resources.slice(0, MAX_ACCESSIBLE_RESOURCES);
   }
 
+  async retrievePageMarkdown(
+    accessToken: string,
+    pageId: string,
+  ): Promise<NotionPageContent> {
+    const root = await this.retrieveMarkdownFragment(accessToken, pageId);
+    const fragments = [root.markdown];
+    const queue = [...root.unknown_block_ids];
+    const visited = new Set<string>();
+    let truncated = root.truncated;
+    let characters = root.markdown.length;
+
+    while (
+      queue.length &&
+      visited.size < MAX_UNKNOWN_SUBTREES &&
+      characters < MAX_MARKDOWN_CHARACTERS
+    ) {
+      const blockId = queue.shift();
+      if (!blockId || visited.has(blockId)) continue;
+      visited.add(blockId);
+      try {
+        const fragment = await this.retrieveMarkdownFragment(
+          accessToken,
+          blockId,
+        );
+        const remaining = MAX_MARKDOWN_CHARACTERS - characters;
+        const selected = fragment.markdown.slice(0, remaining);
+        if (selected) fragments.push(selected);
+        characters += selected.length;
+        truncated ||= fragment.truncated || selected.length < fragment.markdown.length;
+        queue.push(...fragment.unknown_block_ids);
+      } catch (error) {
+        if (
+          error instanceof NotionApiRequestError &&
+          error.status === 404
+        ) {
+          truncated = true;
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    if (queue.length || characters >= MAX_MARKDOWN_CHARACTERS) truncated = true;
+    return {
+      markdown: fragments.join("\n\n").slice(0, MAX_MARKDOWN_CHARACTERS),
+      truncated,
+      unknownBlockIdsVisited: visited.size,
+    };
+  }
+
   redirectUri(): string {
     return (
       this.config.get("NOTION_REDIRECT_URI", { infer: true }) ??
@@ -160,14 +235,36 @@ export class NotionApiService {
 
   private async readJson<T>(response: Response): Promise<T> {
     const body = (await response.json().catch(() => ({}))) as T & {
+      code?: string;
       message?: string;
     };
     if (!response.ok) {
-      throw new BadGatewayException(
-        body.message ?? `Notion API request failed with status ${response.status}.`,
+      throw new NotionApiRequestError(
+        body.message ??
+          `Notion API request failed with status ${response.status}.`,
+        response.status,
+        body.code ?? null,
       );
     }
     return body;
+  }
+
+  private async retrieveMarkdownFragment(
+    accessToken: string,
+    pageOrBlockId: string,
+  ): Promise<NotionMarkdownResponse> {
+    const response = await fetch(
+      `https://api.notion.com/v1/pages/${encodeURIComponent(pageOrBlockId)}/markdown`,
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${accessToken}`,
+          "Notion-Version": NOTION_API_VERSION,
+        },
+        signal: AbortSignal.timeout(20_000),
+      },
+    );
+    return this.readJson<NotionMarkdownResponse>(response);
   }
 
   private normalizeResource(
