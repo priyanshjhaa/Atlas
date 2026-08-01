@@ -101,6 +101,13 @@ button { color: inherit; }
 .window-title small { color: var(--muted); }
 .impact-section { padding: 150px 6vw; }
 .impact-heading { max-width: 1050px; }
+.impact-heading__copy {
+  max-width: 760px;
+  margin: 26px 0 0;
+  color: #706c5e;
+  font-size: 17px;
+  line-height: 1.7;
+}
 .impact-demo { display: grid; grid-template-columns: 200px 1fr; margin-top: 70px; background: #111014; border: 1px solid var(--line); border-radius: 24px; min-height: 620px; overflow: hidden; }
 .impact-rail { padding: 32px 20px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
 .impact-rail span { color: var(--muted); padding: 13px 15px; border-radius: 10px; font-size: 13px; }
