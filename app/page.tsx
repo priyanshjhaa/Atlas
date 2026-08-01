@@ -21,6 +21,13 @@ export const metadata = {
   description: "Understand what changes before you change it. Atlas maps code, architecture, history, and decisions across your engineering system.",
 };
 
+const capabilities = [
+  { icon: Network, index: "01", label: "Map", title: "Engineering graph", detail: "Cross-repository architecture" },
+  { icon: History, index: "02", label: "Trace", title: "Change history", detail: "Commit and pull-request context" },
+  { icon: Database, index: "03", label: "Sync", title: "Living context", detail: "GitHub and Notion knowledge" },
+  { icon: ShieldCheck, index: "04", label: "Explain", title: "Verified impact", detail: "Evidence-backed change risk" },
+];
+
 export default function Home() {
   return (
     <main className="marketing">
@@ -67,11 +74,22 @@ export default function Home() {
         <a href="#story" className="scroll-cue">Explore the system <span>↓</span></a>
       </section>
 
-      <section className="intelligence-strip" aria-label="Atlas capabilities">
-        <article><Network size={16} /><span>01 / MAP</span><b>Engineering graph</b><p>Resolve code, packages, APIs, calls, and dependencies across repositories.</p></article>
-        <article><History size={16} /><span>02 / TRACE</span><b>Change history</b><p>Connect commits and pull requests to the architecture they changed.</p></article>
-        <article><Database size={16} /><span>03 / SYNC</span><b>Living context</b><p>Keep GitHub and Notion knowledge synchronized with bounded history.</p></article>
-        <article><ShieldCheck size={16} /><span>04 / EXPLAIN</span><b>Verified impact</b><p>Explain risk with explicit evidence, provenance, and uncertainty.</p></article>
+      <section className="intelligence-marquee" aria-label="Atlas capabilities">
+        <div className="intelligence-marquee__track">
+          {[0, 1].map((group) => (
+            <div className="intelligence-marquee__group" aria-hidden={group === 1 ? true : undefined} key={group}>
+              {capabilities.map(({ icon: Icon, index, label, title, detail }) => (
+                <article className="intelligence-marquee__item" key={`${group}-${index}`}>
+                  <span className="intelligence-marquee__icon"><Icon size={16} /></span>
+                  <span className="intelligence-marquee__index">{index} / {label}</span>
+                  <b>{title}</b>
+                  <i aria-hidden="true" />
+                  <small>{detail}</small>
+                </article>
+              ))}
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="statement" id="story">
