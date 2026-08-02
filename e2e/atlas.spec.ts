@@ -102,3 +102,50 @@ test("keeps GitHub sign-in inside the viewport", async ({ page }) => {
   expect(layout.noHorizontalOverflow).toBe(true);
   expect(layout.cardInsideViewport).toBe(true);
 });
+
+test("shows a strong focus indicator during keyboard navigation", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .getByRole("navigation", { name: "Primary navigation" })
+    .getByRole("link", { name: "Atlas home" })
+    .focus();
+
+  const focusedElement = page.locator(":focus");
+  await expect(focusedElement).toBeVisible();
+  await expect(focusedElement).toHaveCSS("outline-style", "solid");
+  await expect(focusedElement).toHaveCSS("outline-width", "3px");
+});
+
+test("honors reduced motion without duplicating marquee content", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+
+  const duplicateMarqueeGroup = page.locator(
+    '.intelligence-marquee__group[aria-hidden="true"]',
+  );
+  await expect(duplicateMarqueeGroup).toBeHidden();
+
+  const animatedTrack = page.locator(".intelligence-marquee__track");
+  await expect(animatedTrack).toHaveCSS("animation-name", "none");
+});
+
+test("closes the mobile navigation with Escape and restores focus", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile");
+  await page.goto("/");
+
+  const menuButton = page.getByRole("button", { name: "Open navigation" });
+  await menuButton.click();
+  await page.getByRole("link", { name: "Product" }).focus();
+  await page.keyboard.press("Escape");
+
+  await expect(
+    page.getByRole("button", { name: "Open navigation" }),
+  ).toBeFocused();
+  await expect(page.getByRole("link", { name: "Product" })).toBeHidden();
+});
