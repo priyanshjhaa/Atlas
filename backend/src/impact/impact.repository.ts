@@ -856,6 +856,25 @@ export class ImpactRepository {
     return (report as unknown as StoredImpactReport | undefined) ?? null;
   }
 
+  async findFeedback(
+    workspaceId: string,
+    reportId: string,
+    userId: string,
+  ) {
+    const [feedback] = await this.database.client
+      .select()
+      .from(impactReportFeedback)
+      .where(
+        and(
+          eq(impactReportFeedback.workspaceId, workspaceId),
+          eq(impactReportFeedback.reportId, reportId),
+          eq(impactReportFeedback.submittedByUserId, userId),
+        ),
+      )
+      .limit(1);
+    return feedback ?? null;
+  }
+
   async updateExplanation(
     workspaceId: string,
     reportId: string,

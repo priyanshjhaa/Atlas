@@ -58,6 +58,26 @@ export class WorkspacesController {
     return this.workspaces.listMembers(workspaceId);
   }
 
+  @Get(":workspaceId/pilot-metrics")
+  @WorkspaceRoles("owner", "admin")
+  pilotMetrics(
+    @Param("workspaceId", ParseUUIDPipe) workspaceId: string,
+  ) {
+    return this.workspaces.pilotMetrics(workspaceId);
+  }
+
+  @Delete(":workspaceId/pilot-metrics/expired-feedback")
+  @WorkspaceRoles("owner", "admin")
+  purgeExpiredPilotFeedback(
+    @Param("workspaceId", ParseUUIDPipe) workspaceId: string,
+    @CurrentIdentity() identity: AuthenticatedIdentity,
+  ) {
+    return this.workspaces.purgeExpiredPilotFeedback(
+      workspaceId,
+      identity,
+    );
+  }
+
   @Post(":workspaceId/members")
   @WorkspaceRoles("owner", "admin")
   addMember(

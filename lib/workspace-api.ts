@@ -11,6 +11,7 @@ import type {
   AtlasGraph,
   AtlasArchitectureSnapshot,
   AtlasImpactReport,
+  AtlasPilotMetrics,
   AtlasRepository,
   AtlasSyncJob,
   AtlasWorkspaceData,
@@ -143,6 +144,19 @@ export async function getAtlasImpactReport(
     },
   );
   return readApiResponse<AtlasImpactReport>(response);
+}
+
+export async function getAtlasPilotMetrics(
+  workspaceId: string,
+): Promise<AtlasPilotMetrics> {
+  const response = await fetchAtlasApi(
+    `/v1/workspaces/${workspaceId}/pilot-metrics`,
+    {
+      cache: "no-store",
+      headers: { "X-Atlas-Workspace-Id": workspaceId },
+    },
+  );
+  return readApiResponse<AtlasPilotMetrics>(response);
 }
 
 export async function getAtlasGraph(

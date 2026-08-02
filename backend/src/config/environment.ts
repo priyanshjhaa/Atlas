@@ -28,6 +28,12 @@ const environmentSchema = z.object({
   CONNECTOR_ENCRYPTION_KEY: z.string().min(1).optional(),
   SYNC_WORKER_CONCURRENCY: z.coerce.number().int().positive().max(20).default(2),
   REPOSITORY_STORAGE_PATH: z.string().min(1).default("/tmp/atlas-repositories"),
+  PILOT_FEEDBACK_RETENTION_DAYS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(3_650)
+    .default(180),
   EMBEDDINGS_PROVIDER: z.enum(["local", "openai"]).default("local"),
   OPENAI_API_KEY: z.string().min(1).optional(),
   GROQ_API_KEY: z.string().min(1).optional(),

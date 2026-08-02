@@ -48,10 +48,19 @@ export class ImpactReportsService {
     return this.explanations.generate(report);
   }
 
-  async get(workspaceId: string, reportId: string) {
+  async get(
+    workspaceId: string,
+    reportId: string,
+    identity: AuthenticatedIdentity,
+  ) {
     const report = await this.repository.findById(workspaceId, reportId);
     if (!report) throw new NotFoundException("Impact report not found.");
-    return report;
+    const viewerFeedback = await this.repository.findFeedback(
+      workspaceId,
+      reportId,
+      identity.user.id,
+    );
+    return { ...report, viewerFeedback };
   }
 
   async retryExplanation(workspaceId: string, reportId: string) {

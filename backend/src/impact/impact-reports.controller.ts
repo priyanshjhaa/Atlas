@@ -49,8 +49,9 @@ export class ImpactReportsController {
   get(
     @Param("workspaceId", ParseUUIDPipe) workspaceId: string,
     @Param("reportId", ParseUUIDPipe) reportId: string,
+    @CurrentIdentity() identity: AuthenticatedIdentity,
   ) {
-    return this.reports.get(workspaceId, reportId);
+    return this.reports.get(workspaceId, reportId, identity);
   }
 
   @Post(":reportId/explanation/retry")
