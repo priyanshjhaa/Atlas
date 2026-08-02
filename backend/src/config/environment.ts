@@ -46,19 +46,19 @@ const environmentSchema = z.object({
     .int()
     .positive()
     .max(100)
-    .default(30),
+    .default(12),
   LLM_MAX_EVIDENCE_CHARACTERS: z.coerce
     .number()
     .int()
     .positive()
     .max(200_000)
-    .default(60_000),
+    .default(10_000),
   LLM_MAX_PACKET_CHARACTERS: z.coerce
     .number()
     .int()
     .positive()
     .max(200_000)
-    .default(60_000),
+    .default(14_000),
   LLM_MAX_OUTPUT_TOKENS: z.coerce
     .number()
     .int()

@@ -11,7 +11,9 @@ describe("validateEnvironment", () => {
     expect(environment.REDIS_URL).toContain("redis://");
     expect(environment.LLM_EXPLANATIONS_ENABLED).toBe(false);
     expect(environment.LLM_EXPLANATION_TIMEOUT_MS).toBe(15_000);
-    expect(environment.LLM_MAX_PACKET_CHARACTERS).toBe(60_000);
+    expect(environment.LLM_MAX_EVIDENCE_ITEMS).toBe(12);
+    expect(environment.LLM_MAX_EVIDENCE_CHARACTERS).toBe(10_000);
+    expect(environment.LLM_MAX_PACKET_CHARACTERS).toBe(14_000);
     expect(environment.LLM_MAX_OUTPUT_TOKENS).toBe(2_000);
     expect(environment.LLM_REASONING_EFFORT).toBe("low");
     expect(environment.LLM_MAX_EXPLANATION_CHARACTERS).toBe(20_000);

@@ -97,6 +97,7 @@ export class PullRequestResolverService {
       pullRequest: {
         number: pullRequest.number,
         title: pullRequest.title,
+        body: pullRequest.body?.slice(0, 2_000),
         url: pullRequest.html_url,
         author: pullRequest.user.login,
         baseRevision: pullRequest.base.sha,

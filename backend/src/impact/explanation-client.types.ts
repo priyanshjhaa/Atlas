@@ -4,6 +4,7 @@ import type {
   ImpactExplanationFailureCode,
   ImpactExplanationSchemaVersion,
 } from "./explanation.types";
+import type { ExplanationValidationFailureCode } from "./explanation-validator.types";
 
 export type ExplanationProvider = "openai" | "groq";
 
@@ -50,6 +51,16 @@ export type ExplanationGenerationResult =
       status: "disabled";
     };
 
+export interface ExplanationGenerationOptions {
+  repair?: {
+    candidate: ImpactExplanation;
+    failureCode: ExplanationValidationFailureCode;
+  };
+}
+
 export interface ExplanationClient {
-  generate(packet: ImpactEvidencePacket): Promise<ExplanationGenerationResult>;
+  generate(
+    packet: ImpactEvidencePacket,
+    options?: ExplanationGenerationOptions,
+  ): Promise<ExplanationGenerationResult>;
 }

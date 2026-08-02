@@ -286,6 +286,31 @@ describe("ExplanationGroundingValidator", () => {
     });
   });
 
+  it("fails closed on a PR #3-style unselected path and accepts its grounded repair", () => {
+    const ungrounded = {
+      ...validExplanation,
+      implementationSteps: validExplanation.implementationSteps.map(
+        (step, index) =>
+          index === 0
+            ? {
+                ...step,
+                detail:
+                  "Update backend/drizzle/meta/20260729110422_snapshot.json before changing the boundary.",
+              }
+            : step,
+      ),
+    };
+
+    expect(validator().validate(ungrounded, packet)).toEqual({
+      status: "invalid",
+      failureCode: "unknown_file_path",
+    });
+    expect(validator().validate(validExplanation, packet)).toEqual({
+      status: "valid",
+      explanation: validExplanation,
+    });
+  });
+
   it("accepts identifiers observed verbatim in cited source evidence", () => {
     const packetWithObservedIdentifiers: ImpactEvidencePacket = {
       ...packet,

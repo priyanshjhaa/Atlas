@@ -342,6 +342,7 @@ describe("OpenAIExplanationClient", () => {
       ...explanation,
       claims: explanation.claims.map((claim) => ({
         ...claim,
+        text: "F1 imports F2.",
         evidenceIds: ["E1"],
       })),
       implementationSteps: explanation.implementationSteps.map((step) => ({
@@ -371,7 +372,12 @@ describe("OpenAIExplanationClient", () => {
     expect(result).toMatchObject({
       status: "completed",
       explanation: {
-        claims: [{ evidenceIds: [canonicalEvidenceId] }],
+        claims: [
+          {
+            text: "src/api.ts imports src/session.ts.",
+            evidenceIds: [canonicalEvidenceId],
+          },
+        ],
         implementationSteps: [{ evidenceIds: [canonicalEvidenceId] }],
         verificationSteps: [{ evidenceIds: [canonicalEvidenceId] }],
       },
@@ -382,12 +388,91 @@ describe("OpenAIExplanationClient", () => {
     expect(messages[1]?.content).not.toContain('"repositoryId"');
     expect(messages[1]?.content).not.toContain('"repository-1"');
     expect(messages[1]?.content).toContain(
-      'ALLOWED_FILE_PATHS=["src/session.ts"]',
+      'ALLOWED_FILE_ALIASES=["F1","F2"]',
     );
+    expect(messages[1]?.content).toContain('"filePath":"F2"');
+    expect(messages[1]?.content).toContain(
+      '"excerpt":"F1 imports F2."',
+    );
+    expect(messages[1]?.content).not.toContain("src/session.ts");
+    expect(messages[1]?.content).not.toContain("src/api.ts");
     expect(messages[1]?.content).toContain(
       'OVERVIEW_TECHNICAL_NAMES=[]',
     );
     expect(JSON.stringify(request)).not.toContain(canonicalEvidenceId);
+  });
+
+  it("frames one repair candidate with file aliases and restores canonical paths", async () => {
+    const packetWithEvidence: ImpactEvidencePacket = {
+      ...packet,
+      evidence: [
+        {
+          id: "chunk:session",
+          repositoryId: "repository-1",
+          repository: "atlas/identity",
+          filePath: "src/session.ts",
+          excerpt: "The session boundary is declared here.",
+          provenance: "indexed_source_chunk",
+          sourceRevision: "revision-1",
+        },
+      ],
+    };
+    const invalidCandidate = {
+      ...explanation,
+      answer: "Update src/session.ts and invented/missing.ts.",
+    };
+    const repairedProviderExplanation = {
+      ...explanation,
+      answer: "Update F1.",
+      claims: explanation.claims.map((claim) => ({
+        ...claim,
+        evidenceIds: ["E1"],
+      })),
+      implementationSteps: explanation.implementationSteps.map((step) => ({
+        ...step,
+        evidenceIds: ["E1"],
+      })),
+      verificationSteps: explanation.verificationSteps.map((step) => ({
+        ...step,
+        evidenceIds: ["E1"],
+      })),
+    };
+    const parse = vi
+      .fn()
+      .mockResolvedValue(groqCompletion(repairedProviderExplanation));
+    const client = new OpenAIExplanationClient(
+      config({
+        LLM_EXPLANATIONS_ENABLED: "true",
+        LLM_PROVIDER: "groq",
+        LLM_EXPLANATION_MODEL: "openai/gpt-oss-120b",
+        GROQ_API_KEY: "test-key",
+      }),
+      fakeClient(parse),
+    );
+
+    const result = await client.generate(packetWithEvidence, {
+      repair: {
+        candidate: invalidCandidate,
+        failureCode: "unknown_file_path",
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: "completed",
+      explanation: {
+        answer: "Update src/session.ts.",
+      },
+    });
+    const [request] = parse.mock.calls[0] as [
+      { messages: Array<{ content: string }> },
+    ];
+    const envelope = request.messages[1]?.content ?? "";
+    expect(envelope).toContain("REPAIR_MODE=true");
+    expect(envelope).toContain("REPAIR_FAILURE_CODE=unknown_file_path");
+    expect(envelope).toContain("BEGIN_ATLAS_REPAIR_CANDIDATE");
+    expect(envelope).toContain("Update F1 and [UNSUPPORTED_PATH].");
+    expect(envelope).not.toContain("src/session.ts");
+    expect(envelope).not.toContain("invented/missing.ts");
   });
 
   it("fails closed after one Groq structured-generation rejection", async () => {

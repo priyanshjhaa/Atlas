@@ -134,29 +134,54 @@ export class ExplanationGenerationService {
         );
       }
 
-      const validation = this.validator.validate(
-        generated.explanation,
+      let completedGeneration = generated;
+      let validation = this.validator.validate(
+        completedGeneration.explanation,
         packetResult.packet,
       );
+      if (
+        validation.status === "invalid" &&
+        validation.failureCode === "unknown_file_path"
+      ) {
+        const repaired = await this.client.generate(packetResult.packet, {
+          repair: {
+            candidate: completedGeneration.explanation,
+            failureCode: validation.failureCode,
+          },
+        });
+        if (repaired.status === "completed") {
+          completedGeneration = {
+            ...repaired,
+            metadata: this.combinedGenerationMetadata(
+              completedGeneration.metadata,
+              repaired.metadata,
+            ),
+          };
+          validation = this.validator.validate(
+            completedGeneration.explanation,
+            packetResult.packet,
+          );
+        }
+      }
       if (validation.status === "invalid") {
         return this.persistFailure(
           pending,
           validation.failureCode,
           packetResult.evidencePacketHash,
-          generated.metadata.latencyMs,
+          completedGeneration.metadata.latencyMs,
           "invalid",
-          generated.metadata,
+          completedGeneration.metadata,
         );
       }
 
       const metadata = this.metadata(
         pending,
         packetResult.evidencePacketHash,
-        generated.metadata.latencyMs,
+        completedGeneration.metadata.latencyMs,
         "valid",
         false,
         null,
-        generated.metadata,
+        completedGeneration.metadata,
       );
       const completed = await this.persist(pending, {
         status: "completed",
@@ -175,6 +200,24 @@ export class ExplanationGenerationService {
         "not_run",
       );
     }
+  }
+
+  private combinedGenerationMetadata(
+    initial: ExplanationGenerationMetadata,
+    repaired: ExplanationGenerationMetadata,
+  ): ExplanationGenerationMetadata {
+    return {
+      ...repaired,
+      latencyMs: initial.latencyMs + repaired.latencyMs,
+      usage: {
+        inputTokens:
+          initial.usage.inputTokens + repaired.usage.inputTokens,
+        outputTokens:
+          initial.usage.outputTokens + repaired.usage.outputTokens,
+        totalTokens:
+          initial.usage.totalTokens + repaired.usage.totalTokens,
+      },
+    };
   }
 
   private async persistFailure(
