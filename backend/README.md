@@ -269,6 +269,16 @@ workspace repositories receive a bounded boost based on observed versus
 inferred classification and retain their own repository/file citation.
 Historical graph edges are never used to expand live retrieval.
 
+## Pilot readiness
+
+Impact reports accept tenant-scoped usefulness feedback, confirmed finding IDs,
+missed-impact notes, and optional comments. Owners and administrators can view
+aggregated usefulness, time-to-feedback, explanation fallback, and GitHub plus
+Notion synchronization metrics. CSV exports are capped at 1,000 feedback rows
+and exclude free-form text. Feedback is deleted with its report, user, or
+workspace; administrators can also apply the audited retention operation using
+`PILOT_FEEDBACK_RETENTION_DAYS`, which defaults to 180 days.
+
 The exact source commit, included concepts, exclusions, and Atlas adaptations
 are recorded in `src/intelligence/CODEMAP_FORK.md`. Atlas does not depend on the
 CodeMap repository at runtime and does not automatically merge later CodeMap

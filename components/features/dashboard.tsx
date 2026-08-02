@@ -18,6 +18,7 @@ import {
 } from "@/components/app/shared";
 import type {
   AtlasGraph as AtlasGraphData,
+  AtlasPilotMetrics,
   AtlasRepository,
   AtlasSyncJob,
   AtlasWorkspace,
@@ -42,12 +43,14 @@ export function DashboardPage({
   repositories,
   jobs,
   graph,
+  pilotMetrics = null,
 }: {
   userName: string;
   workspace: AtlasWorkspace;
   repositories: AtlasRepository[];
   jobs: AtlasSyncJob[];
   graph: AtlasGraphData | null;
+  pilotMetrics?: AtlasPilotMetrics | null;
 }) {
   const firstName = userName.trim().split(/\s+/)[0] || userName;
   const [greeting, setGreeting] = useState("Welcome");
@@ -148,6 +151,45 @@ export function DashboardPage({
         ))}
       </div>
       <div className="dashboard-grid">
+        {pilotMetrics && (
+          <section className="panel">
+            <div className="panel-heading">
+              <div>
+                <span>Pilot readiness</span>
+                <h2>Measured outcomes</h2>
+              </div>
+              <Sparkles size={18} />
+            </div>
+            <div className="pilot-metric-list">
+              <p>
+                <b>
+                  {pilotMetrics.feedback.usefulnessRate === null
+                    ? "—"
+                    : `${pilotMetrics.feedback.usefulnessRate}%`}
+                </b>
+                <span>useful reports</span>
+              </p>
+              <p><b>{pilotMetrics.feedback.responses}</b><span>feedback responses</span></p>
+              <p><b>{pilotMetrics.feedback.missedImpacts}</b><span>reported misses</span></p>
+              <p>
+                <b>
+                  {pilotMetrics.synchronization.successRate === null
+                    ? "—"
+                    : `${pilotMetrics.synchronization.successRate}%`}
+                </b>
+                <span>sync success</span>
+              </p>
+              <p><b>{pilotMetrics.explanations.modelFallbacks}</b><span>model fallbacks</span></p>
+              <p><b>{pilotMetrics.explanations.deterministicFallbacks}</b><span>deterministic fallbacks</span></p>
+            </div>
+            <a
+              className="button button--ghost button--small"
+              href={`/api/pilot-metrics/export?workspaceId=${encodeURIComponent(workspace.id)}`}
+            >
+              Export bounded CSV
+            </a>
+          </section>
+        )}
         <section className="panel panel--graph">
           <div className="panel-heading">
             <div>

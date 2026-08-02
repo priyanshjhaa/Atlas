@@ -37,6 +37,8 @@ function setup() {
   const repository = {
     create: vi.fn().mockResolvedValue(stored),
     findById: vi.fn().mockResolvedValue(stored),
+    findFeedback: vi.fn().mockResolvedValue(null),
+    upsertFeedback: vi.fn(),
   };
   const pullRequests = { resolve: vi.fn() };
   const explanations = { generate: vi.fn().mockResolvedValue(enhanced) };
@@ -100,6 +102,26 @@ describe("ImpactReportsService explanation integration", () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it("restores feedback only for the current report viewer", async () => {
+    const { service, repository } = setup();
+    repository.findFeedback.mockResolvedValue({
+      id: "feedback-1",
+      rating: "useful",
+    });
+
+    await expect(
+      service.get("workspace-1", "report-1", identity),
+    ).resolves.toMatchObject({
+      id: "report-1",
+      viewerFeedback: { id: "feedback-1", rating: "useful" },
+    });
+    expect(repository.findFeedback).toHaveBeenCalledWith(
+      "workspace-1",
+      "report-1",
+      "user-1",
+    );
+  });
+
   it("generates explanations for resolved pull-request reports", async () => {
     const {
       service,
@@ -152,5 +174,62 @@ describe("ImpactReportsService explanation integration", () => {
       resolvedInput,
     );
     expect(explanations.generate).toHaveBeenCalledWith(stored);
+  });
+
+  it("normalizes and persists tenant-scoped pilot feedback", async () => {
+    const { service, repository } = setup();
+    repository.upsertFeedback.mockResolvedValue({
+      id: "feedback-1",
+      rating: "useful",
+      confirmedFindingIds: ["finding-1", "finding-2"],
+      missedImpact: null,
+      comment: "Clear evidence.",
+      timeToFeedbackSeconds: 42,
+    });
+
+    await expect(
+      service.submitFeedback(
+        "workspace-1",
+        "report-1",
+        {
+          rating: "useful",
+          confirmedFindingIds: [
+            "finding-1",
+            "finding-1",
+            "finding-2",
+          ],
+          missedImpact: "  ",
+          comment: "  Clear evidence.  ",
+        },
+        identity,
+      ),
+    ).resolves.toMatchObject({
+      id: "feedback-1",
+      rating: "useful",
+      timeToFeedbackSeconds: 42,
+    });
+    expect(repository.upsertFeedback).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      reportId: "report-1",
+      submittedByUserId: "user-1",
+      rating: "useful",
+      confirmedFindingIds: ["finding-1", "finding-2"],
+      missedImpact: null,
+      comment: "Clear evidence.",
+    });
+  });
+
+  it("does not accept feedback for a report outside the workspace", async () => {
+    const { service, repository } = setup();
+    repository.upsertFeedback.mockResolvedValue(null);
+
+    await expect(
+      service.submitFeedback(
+        "workspace-1",
+        "foreign-report",
+        { rating: "not_useful", missedImpact: "Missed API consumer." },
+        identity,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

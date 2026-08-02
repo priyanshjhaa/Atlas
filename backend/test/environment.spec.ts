@@ -18,6 +18,7 @@ describe("validateEnvironment", () => {
     expect(environment.LLM_MAX_OUTPUT_TOKENS).toBe(2_000);
     expect(environment.LLM_REASONING_EFFORT).toBe("low");
     expect(environment.LLM_MAX_EXPLANATION_CHARACTERS).toBe(20_000);
+    expect(environment.PILOT_FEEDBACK_RETENTION_DAYS).toBe(180);
   });
 
   it("rejects an invalid port", () => {

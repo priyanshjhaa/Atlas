@@ -1,9 +1,13 @@
 import { Injectable } from "@nestjs/common";
-import { and, count, eq } from "drizzle-orm";
+import { and, count, desc, eq, lt } from "drizzle-orm";
 import { DatabaseService } from "../database/database.service";
 import {
   auditEvents,
+  impactReportFeedback,
+  impactReports,
+  notionSyncJobs,
   repositories,
+  syncJobs,
   users,
   workspaceMembers,
   workspaces,
@@ -287,6 +291,148 @@ export class WorkspacesRepository {
       })
       .from(repositories)
       .where(eq(repositories.workspaceId, workspaceId));
+  }
+
+  async pilotMetrics(workspaceId: string) {
+    const [feedback, reports, repositoryJobs, notionJobs] =
+      await Promise.all([
+        this.database.client
+          .select()
+          .from(impactReportFeedback)
+          .where(eq(impactReportFeedback.workspaceId, workspaceId))
+          .orderBy(desc(impactReportFeedback.updatedAt))
+          .limit(1_000),
+        this.database.client
+          .select({
+            id: impactReports.id,
+            createdAt: impactReports.createdAt,
+            explanation: impactReports.explanation,
+          })
+          .from(impactReports)
+          .where(eq(impactReports.workspaceId, workspaceId))
+          .orderBy(desc(impactReports.createdAt))
+          .limit(1_000),
+        this.database.client
+          .select({
+            status: syncJobs.status,
+            stage: syncJobs.stage,
+          })
+          .from(syncJobs)
+          .where(eq(syncJobs.workspaceId, workspaceId))
+          .limit(1_000),
+        this.database.client
+          .select({
+            status: notionSyncJobs.status,
+            stage: notionSyncJobs.stage,
+          })
+          .from(notionSyncJobs)
+          .where(eq(notionSyncJobs.workspaceId, workspaceId))
+          .limit(1_000),
+      ]);
+    const reportCreatedAt = new Map(
+      reports.map((report) => [report.id, report.createdAt.getTime()]),
+    );
+    const useful = feedback.filter((item) => item.rating === "useful").length;
+    const feedbackSeconds = feedback.map((item) =>
+      Math.max(
+        0,
+        Math.round(
+          (item.updatedAt.getTime() -
+            (reportCreatedAt.get(item.reportId) ?? item.createdAt.getTime())) /
+            1_000,
+        ),
+      ),
+    );
+    const explanationOutcomes = reports.reduce(
+      (totals, report) => {
+        const explanation = report.explanation as
+          | {
+              status?: string;
+              metadata?: { attempts?: unknown[]; deterministicFallback?: boolean };
+            }
+          | null;
+        if (explanation?.status === "completed") totals.completed += 1;
+        if (explanation?.status === "failed") totals.failed += 1;
+        if ((explanation?.metadata?.attempts?.length ?? 0) > 1)
+          totals.modelFallbacks += 1;
+        if (explanation?.metadata?.deterministicFallback)
+          totals.deterministicFallbacks += 1;
+        return totals;
+      },
+      {
+        completed: 0,
+        failed: 0,
+        modelFallbacks: 0,
+        deterministicFallbacks: 0,
+      },
+    );
+    const jobs = [...repositoryJobs, ...notionJobs];
+    const completedJobs = jobs.filter((job) => job.status === "completed");
+    return {
+      feedback: {
+        responses: feedback.length,
+        useful,
+        usefulnessRate: feedback.length
+          ? Math.round((useful / feedback.length) * 100)
+          : null,
+        confirmedFindings: feedback.reduce(
+          (sum, item) => sum + item.confirmedFindingIds.length,
+          0,
+        ),
+        missedImpacts: feedback.filter((item) => item.missedImpact).length,
+        averageTimeToFeedbackSeconds: feedbackSeconds.length
+          ? Math.round(
+              feedbackSeconds.reduce((sum, value) => sum + value, 0) /
+                feedbackSeconds.length,
+            )
+          : null,
+      },
+      explanations: explanationOutcomes,
+      synchronization: {
+        total: jobs.length,
+        completed: completedJobs.length,
+        failed: jobs.filter((job) => job.status === "failed").length,
+        noChange: jobs.filter((job) => job.stage === "no_change").length,
+        successRate: jobs.length
+          ? Math.round((completedJobs.length / jobs.length) * 100)
+          : null,
+      },
+      export: feedback.map((item) => ({
+        reportId: item.reportId,
+        rating: item.rating,
+        confirmedFindingCount: item.confirmedFindingIds.length,
+        hasMissedImpact: Boolean(item.missedImpact),
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      })),
+    };
+  }
+
+  async purgeExpiredPilotFeedback(
+    workspaceId: string,
+    cutoff: Date,
+    actorUserId: string,
+  ) {
+    return this.database.client.transaction(async (transaction) => {
+      const deleted = await transaction
+        .delete(impactReportFeedback)
+        .where(
+          and(
+            eq(impactReportFeedback.workspaceId, workspaceId),
+            lt(impactReportFeedback.updatedAt, cutoff),
+          ),
+        )
+        .returning({ id: impactReportFeedback.id });
+      await transaction.insert(auditEvents).values({
+        workspaceId,
+        actorUserId,
+        action: "pilot.feedback.retention_applied",
+        targetType: "workspace",
+        targetId: workspaceId,
+        metadata: { deletedCount: deleted.length, cutoff: cutoff.toISOString() },
+      });
+      return { deletedCount: deleted.length, cutoff: cutoff.toISOString() };
+    });
   }
 
   private slugify(name: string): string {

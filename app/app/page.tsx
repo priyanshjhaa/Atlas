@@ -1,6 +1,7 @@
 import { DashboardPage } from "@/components/features/dashboard";
 import {
   getAtlasGraph,
+  getAtlasPilotMetrics,
   getAtlasSyncJobs,
   getAtlasWorkspaceData,
 } from "@/lib/workspace-api";
@@ -11,10 +12,13 @@ export default async function Page() {
   const graphRepository = repositories.find(
     (repository) => repository.isActive && repository.lastSyncedAt,
   );
-  const [jobs, graph] = await Promise.all([
+  const [jobs, graph, pilotMetrics] = await Promise.all([
     getAtlasSyncJobs(activeWorkspace.id),
     graphRepository
       ? getAtlasGraph(activeWorkspace.id, graphRepository.id).catch(() => null)
+      : Promise.resolve(null),
+    ["owner", "admin"].includes(activeWorkspace.role)
+      ? getAtlasPilotMetrics(activeWorkspace.id).catch(() => null)
       : Promise.resolve(null),
   ]);
   return (
@@ -24,6 +28,7 @@ export default async function Page() {
       repositories={repositories}
       jobs={jobs}
       graph={graph}
+      pilotMetrics={pilotMetrics}
     />
   );
 }

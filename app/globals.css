@@ -708,6 +708,18 @@ body::before {
 .feedback-panel button { cursor: pointer; }
 .feedback-panel button.active { color: #40513b; border-color: rgba(100, 125, 91, .35); background: rgba(100, 125, 91, .14); }
 .feedback-panel > p { margin: 9px 0 0; color: var(--muted); font-size: 8px; }
+.pilot-feedback { margin-top: 28px; display: grid; gap: 14px; }
+.pilot-feedback h2 { margin: 0; font-size: 18px; }
+.pilot-feedback > label { display: grid; gap: 7px; color: var(--muted); font-size: 10px; }
+.pilot-feedback textarea { min-height: 76px; resize: vertical; border: 1px solid var(--line); border-radius: 9px; padding: 10px; background: rgba(255,250,238,.55); color: var(--ink); }
+.pilot-feedback__findings { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px !important; margin-top: 0 !important; }
+.pilot-feedback__findings label { display: flex; gap: 8px; align-items: flex-start; color: var(--muted); font-size: 9px; }
+.pilot-feedback button { display: inline-flex; align-items: center; gap: 6px; }
+.pilot-metric-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.pilot-metric-list p { margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 9px; }
+.pilot-metric-list b, .pilot-metric-list span { display: block; }
+.pilot-metric-list b { font-size: 20px; }
+.pilot-metric-list span { margin-top: 4px; color: var(--muted); font-size: 8px; text-transform: uppercase; }
 .pr-detail { margin: -20px 0 28px; padding: 18px; }
 .pr-detail > span { color: var(--muted); font-family: var(--mono); font-size: 8px; text-transform: uppercase; }
 .pr-detail h2 { margin: 7px 0; font-size: 17px; }

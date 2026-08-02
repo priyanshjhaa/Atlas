@@ -4,6 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import type { Environment } from "../config/environment";
 import type {
   AuthenticatedIdentity,
   WorkspaceAccess,
@@ -18,7 +20,10 @@ import {
 
 @Injectable()
 export class WorkspacesService {
-  constructor(private readonly workspaces: WorkspacesRepository) {}
+  constructor(
+    private readonly workspaces: WorkspacesRepository,
+    private readonly config: ConfigService<Environment, true>,
+  ) {}
 
   create(
     name: string,
@@ -116,6 +121,28 @@ export class WorkspacesService {
 
   listRepositories(workspaceId: string): Promise<RepositoryRecord[]> {
     return this.workspaces.listRepositories(workspaceId);
+  }
+
+  pilotMetrics(workspaceId: string) {
+    return this.workspaces.pilotMetrics(workspaceId);
+  }
+
+  purgeExpiredPilotFeedback(
+    workspaceId: string,
+    identity: AuthenticatedIdentity,
+  ) {
+    const retentionDays = this.config.get(
+      "PILOT_FEEDBACK_RETENTION_DAYS",
+      { infer: true },
+    );
+    const cutoff = new Date(
+      Date.now() - retentionDays * 24 * 60 * 60 * 1_000,
+    );
+    return this.workspaces.purgeExpiredPilotFeedback(
+      workspaceId,
+      cutoff,
+      identity.user.id,
+    );
   }
 
   private async requireMember(

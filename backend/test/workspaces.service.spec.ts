@@ -4,6 +4,8 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ConfigService } from "@nestjs/config";
+import type { Environment } from "../src/config/environment";
 import type {
   AuthenticatedIdentity,
   WorkspaceAccess,
@@ -52,6 +54,8 @@ describe("WorkspacesService", () => {
     updateMemberRole: ReturnType<typeof vi.fn>;
     removeMember: ReturnType<typeof vi.fn>;
     listRepositories: ReturnType<typeof vi.fn>;
+    pilotMetrics: ReturnType<typeof vi.fn>;
+    purgeExpiredPilotFeedback: ReturnType<typeof vi.fn>;
   };
   let service: WorkspacesService;
 
@@ -66,9 +70,31 @@ describe("WorkspacesService", () => {
       updateMemberRole: vi.fn(),
       removeMember: vi.fn(),
       listRepositories: vi.fn(),
+      pilotMetrics: vi.fn(),
+      purgeExpiredPilotFeedback: vi.fn(),
     };
     service = new WorkspacesService(
       repository as unknown as WorkspacesRepository,
+      new ConfigService({
+        PILOT_FEEDBACK_RETENTION_DAYS: 180,
+      }) as unknown as ConfigService<Environment, true>,
+    );
+  });
+
+  it("keeps pilot metrics and retention tenant scoped", async () => {
+    repository.pilotMetrics.mockResolvedValue({ feedback: { responses: 2 } });
+    repository.purgeExpiredPilotFeedback.mockResolvedValue({
+      deletedCount: 1,
+    });
+
+    await service.pilotMetrics(ownerWorkspace.id);
+    await service.purgeExpiredPilotFeedback(ownerWorkspace.id, identity);
+
+    expect(repository.pilotMetrics).toHaveBeenCalledWith(ownerWorkspace.id);
+    expect(repository.purgeExpiredPilotFeedback).toHaveBeenCalledWith(
+      ownerWorkspace.id,
+      expect.any(Date),
+      identity.user.id,
     );
   });
 

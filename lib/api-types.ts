@@ -408,6 +408,15 @@ export interface AtlasImpactReport {
   repositoryId: string;
   requestedByUserId: string | null;
   sourceRevision: string;
+  viewerFeedback?: {
+    id: string;
+    rating: "useful" | "not_useful";
+    confirmedFindingIds: string[];
+    missedImpact: string | null;
+    comment: string | null;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
   input: {
     mode: "planned" | "pull-request";
     repositoryId: string;
@@ -485,4 +494,28 @@ export interface AtlasImpactReport {
   explanation?: AtlasImpactExplanationState | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AtlasPilotMetrics {
+  feedback: {
+    responses: number;
+    useful: number;
+    usefulnessRate: number | null;
+    confirmedFindings: number;
+    missedImpacts: number;
+    averageTimeToFeedbackSeconds: number | null;
+  };
+  explanations: {
+    completed: number;
+    failed: number;
+    modelFallbacks: number;
+    deterministicFallbacks: number;
+  };
+  synchronization: {
+    total: number;
+    completed: number;
+    failed: number;
+    noChange: number;
+    successRate: number | null;
+  };
 }

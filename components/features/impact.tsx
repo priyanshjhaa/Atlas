@@ -19,6 +19,8 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  ThumbsDown,
+  ThumbsUp,
   X,
   Zap,
 } from "lucide-react";
@@ -812,6 +814,20 @@ export function ImpactReportPage({
   const [currentReport, setCurrentReport] = useState(report);
   const [retryingExplanation, setRetryingExplanation] = useState(false);
   const [explanationRetryError, setExplanationRetryError] = useState("");
+  const [feedbackRating, setFeedbackRating] = useState<
+    "useful" | "not_useful" | null
+  >(report.viewerFeedback?.rating ?? null);
+  const [confirmedFindingIds, setConfirmedFindingIds] = useState<string[]>(
+    report.viewerFeedback?.confirmedFindingIds ?? [],
+  );
+  const [missedImpact, setMissedImpact] = useState(
+    report.viewerFeedback?.missedImpact ?? "",
+  );
+  const [feedbackComment, setFeedbackComment] = useState(
+    report.viewerFeedback?.comment ?? "",
+  );
+  const [feedbackStatus, setFeedbackStatus] = useState("");
+  const [savingFeedback, setSavingFeedback] = useState(false);
   const { result } = currentReport;
   const downstreamAndUnknown = [
     ...result.downstreamImpacts,
@@ -852,6 +868,38 @@ export function ImpactReportPage({
       );
     } finally {
       setRetryingExplanation(false);
+    }
+  }
+
+  async function submitFeedback(rating: "useful" | "not_useful") {
+    setSavingFeedback(true);
+    setFeedbackStatus("");
+    try {
+      const response = await fetch(
+        `/api/impact-reports/${currentReport.id}/feedback`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspaceId: currentReport.workspaceId,
+            rating,
+            confirmedFindingIds,
+            missedImpact,
+            comment: feedbackComment,
+          }),
+        },
+      );
+      if (!response.ok) throw new Error("Atlas could not save this feedback.");
+      setFeedbackRating(rating);
+      setFeedbackStatus("Feedback saved. Thank you.");
+    } catch (reason) {
+      setFeedbackStatus(
+        reason instanceof Error
+          ? reason.message
+          : "Atlas could not save this feedback.",
+      );
+    } finally {
+      setSavingFeedback(false);
     }
   }
 
@@ -1185,6 +1233,68 @@ export function ImpactReportPage({
           </div>
         </section>
       )}
+      <section className="feedback-panel pilot-feedback panel">
+        <span>Pilot feedback</span>
+        <h2>Did this report help you understand the change?</h2>
+        <p>
+          Confirm the findings that were useful and record anything Atlas
+          missed. This feedback is scoped to your workspace.
+        </p>
+        <div className="pilot-feedback__findings">
+          {[
+            ...result.directImpacts,
+            ...result.downstreamImpacts,
+          ].map((finding) => (
+            <label key={finding.id}>
+              <input
+                type="checkbox"
+                checked={confirmedFindingIds.includes(finding.id)}
+                onChange={(event) =>
+                  setConfirmedFindingIds((current) =>
+                    event.target.checked
+                      ? [...new Set([...current, finding.id])]
+                      : current.filter((id) => id !== finding.id),
+                  )
+                }
+              />
+              <span>Confirm finding: {finding.title}</span>
+            </label>
+          ))}
+        </div>
+        <label>
+          <span>What impact did Atlas miss?</span>
+          <textarea
+            value={missedImpact}
+            maxLength={2000}
+            onChange={(event) => setMissedImpact(event.target.value)}
+          />
+        </label>
+        <label>
+          <span>Additional notes</span>
+          <textarea
+            value={feedbackComment}
+            maxLength={2000}
+            onChange={(event) => setFeedbackComment(event.target.value)}
+          />
+        </label>
+        <div>
+          <button
+            className={feedbackRating === "useful" ? "active" : ""}
+            disabled={savingFeedback}
+            onClick={() => submitFeedback("useful")}
+          >
+            <ThumbsUp size={14} /> Useful
+          </button>
+          <button
+            className={feedbackRating === "not_useful" ? "active" : ""}
+            disabled={savingFeedback}
+            onClick={() => submitFeedback("not_useful")}
+          >
+            <ThumbsDown size={14} /> Not useful
+          </button>
+        </div>
+        {feedbackStatus && <p role="status">{feedbackStatus}</p>}
+      </section>
     </>
   );
 }
