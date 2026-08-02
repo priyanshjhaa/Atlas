@@ -131,6 +131,7 @@ export class ExplanationGenerationService {
           packetResult.evidencePacketHash,
           generated.latencyMs,
           "not_run",
+          this.failedGenerationMetadata(generated),
         );
       }
 
@@ -217,6 +218,29 @@ export class ExplanationGenerationService {
         totalTokens:
           initial.usage.totalTokens + repaired.usage.totalTokens,
       },
+      attempts: [
+        ...(initial.attempts ?? []),
+        ...(repaired.attempts ?? []),
+      ],
+    };
+  }
+
+  private failedGenerationMetadata(
+    result: Extract<
+      Awaited<ReturnType<OpenAIExplanationClient["generate"]>>,
+      { status: "failed" }
+    >,
+  ): ExplanationGenerationMetadata | undefined {
+    const lastAttempt = result.attempts?.at(-1);
+    if (!lastAttempt) return undefined;
+    return {
+      provider: lastAttempt.provider,
+      model: lastAttempt.model,
+      promptVersion: IMPACT_EXPLANATION_PROMPT_VERSION,
+      outputSchemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
+      latencyMs: result.latencyMs,
+      usage: result.usage,
+      attempts: result.attempts,
     };
   }
 
@@ -285,6 +309,7 @@ export class ExplanationGenerationService {
         outputTokens: 0,
         totalTokens: 0,
       },
+      attempts: generation?.attempts,
       validationStatus,
       failureCode,
       deterministicFallback,

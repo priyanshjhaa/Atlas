@@ -321,6 +321,162 @@ describe("OpenAIExplanationClient", () => {
     expect(request).toHaveProperty("tools", []);
   });
 
+  it("uses the configured Groq fallback model after a rate limit", async () => {
+    const parse = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new APIError(
+          429,
+          {},
+          "primary model rate limited",
+          new Headers({ "retry-after": "0.25" }),
+        ),
+      )
+      .mockResolvedValueOnce(groqCompletion());
+    const setTimeoutSpy = vi
+      .spyOn(globalThis, "setTimeout")
+      .mockImplementation(((handler: (...arguments_: unknown[]) => void) => {
+        handler();
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      }) as typeof setTimeout);
+    const client = new OpenAIExplanationClient(
+      config({
+        LLM_EXPLANATIONS_ENABLED: "true",
+        LLM_PROVIDER: "groq",
+        LLM_EXPLANATION_MODEL: "openai/gpt-oss-120b",
+        LLM_FALLBACK_MODEL: "openai/gpt-oss-20b",
+        GROQ_API_KEY: "test-key",
+      }),
+      fakeClient(parse),
+    );
+
+    const result = await client.generate(packet);
+
+    expect(result).toMatchObject({
+      status: "completed",
+      metadata: {
+        provider: "groq",
+        model: "openai/gpt-oss-20b",
+        usage: {
+          inputTokens: 120,
+          outputTokens: 45,
+          totalTokens: 165,
+        },
+        attempts: [
+          {
+            model: "openai/gpt-oss-120b",
+            status: "failed",
+            failureCode: "provider_rate_limited",
+          },
+          {
+            model: "openai/gpt-oss-20b",
+            status: "completed",
+            failureCode: null,
+          },
+        ],
+      },
+    });
+    expect(parse).toHaveBeenCalledTimes(2);
+    expect(setTimeoutSpy).toHaveBeenCalledWith(
+      expect.any(Function),
+      250,
+    );
+    expect(parse.mock.calls[0]?.[0]).toHaveProperty(
+      "model",
+      "openai/gpt-oss-120b",
+    );
+    expect(parse.mock.calls[1]?.[0]).toHaveProperty(
+      "model",
+      "openai/gpt-oss-20b",
+    );
+    setTimeoutSpy.mockRestore();
+  });
+
+  it.each([
+    [
+      "timeout",
+      new APIConnectionTimeoutError({ message: "primary timed out" }),
+      "provider_timeout",
+    ],
+    [
+      "upstream outage",
+      new APIError(
+        503,
+        {},
+        "primary unavailable",
+        new Headers(),
+      ),
+      "provider_unavailable",
+    ],
+  ])(
+    "uses the configured Groq fallback model after a %s",
+    async (_label, providerError, failureCode) => {
+      const parse = vi
+        .fn()
+        .mockRejectedValueOnce(providerError)
+        .mockResolvedValueOnce(groqCompletion());
+      const client = new OpenAIExplanationClient(
+        config({
+          LLM_EXPLANATIONS_ENABLED: "true",
+          LLM_PROVIDER: "groq",
+          LLM_EXPLANATION_MODEL: "openai/gpt-oss-120b",
+          LLM_FALLBACK_MODEL: "openai/gpt-oss-20b",
+          GROQ_API_KEY: "test-key",
+        }),
+        fakeClient(parse),
+      );
+
+      await expect(client.generate(packet)).resolves.toMatchObject({
+        status: "completed",
+        metadata: {
+          model: "openai/gpt-oss-20b",
+          attempts: [
+            {
+              model: "openai/gpt-oss-120b",
+              failureCode,
+            },
+            {
+              model: "openai/gpt-oss-20b",
+              status: "completed",
+            },
+          ],
+        },
+      });
+      expect(parse).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("does not switch models for an organization-wide Groq spend limit", async () => {
+    const parse = vi.fn().mockRejectedValue(
+      Object.assign(new Error("organization spend limit reached"), {
+        status: 400,
+        code: "blocked_api_access",
+      }),
+    );
+    const client = new OpenAIExplanationClient(
+      config({
+        LLM_EXPLANATIONS_ENABLED: "true",
+        LLM_PROVIDER: "groq",
+        LLM_EXPLANATION_MODEL: "openai/gpt-oss-120b",
+        LLM_FALLBACK_MODEL: "openai/gpt-oss-20b",
+        GROQ_API_KEY: "test-key",
+      }),
+      fakeClient(parse),
+    );
+
+    await expect(client.generate(packet)).resolves.toMatchObject({
+      status: "failed",
+      failureCode: "provider_request_rejected",
+      attempts: [
+        {
+          model: "openai/gpt-oss-120b",
+          failureCode: "provider_request_rejected",
+        },
+      ],
+    });
+    expect(parse).toHaveBeenCalledTimes(1);
+  });
+
   it("uses short provider citation aliases and restores canonical evidence IDs", async () => {
     const canonicalEvidenceId =
       "relationship:ddede320-0ef8-40a3-9781-b9a459cf95cf";

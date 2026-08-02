@@ -42,6 +42,7 @@ export function explanationAuditEvent(
       inputTokens: metadata?.usage.inputTokens ?? 0,
       outputTokens: metadata?.usage.outputTokens ?? 0,
       totalTokens: metadata?.usage.totalTokens ?? 0,
+      attempts: metadata?.attempts ?? [],
       validationStatus: metadata?.validationStatus ?? "not_run",
       failureCode:
         metadata?.failureCode ??

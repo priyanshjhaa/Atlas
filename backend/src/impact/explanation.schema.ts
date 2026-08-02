@@ -132,6 +132,28 @@ const generationMetadataSchema = z
         totalTokens: z.number().int().nonnegative(),
       })
       .strict(),
+    attempts: z
+      .array(
+        z
+          .object({
+            provider: z.enum(["openai", "groq"]),
+            model: z.string().min(1),
+            status: z.enum(["completed", "failed"]),
+            failureCode: z
+              .enum(IMPACT_EXPLANATION_FAILURE_CODES)
+              .nullable(),
+            latencyMs: z.number().nonnegative(),
+            usage: z
+              .object({
+                inputTokens: z.number().int().nonnegative(),
+                outputTokens: z.number().int().nonnegative(),
+                totalTokens: z.number().int().nonnegative(),
+              })
+              .strict(),
+          })
+          .strict(),
+      )
+      .optional(),
     validationStatus: z.enum(["valid", "invalid", "not_run"]),
     failureCode: z.enum(IMPACT_EXPLANATION_FAILURE_CODES).nullable(),
     deterministicFallback: z.boolean(),

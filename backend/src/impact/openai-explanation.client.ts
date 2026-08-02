@@ -21,6 +21,7 @@ import type { ImpactEvidencePacket } from "./evidence-packet.types";
 import type {
   ExplanationClient,
   ExplanationFailureCode,
+  ExplanationGenerationMetadata,
   ExplanationGenerationOptions,
   ExplanationGenerationResult,
 } from "./explanation-client.types";
@@ -69,6 +70,8 @@ export class OpenAIExplanationClient implements ExplanationClient {
         status: "failed",
         failureCode: "configuration_error",
         latencyMs: 0,
+        usage: this.emptyUsage(),
+        attempts: [],
       };
     }
 
@@ -78,13 +81,45 @@ export class OpenAIExplanationClient implements ExplanationClient {
     const providerPacket = this.providerPacket(packet, options.repair);
     const startedAt = performance.now();
     if (provider === "groq") {
-      return this.generateWithGroq(
+      const primary = await this.generateWithGroq(
         providerPacket,
         apiKey,
         model,
         timeout,
         startedAt,
       );
+      const fallbackModel = this.config.get("LLM_FALLBACK_MODEL", {
+        infer: true,
+      });
+      if (
+        primary.status !== "failed" ||
+        !fallbackModel ||
+        !this.canUseFallbackModel(primary.failureCode)
+      ) {
+        return primary;
+      }
+      if (
+        primary.retryAfterMs !== undefined &&
+        primary.retryAfterMs <= 1_000
+      ) {
+        await this.delay(primary.retryAfterMs);
+      }
+
+      this.logger.warn({
+        event: "impact_explanation_fallback_model_started",
+        provider: "groq",
+        primaryModel: model,
+        fallbackModel,
+        primaryFailureCode: primary.failureCode,
+      });
+      const fallback = await this.generateWithGroq(
+        providerPacket,
+        apiKey,
+        fallbackModel,
+        timeout,
+        performance.now(),
+      );
+      return this.combineModelAttempts(primary, fallback);
     }
 
     const request = {
@@ -134,13 +169,19 @@ export class OpenAIExplanationClient implements ExplanationClient {
       const latencyMs = this.elapsedMilliseconds(startedAt);
 
       if (!response.output_parsed) {
-        return {
-          status: "failed",
-          failureCode: this.responseFailureCode(response),
+        return this.failedResult(
+          provider,
+          model,
+          this.responseFailureCode(response),
           latencyMs,
-        };
+        );
       }
 
+      const usage = {
+        inputTokens: response.usage?.input_tokens ?? 0,
+        outputTokens: response.usage?.output_tokens ?? 0,
+        totalTokens: response.usage?.total_tokens ?? 0,
+      };
       return {
         status: "completed",
         explanation: this.restoreAliases(
@@ -154,11 +195,17 @@ export class OpenAIExplanationClient implements ExplanationClient {
           promptVersion: IMPACT_EXPLANATION_PROMPT_VERSION,
           outputSchemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
           latencyMs,
-          usage: {
-            inputTokens: response.usage?.input_tokens ?? 0,
-            outputTokens: response.usage?.output_tokens ?? 0,
-            totalTokens: response.usage?.total_tokens ?? 0,
-          },
+          usage,
+          attempts: [
+            {
+              provider,
+              model,
+              status: "completed",
+              failureCode: null,
+              latencyMs,
+              usage,
+            },
+          ],
         },
       };
     } catch (error: unknown) {
@@ -223,15 +270,20 @@ export class OpenAIExplanationClient implements ExplanationClient {
         const latencyMs = this.elapsedMilliseconds(startedAt);
         const parsed = completion.choices[0]?.message.parsed;
         if (!parsed) {
-          return {
-            status: "failed",
-            failureCode:
-              completion.choices[0]?.message.refusal
-                ? "provider_refusal"
-                : "invalid_provider_response",
+          return this.failedResult(
+            "groq",
+            model,
+            completion.choices[0]?.message.refusal
+              ? "provider_refusal"
+              : "invalid_provider_response",
             latencyMs,
-          };
+          );
         }
+        const usage = {
+          inputTokens: completion.usage?.prompt_tokens ?? 0,
+          outputTokens: completion.usage?.completion_tokens ?? 0,
+          totalTokens: completion.usage?.total_tokens ?? 0,
+        };
         return {
           status: "completed",
           explanation: this.restoreAliases(
@@ -245,11 +297,17 @@ export class OpenAIExplanationClient implements ExplanationClient {
             promptVersion: IMPACT_EXPLANATION_PROMPT_VERSION,
             outputSchemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
             latencyMs,
-            usage: {
-              inputTokens: completion.usage?.prompt_tokens ?? 0,
-              outputTokens: completion.usage?.completion_tokens ?? 0,
-              totalTokens: completion.usage?.total_tokens ?? 0,
-            },
+            usage,
+            attempts: [
+              {
+                provider: "groq",
+                model,
+                status: "completed",
+                failureCode: null,
+                latencyMs,
+                usage,
+              },
+            ],
           },
         };
       } catch (error: unknown) {
@@ -266,11 +324,12 @@ export class OpenAIExplanationClient implements ExplanationClient {
       }
     }
 
-    return {
-      status: "failed",
-      failureCode: "provider_request_rejected",
-      latencyMs: this.elapsedMilliseconds(startedAt),
-    };
+    return this.failedResult(
+      "groq",
+      model,
+      "provider_request_rejected",
+      this.elapsedMilliseconds(startedAt),
+    );
   }
 
   private providerFailure(
@@ -287,11 +346,117 @@ export class OpenAIExplanationClient implements ExplanationClient {
       failureCode,
       ...this.safeErrorMetadata(error),
     });
+    return this.failedResult(
+      provider,
+      model,
+      failureCode,
+      this.elapsedMilliseconds(startedAt),
+      this.retryAfterMilliseconds(error),
+    );
+  }
+
+  private failedResult(
+    provider: "openai" | "groq",
+    model: string,
+    failureCode: ExplanationFailureCode,
+    latencyMs: number,
+    retryAfterMs?: number,
+  ): Extract<ExplanationGenerationResult, { status: "failed" }> {
+    const usage = this.emptyUsage();
     return {
       status: "failed",
       failureCode,
-      latencyMs: this.elapsedMilliseconds(startedAt),
+      latencyMs,
+      usage,
+      ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+      attempts: [
+        {
+          provider,
+          model,
+          status: "failed",
+          failureCode,
+          latencyMs,
+          usage,
+        },
+      ],
     };
+  }
+
+  private canUseFallbackModel(
+    failureCode: ExplanationFailureCode,
+  ): boolean {
+    return (
+      failureCode === "provider_rate_limited" ||
+      failureCode === "provider_timeout" ||
+      failureCode === "provider_unavailable"
+    );
+  }
+
+  private combineModelAttempts(
+    primary: Extract<ExplanationGenerationResult, { status: "failed" }>,
+    fallback: ExplanationGenerationResult,
+  ): ExplanationGenerationResult {
+    if (fallback.status === "disabled") return fallback;
+    if (fallback.status === "failed") {
+      const latencyMs = primary.latencyMs + fallback.latencyMs;
+      const usage = this.combineUsage(primary.usage, fallback.usage);
+      const attempts = [...primary.attempts, ...fallback.attempts];
+      return {
+        ...fallback,
+        latencyMs,
+        usage,
+        attempts,
+      };
+    }
+    const latencyMs = primary.latencyMs + fallback.metadata.latencyMs;
+    const usage = this.combineUsage(
+      primary.usage,
+      fallback.metadata.usage,
+    );
+    const attempts = [
+      ...primary.attempts,
+      ...(fallback.metadata.attempts ?? []),
+    ];
+    return {
+      ...fallback,
+      metadata: {
+        ...fallback.metadata,
+        latencyMs,
+        usage,
+        attempts,
+      },
+    };
+  }
+
+  private combineUsage(
+    first: ExplanationGenerationMetadata["usage"],
+    second: ExplanationGenerationMetadata["usage"],
+  ): ExplanationGenerationMetadata["usage"] {
+    return {
+      inputTokens: first.inputTokens + second.inputTokens,
+      outputTokens: first.outputTokens + second.outputTokens,
+      totalTokens: first.totalTokens + second.totalTokens,
+    };
+  }
+
+  private emptyUsage(): ExplanationGenerationMetadata["usage"] {
+    return {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+    };
+  }
+
+  private retryAfterMilliseconds(error: unknown): number | undefined {
+    if (!error || typeof error !== "object") return undefined;
+    const headers = (error as { headers?: Headers }).headers;
+    const seconds = Number(headers?.get("retry-after"));
+    if (!Number.isFinite(seconds) || seconds < 0) return undefined;
+    return Math.round(seconds * 1_000);
+  }
+
+  private async delay(milliseconds: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, milliseconds));
   }
 
   private openai(

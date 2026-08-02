@@ -11,6 +11,7 @@ describe("validateEnvironment", () => {
     expect(environment.REDIS_URL).toContain("redis://");
     expect(environment.LLM_EXPLANATIONS_ENABLED).toBe(false);
     expect(environment.LLM_EXPLANATION_TIMEOUT_MS).toBe(15_000);
+    expect(environment.LLM_FALLBACK_MODEL).toBeUndefined();
     expect(environment.LLM_MAX_EVIDENCE_ITEMS).toBe(12);
     expect(environment.LLM_MAX_EVIDENCE_CHARACTERS).toBe(10_000);
     expect(environment.LLM_MAX_PACKET_CHARACTERS).toBe(14_000);
@@ -110,13 +111,34 @@ describe("validateEnvironment", () => {
         LLM_PROVIDER: "groq",
         LLM_BASE_URL: "https://api.groq.com/openai/v1",
         LLM_EXPLANATION_MODEL: "openai/gpt-oss-20b",
+        LLM_FALLBACK_MODEL: "llama-3.3-70b-versatile",
         GROQ_API_KEY: "test-key",
       }),
     ).toMatchObject({
       LLM_EXPLANATIONS_ENABLED: true,
       LLM_PROVIDER: "groq",
       LLM_BASE_URL: "https://api.groq.com/openai/v1",
+      LLM_FALLBACK_MODEL: "llama-3.3-70b-versatile",
     });
+
+    expect(() =>
+      validateEnvironment({
+        LLM_EXPLANATIONS_ENABLED: "true",
+        LLM_PROVIDER: "openai",
+        LLM_EXPLANATION_MODEL: "configured-model",
+        LLM_FALLBACK_MODEL: "fallback-model",
+        OPENAI_API_KEY: "test-key",
+      }),
+    ).toThrow("supported only when LLM_PROVIDER is groq");
+    expect(() =>
+      validateEnvironment({
+        LLM_EXPLANATIONS_ENABLED: "true",
+        LLM_PROVIDER: "groq",
+        LLM_EXPLANATION_MODEL: "openai/gpt-oss-20b",
+        LLM_FALLBACK_MODEL: "openai/gpt-oss-20b",
+        GROQ_API_KEY: "test-key",
+      }),
+    ).toThrow("must differ from LLM_EXPLANATION_MODEL");
   });
 
   it("parses false explicitly and validates evidence limits", () => {

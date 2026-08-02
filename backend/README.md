@@ -165,6 +165,7 @@ evidence:
 ```text
 LLM_PROVIDER=groq
 LLM_EXPLANATION_MODEL=openai/gpt-oss-120b
+LLM_FALLBACK_MODEL=openai/gpt-oss-20b
 LLM_MAX_EVIDENCE_ITEMS=8
 LLM_MAX_EVIDENCE_CHARACTERS=6000
 LLM_MAX_PACKET_CHARACTERS=7000
@@ -177,6 +178,11 @@ before sending the provider request. A transient JSON-validation failure is
 retried only when Groq's `x-ratelimit-remaining-tokens` response header reports
 enough capacity for another complete request. See the
 [Groq rate-limit documentation](https://console.groq.com/docs/rate-limits).
+When `LLM_FALLBACK_MODEL` is configured, Atlas switches to that Groq model only
+after a rate limit, timeout, or upstream availability failure. Authentication,
+permission, spend-limit, malformed-request, refusal, and validation failures do
+not trigger a model switch. Both attempts use the same bounded evidence packet
+and grounding validator.
 
 ## Synchronization jobs
 

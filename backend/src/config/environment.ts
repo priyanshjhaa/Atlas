@@ -35,6 +35,7 @@ const environmentSchema = z.object({
   LLM_PROVIDER: z.enum(["openai", "groq"]).default("openai"),
   LLM_BASE_URL: z.url().optional(),
   LLM_EXPLANATION_MODEL: z.string().trim().optional(),
+  LLM_FALLBACK_MODEL: z.string().trim().optional(),
   LLM_EXPLANATION_TIMEOUT_MS: z.coerce
     .number()
     .int()
@@ -123,6 +124,26 @@ const environmentSchema = z.object({
         message:
           "LLM_EXPLANATION_MODEL is required when LLM explanations are enabled.",
         path: ["LLM_EXPLANATION_MODEL"],
+      });
+    }
+    if (
+      environment.LLM_FALLBACK_MODEL &&
+      environment.LLM_PROVIDER !== "groq"
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "LLM_FALLBACK_MODEL is supported only when LLM_PROVIDER is groq.",
+        path: ["LLM_FALLBACK_MODEL"],
+      });
+    }
+    if (
+      environment.LLM_FALLBACK_MODEL &&
+      environment.LLM_FALLBACK_MODEL === environment.LLM_EXPLANATION_MODEL
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "LLM_FALLBACK_MODEL must differ from LLM_EXPLANATION_MODEL.",
+        path: ["LLM_FALLBACK_MODEL"],
       });
     }
     const providerKey =
