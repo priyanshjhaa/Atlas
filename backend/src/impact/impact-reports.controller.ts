@@ -12,6 +12,7 @@ import {
 } from "../auth/auth.decorators";
 import type { AuthenticatedIdentity } from "../auth/auth.types";
 import { CreateImpactReportDto } from "./dto/create-impact-report.dto";
+import { SubmitImpactFeedbackDto } from "./dto/submit-impact-feedback.dto";
 import { ImpactReportsService } from "./impact-reports.service";
 
 @Controller("workspaces/:workspaceId/impact-reports")
@@ -59,5 +60,21 @@ export class ImpactReportsController {
     @Param("reportId", ParseUUIDPipe) reportId: string,
   ) {
     return this.reports.retryExplanation(workspaceId, reportId);
+  }
+
+  @Post(":reportId/feedback")
+  @WorkspaceRoles("owner", "admin", "member")
+  submitFeedback(
+    @Param("workspaceId", ParseUUIDPipe) workspaceId: string,
+    @Param("reportId", ParseUUIDPipe) reportId: string,
+    @Body() body: SubmitImpactFeedbackDto,
+    @CurrentIdentity() identity: AuthenticatedIdentity,
+  ) {
+    return this.reports.submitFeedback(
+      workspaceId,
+      reportId,
+      body,
+      identity,
+    );
   }
 }

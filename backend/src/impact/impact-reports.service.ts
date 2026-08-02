@@ -4,6 +4,7 @@ import { ExplanationGenerationService } from "./explanation-generation.service";
 import { ImpactAnalysisService } from "./impact-analysis.service";
 import { ImpactRepository } from "./impact.repository";
 import type { CreateImpactReportInput } from "./impact.types";
+import type { SubmitImpactFeedbackDto } from "./dto/submit-impact-feedback.dto";
 import { PullRequestResolverService } from "./pull-request-resolver.service";
 
 @Injectable()
@@ -57,5 +58,26 @@ export class ImpactReportsService {
     const report = await this.repository.findById(workspaceId, reportId);
     if (!report) throw new NotFoundException("Impact report not found.");
     return this.explanations.generate(report, { retryPending: true });
+  }
+
+  async submitFeedback(
+    workspaceId: string,
+    reportId: string,
+    feedback: SubmitImpactFeedbackDto,
+    identity: AuthenticatedIdentity,
+  ) {
+    const saved = await this.repository.upsertFeedback({
+      workspaceId,
+      reportId,
+      submittedByUserId: identity.user.id,
+      rating: feedback.rating,
+      confirmedFindingIds: [
+        ...new Set(feedback.confirmedFindingIds ?? []),
+      ],
+      missedImpact: feedback.missedImpact?.trim() || null,
+      comment: feedback.comment?.trim() || null,
+    });
+    if (!saved) throw new NotFoundException("Impact report not found.");
+    return saved;
   }
 }

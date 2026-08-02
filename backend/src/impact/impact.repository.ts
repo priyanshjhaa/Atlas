@@ -18,6 +18,7 @@ import {
   codeRelationships,
   codeSymbols,
   connectors,
+  impactReportFeedback,
   impactReports,
   repositories,
   packageRelationships,
@@ -888,6 +889,72 @@ export class ImpactRepository {
         });
       }
       return (updated as unknown as StoredImpactReport | undefined) ?? null;
+    });
+  }
+
+  async upsertFeedback(input: {
+    workspaceId: string;
+    reportId: string;
+    submittedByUserId: string;
+    rating: "useful" | "not_useful";
+    confirmedFindingIds: string[];
+    missedImpact: string | null;
+    comment: string | null;
+  }) {
+    return this.database.client.transaction(async (transaction) => {
+      const [report] = await transaction
+        .select({ createdAt: impactReports.createdAt })
+        .from(impactReports)
+        .where(
+          and(
+            eq(impactReports.workspaceId, input.workspaceId),
+            eq(impactReports.id, input.reportId),
+          ),
+        )
+        .limit(1);
+      if (!report) return null;
+
+      const [feedback] = await transaction
+        .insert(impactReportFeedback)
+        .values(input)
+        .onConflictDoUpdate({
+          target: [
+            impactReportFeedback.reportId,
+            impactReportFeedback.submittedByUserId,
+          ],
+          set: {
+            rating: input.rating,
+            confirmedFindingIds: input.confirmedFindingIds,
+            missedImpact: input.missedImpact,
+            comment: input.comment,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+      if (!feedback) return null;
+
+      const timeToFeedbackSeconds = Math.max(
+        0,
+        Math.round(
+          (feedback.updatedAt.getTime() - report.createdAt.getTime()) /
+            1_000,
+        ),
+      );
+      await transaction.insert(auditEvents).values({
+        workspaceId: input.workspaceId,
+        actorUserId: input.submittedByUserId,
+        action: "impact.feedback.submitted",
+        targetType: "impact_report",
+        targetId: input.reportId,
+        metadata: {
+          rating: input.rating,
+          confirmedFindingCount: input.confirmedFindingIds.length,
+          hasMissedImpact: Boolean(input.missedImpact),
+          hasComment: Boolean(input.comment),
+          timeToFeedbackSeconds,
+        },
+      });
+      return { ...feedback, timeToFeedbackSeconds };
     });
   }
 }

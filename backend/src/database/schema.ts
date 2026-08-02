@@ -50,6 +50,10 @@ export const graphRelationshipClassification = pgEnum(
   "graph_relationship_classification",
   ["observed", "historical", "inferred"],
 );
+export const impactFeedbackRating = pgEnum("impact_feedback_rating", [
+  "useful",
+  "not_useful",
+]);
 
 // Better Auth-compatible identity tables. The adapter is connected in Milestone 3.
 export const users = pgTable(
@@ -1101,6 +1105,40 @@ export const impactReports = pgTable(
       table.requestedByUserId,
     ),
     index("impact_reports_created_at_idx").on(table.createdAt),
+  ],
+);
+
+export const impactReportFeedback = pgTable(
+  "impact_report_feedback",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    reportId: uuid("report_id")
+      .notNull()
+      .references(() => impactReports.id, { onDelete: "cascade" }),
+    submittedByUserId: text("submitted_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    rating: impactFeedbackRating("rating").notNull(),
+    confirmedFindingIds: jsonb("confirmed_finding_ids")
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    missedImpact: text("missed_impact"),
+    comment: text("comment"),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("impact_report_feedback_report_user_unique").on(
+      table.reportId,
+      table.submittedByUserId,
+    ),
+    index("impact_report_feedback_workspace_id_idx").on(table.workspaceId),
+    index("impact_report_feedback_report_id_idx").on(table.reportId),
+    index("impact_report_feedback_rating_idx").on(table.rating),
+    index("impact_report_feedback_created_at_idx").on(table.createdAt),
   ],
 );
 
