@@ -4,6 +4,7 @@ import type {
   ImpactExplanationFailureCode,
   ImpactExplanationSchemaVersion,
 } from "./explanation.types";
+import type { ExplanationValidationFailureCode } from "./explanation-validator.types";
 
 export type ExplanationProvider = "openai" | "groq";
 
@@ -22,6 +23,19 @@ export type ExplanationFailureCode = Extract<
   | "provider_error"
 >;
 
+export interface ExplanationProviderAttemptMetadata {
+  provider: ExplanationProvider;
+  model: string;
+  status: "completed" | "failed";
+  failureCode: ExplanationFailureCode | null;
+  latencyMs: number;
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
+}
+
 export interface ExplanationGenerationMetadata {
   provider: ExplanationProvider;
   model: string;
@@ -33,6 +47,7 @@ export interface ExplanationGenerationMetadata {
     outputTokens: number;
     totalTokens: number;
   };
+  attempts?: ExplanationProviderAttemptMetadata[];
 }
 
 export type ExplanationGenerationResult =
@@ -45,11 +60,24 @@ export type ExplanationGenerationResult =
       status: "failed";
       failureCode: ExplanationFailureCode;
       latencyMs: number;
+      usage: ExplanationGenerationMetadata["usage"];
+      attempts: ExplanationProviderAttemptMetadata[];
+      retryAfterMs?: number;
     }
   | {
       status: "disabled";
     };
 
+export interface ExplanationGenerationOptions {
+  repair?: {
+    candidate: ImpactExplanation;
+    failureCode: ExplanationValidationFailureCode;
+  };
+}
+
 export interface ExplanationClient {
-  generate(packet: ImpactEvidencePacket): Promise<ExplanationGenerationResult>;
+  generate(
+    packet: ImpactEvidencePacket,
+    options?: ExplanationGenerationOptions,
+  ): Promise<ExplanationGenerationResult>;
 }

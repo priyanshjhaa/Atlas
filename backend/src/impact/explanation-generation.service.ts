@@ -131,32 +131,58 @@ export class ExplanationGenerationService {
           packetResult.evidencePacketHash,
           generated.latencyMs,
           "not_run",
+          this.failedGenerationMetadata(generated),
         );
       }
 
-      const validation = this.validator.validate(
-        generated.explanation,
+      let completedGeneration = generated;
+      let validation = this.validator.validate(
+        completedGeneration.explanation,
         packetResult.packet,
       );
+      if (
+        validation.status === "invalid" &&
+        validation.failureCode === "unknown_file_path"
+      ) {
+        const repaired = await this.client.generate(packetResult.packet, {
+          repair: {
+            candidate: completedGeneration.explanation,
+            failureCode: validation.failureCode,
+          },
+        });
+        if (repaired.status === "completed") {
+          completedGeneration = {
+            ...repaired,
+            metadata: this.combinedGenerationMetadata(
+              completedGeneration.metadata,
+              repaired.metadata,
+            ),
+          };
+          validation = this.validator.validate(
+            completedGeneration.explanation,
+            packetResult.packet,
+          );
+        }
+      }
       if (validation.status === "invalid") {
         return this.persistFailure(
           pending,
           validation.failureCode,
           packetResult.evidencePacketHash,
-          generated.metadata.latencyMs,
+          completedGeneration.metadata.latencyMs,
           "invalid",
-          generated.metadata,
+          completedGeneration.metadata,
         );
       }
 
       const metadata = this.metadata(
         pending,
         packetResult.evidencePacketHash,
-        generated.metadata.latencyMs,
+        completedGeneration.metadata.latencyMs,
         "valid",
         false,
         null,
-        generated.metadata,
+        completedGeneration.metadata,
       );
       const completed = await this.persist(pending, {
         status: "completed",
@@ -175,6 +201,47 @@ export class ExplanationGenerationService {
         "not_run",
       );
     }
+  }
+
+  private combinedGenerationMetadata(
+    initial: ExplanationGenerationMetadata,
+    repaired: ExplanationGenerationMetadata,
+  ): ExplanationGenerationMetadata {
+    return {
+      ...repaired,
+      latencyMs: initial.latencyMs + repaired.latencyMs,
+      usage: {
+        inputTokens:
+          initial.usage.inputTokens + repaired.usage.inputTokens,
+        outputTokens:
+          initial.usage.outputTokens + repaired.usage.outputTokens,
+        totalTokens:
+          initial.usage.totalTokens + repaired.usage.totalTokens,
+      },
+      attempts: [
+        ...(initial.attempts ?? []),
+        ...(repaired.attempts ?? []),
+      ],
+    };
+  }
+
+  private failedGenerationMetadata(
+    result: Extract<
+      Awaited<ReturnType<OpenAIExplanationClient["generate"]>>,
+      { status: "failed" }
+    >,
+  ): ExplanationGenerationMetadata | undefined {
+    const lastAttempt = result.attempts?.at(-1);
+    if (!lastAttempt) return undefined;
+    return {
+      provider: lastAttempt.provider,
+      model: lastAttempt.model,
+      promptVersion: IMPACT_EXPLANATION_PROMPT_VERSION,
+      outputSchemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
+      latencyMs: result.latencyMs,
+      usage: result.usage,
+      attempts: result.attempts,
+    };
   }
 
   private async persistFailure(
@@ -242,6 +309,7 @@ export class ExplanationGenerationService {
         outputTokens: 0,
         totalTokens: 0,
       },
+      attempts: generation?.attempts,
       validationStatus,
       failureCode,
       deterministicFallback,

@@ -101,7 +101,9 @@ function setup(options: {
   enabled?: boolean;
   packetResult?: unknown;
   clientResult?: unknown;
+  repairResult?: unknown;
   validationResult?: unknown;
+  repairValidationResult?: unknown;
   initialExplanation?: ImpactExplanationState | null;
 } = {}) {
   const storedReport = report(options.initialExplanation);
@@ -114,33 +116,49 @@ function setup(options: {
       },
     ),
   };
-  const client = {
-    generate: vi.fn().mockResolvedValue(
-      options.clientResult ?? {
-        status: "completed",
-        explanation,
-        metadata: {
-          provider: "openai",
-          model: "configured-model",
-          promptVersion: IMPACT_EXPLANATION_PROMPT_VERSION,
-          outputSchemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
-          latencyMs: 25,
-          usage: {
-            inputTokens: 100,
-            outputTokens: 40,
-            totalTokens: 140,
-          },
-        },
+  const defaultClientResult = {
+    status: "completed",
+    explanation,
+    metadata: {
+      provider: "openai",
+      model: "configured-model",
+      promptVersion: IMPACT_EXPLANATION_PROMPT_VERSION,
+      outputSchemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
+      latencyMs: 25,
+      usage: {
+        inputTokens: 100,
+        outputTokens: 40,
+        totalTokens: 140,
       },
-    ),
+    },
   };
+  const generate = vi
+    .fn()
+    .mockResolvedValue(options.clientResult ?? defaultClientResult);
+  if (options.repairResult !== undefined) {
+    generate
+      .mockResolvedValueOnce(options.clientResult ?? defaultClientResult)
+      .mockResolvedValueOnce(options.repairResult);
+  }
+  const client = {
+    generate,
+  };
+  const defaultValidationResult = {
+    status: "valid",
+    explanation,
+  };
+  const validate = vi
+    .fn()
+    .mockReturnValue(options.validationResult ?? defaultValidationResult);
+  if (options.repairValidationResult !== undefined) {
+    validate
+      .mockReturnValueOnce(
+        options.validationResult ?? defaultValidationResult,
+      )
+      .mockReturnValueOnce(options.repairValidationResult);
+  }
   const validator = {
-    validate: vi.fn().mockReturnValue(
-      options.validationResult ?? {
-        status: "valid",
-        explanation,
-      },
-    ),
+    validate,
   };
   const repository = {
     updateExplanation: vi
@@ -335,6 +353,66 @@ describe("ExplanationGenerationService", () => {
       },
     });
     expect(validationResult.explanation).not.toHaveProperty("explanation");
+    expect(validationSetup.client.generate).toHaveBeenCalledTimes(2);
+  });
+
+  it("repairs one unknown file-path failure and combines provider usage", async () => {
+    const repairedExplanation = {
+      ...explanation,
+      answer: "The repaired grounded answer.",
+    };
+    const repairResult = {
+      status: "completed",
+      explanation: repairedExplanation,
+      metadata: {
+        provider: "openai",
+        model: "configured-model",
+        promptVersion: IMPACT_EXPLANATION_PROMPT_VERSION,
+        outputSchemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
+        latencyMs: 30,
+        usage: {
+          inputTokens: 120,
+          outputTokens: 45,
+          totalTokens: 165,
+        },
+      },
+    };
+    const repairSetup = setup({
+      validationResult: {
+        status: "invalid",
+        failureCode: "unknown_file_path",
+      },
+      repairResult,
+      repairValidationResult: {
+        status: "valid",
+        explanation: repairedExplanation,
+      },
+    });
+
+    const result = await repairSetup.service.generate(repairSetup.report);
+
+    expect(repairSetup.client.generate).toHaveBeenCalledTimes(2);
+    expect(repairSetup.client.generate.mock.calls[1]).toEqual([
+      packet,
+      {
+        repair: {
+          candidate: explanation,
+          failureCode: "unknown_file_path",
+        },
+      },
+    ]);
+    expect(result.explanation).toMatchObject({
+      status: "completed",
+      explanation: repairedExplanation,
+      metadata: {
+        latencyMs: 55,
+        usage: {
+          inputTokens: 220,
+          outputTokens: 85,
+          totalTokens: 305,
+        },
+      },
+    });
   });
 
   it("short-circuits insufficient evidence before the provider", async () => {

@@ -42,6 +42,7 @@ export interface ImpactReportInput {
   pullRequest?: {
     number: number;
     title: string;
+    body?: string;
     url: string;
     author: string;
     baseRevision: string;

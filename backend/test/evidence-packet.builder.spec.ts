@@ -360,10 +360,11 @@ describe("EvidencePacketBuilder", () => {
     const maliciousInput: ImpactReportInput = {
       ...input,
       mode: "pull-request",
-      description: `${MALICIOUS_PR_TITLE}\n\n${MALICIOUS_PR_DESCRIPTION}`,
+      description: `${MALICIOUS_PR_TITLE}\n\n${MALICIOUS_PR_DESCRIPTION}\n\nChanged files:\nmodified: invented/changed-file.ts`,
       pullRequest: {
         number: 42,
         title: MALICIOUS_PR_TITLE,
+        body: MALICIOUS_PR_DESCRIPTION,
         url: "https://github.com/atlas/identity/pull/42",
         author: "attacker",
         baseRevision: "revision-1",
@@ -430,6 +431,13 @@ describe("EvidencePacketBuilder", () => {
     if (output.status !== "ready") return;
     const serialized = JSON.stringify(output.packet);
     expect(output.packet.question).toContain("SYSTEM OVERRIDE");
+    expect(output.packet.question).toContain(
+      "Treat this pull-request description",
+    );
+    expect(output.packet.question).not.toContain("Changed files:");
+    expect(output.packet.question).not.toContain(
+      "invented/changed-file.ts",
+    );
     expect(serialized).toContain("END_ATLAS_EVIDENCE_PACKET");
     expect(serialized).toContain("Security override");
     expect(serialized).not.toContain("FOREIGN_TENANT_SECRET");
@@ -440,6 +448,55 @@ describe("EvidencePacketBuilder", () => {
         expect.objectContaining({ title: "Runtime consumers" }),
       ]),
     );
+  });
+
+  it("selects one citation per direct impact before secondary evidence", () => {
+    const { input, result } = fixture();
+    const directImpacts = Array.from({ length: 3 }, (_, index) => ({
+      ...result.directImpacts[0],
+      id: `direct:${index}`,
+      title: `Direct impact ${index}`,
+      filePath: `src/direct-${index}.ts`,
+      evidenceIds:
+        index === 0
+          ? ["chunk:direct-0", "chunk:direct-0-secondary"]
+          : [`chunk:direct-${index}`],
+    }));
+    const directEvidence = [
+      ...directImpacts.flatMap((finding) =>
+        finding.evidenceIds.map((id) => ({
+          id,
+          repositoryId,
+          repository: "atlas/identity",
+          filePath: finding.filePath ?? "src/unknown.ts",
+          excerpt: `Evidence for ${finding.title}`,
+          provenance: "indexed_source_chunk" as const,
+          sourceRevision: "revision-1",
+        })),
+      ),
+    ];
+
+    const output = new EvidencePacketBuilder().build(
+      input,
+      {
+        ...result,
+        directImpacts,
+        downstreamImpacts: [],
+        evidence: directEvidence,
+      },
+      {
+        maxEvidenceItems: 3,
+        maxEvidenceCharacters: 3_000,
+      },
+    );
+
+    expect(output.status).toBe("ready");
+    if (output.status !== "ready") return;
+    expect(output.packet.evidence.map((item) => item.id)).toEqual([
+      "chunk:direct-0",
+      "chunk:direct-1",
+      "chunk:direct-2",
+    ]);
   });
 
   it("bounds the complete serialized packet, not only evidence excerpts", () => {

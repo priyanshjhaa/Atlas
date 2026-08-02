@@ -35,10 +35,17 @@ export function expandedQueryTerms(query: string, limit = 24): string[] {
     .replace(/[^a-z0-9_./-]+/g, " ")
     .split(/\s+/)
     .filter((term) => term.length >= 3 && !stopWords.has(term));
-  const expanded = original.flatMap((term) => [
-    term,
-    ...(conceptAliases[term.replace(/[-_]/g, "")] ?? []),
-  ]);
+  const expanded = original.flatMap((term) => {
+    const aliasKey = term.replace(/[-_]/g, "");
+    const aliases = Object.prototype.hasOwnProperty.call(
+      conceptAliases,
+      aliasKey,
+    )
+      ? conceptAliases[aliasKey]
+      : [];
+
+    return [term, ...aliases];
+  });
   return [...new Set(expanded.map((term) => term.toLowerCase()))].slice(
     0,
     limit,

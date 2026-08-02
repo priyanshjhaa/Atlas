@@ -19,6 +19,7 @@ node_modules/
 coverage/
 playwright-report/
 test-results/
+.lighthouseci/
 
 # backend build output
 backend/dist/

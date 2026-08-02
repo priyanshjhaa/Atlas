@@ -81,6 +81,18 @@ export interface ImpactExplanationGenerationMetadata {
     outputTokens: number;
     totalTokens: number;
   };
+  attempts?: Array<{
+    provider: "openai" | "groq";
+    model: string;
+    status: "completed" | "failed";
+    failureCode: ImpactExplanationFailureCode | null;
+    latencyMs: number;
+    usage: {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+    };
+  }>;
   validationStatus: "valid" | "invalid" | "not_run";
   failureCode: ImpactExplanationFailureCode | null;
   deterministicFallback: boolean;

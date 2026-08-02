@@ -17,11 +17,11 @@ import type {
 
 export const DEFAULT_IMPACT_EVIDENCE_PACKET_LIMITS: ImpactEvidencePacketLimits =
   Object.freeze({
-    maxEvidenceItems: 30,
-    maxEvidenceCharacters: 60_000,
-    maxExcerptCharacters: 4_000,
+    maxEvidenceItems: 12,
+    maxEvidenceCharacters: 10_000,
+    maxExcerptCharacters: 2_000,
     maxQuestionCharacters: 2_000,
-    maxPacketCharacters: 60_000,
+    maxPacketCharacters: 14_000,
     maxDirectImpacts: 8,
     maxDownstreamImpacts: 12,
     maxUnknownImpacts: 8,
@@ -91,7 +91,7 @@ export class EvidencePacketBuilder {
     const canonicalRepository = `${result.repository.owner}/${result.repository.name}`;
     const packet = this.fitPacketToBudget({
       packetVersion: IMPACT_EVIDENCE_PACKET_VERSION,
-      question: this.sanitize(input.description).slice(
+      question: this.sanitize(this.explanationQuestion(input)).slice(
         0,
         limits.maxQuestionCharacters,
       ),
@@ -215,6 +215,19 @@ export class EvidencePacketBuilder {
     };
   }
 
+  private explanationQuestion(input: ImpactReportInput): string {
+    if (input.mode !== "pull-request" || !input.pullRequest) {
+      return input.description;
+    }
+
+    return [
+      `GitHub pull request #${input.pullRequest.number}: ${input.pullRequest.title}`,
+      input.pullRequest.body,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }
+
   private selectEvidence(
     result: ImpactReportResult,
     limits: ImpactEvidencePacketLimits,
@@ -247,13 +260,42 @@ export class EvidencePacketBuilder {
           left.citation.filePath.localeCompare(right.citation.filePath) ||
           left.citation.id.localeCompare(right.citation.id),
       );
+    const rankedById = new Map(
+      ranked.map((item) => [item.citation.id, item]),
+    );
+    const directCoverage = [...result.directImpacts]
+      .sort((left, right) =>
+        this.findingSortKey(left).localeCompare(this.findingSortKey(right)),
+      )
+      .flatMap((finding) => {
+        const citation = finding.evidenceIds
+          .map((id) => rankedById.get(id))
+          .filter((item): item is RankedCitation => Boolean(item))
+          .sort(
+            (left, right) =>
+              left.rank - right.rank ||
+              left.citation.filePath.localeCompare(
+                right.citation.filePath,
+              ) ||
+              left.citation.id.localeCompare(right.citation.id),
+          )[0];
+        return citation ? [citation] : [];
+      });
+    const ordered = [
+      ...new Map(
+        [...directCoverage, ...ranked].map((item) => [
+          item.citation.id,
+          item,
+        ]),
+      ).values(),
+    ];
 
     const selected: ImpactEvidencePacketCitation[] = [];
     const seenIds = new Set<string>();
     const seenLocations = new Set<string>();
     let characterCount = 0;
 
-    for (const { citation } of ranked) {
+    for (const { citation } of ordered) {
       const locationKey = [
         citation.provenance,
         citation.repositoryId,

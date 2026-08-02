@@ -19,4 +19,10 @@ describe("expandedQueryTerms", () => {
       ]),
     );
   });
+
+  it("treats object prototype property names as ordinary query terms", () => {
+    const terms = expandedQueryTerms("constructor toString __proto__");
+
+    expect(terms).toEqual(["constructor", "string", "__proto__"]);
+  });
 });
