@@ -2386,7 +2386,7 @@ body {
 
 @media (max-width: 600px) {
   .floating-nav { border-radius: 13px 17px 14px 16px; }
-  .hero { min-height: max(990px, 100svh); padding: 112px 20px 70px; }
+  .hero { min-height: max(1220px, 100svh); padding: 112px 20px 70px; }
   .hero-system-bar span:last-child { display: none; }
   .hero h1 { font-size: 51px; }
   .hero-deck { font-size: 16px; }
