@@ -60,26 +60,47 @@ encrypts traffic but does not expose a usable CA chain.
 
 ## Database backup and restore
 
-Create a compressed, checksummed backup before migrations:
+Create a private, compressed, checksummed backup before migrations:
 
 ```bash
-pg_dump --format=custom --no-owner --no-privileges "$DATABASE_URL" --file atlas.dump
-shasum -a 256 atlas.dump > atlas.dump.sha256
+ATLAS_RELEASE="$ATLAS_RELEASE" \
+  BACKUP_DIR=./backups \
+  ./scripts/operations/database-backup.sh
 ```
 
 Store both files in encrypted object storage with access logging and a
-retention policy. Never commit database dumps.
+retention policy. Record the object version, checksum, source release, and
+database engine version. Never commit database dumps or leave the only copy on
+the deployment host.
 
 Restore drills must use an isolated empty database:
 
 ```bash
-shasum -a 256 --check atlas.dump.sha256
-pg_restore --clean --if-exists --no-owner --no-privileges --dbname "$RESTORE_DATABASE_URL" atlas.dump
+RESTORE_DATABASE_URL="$RESTORE_DATABASE_URL" \
+  BACKUP_FILE=./backups/atlas-<timestamp>-<release>.dump \
+  RESTORE_CONFIRMATION=restore-isolated-database \
+  ./scripts/operations/database-restore.sh
 ```
 
 After restoration, run migrations and verify `/v1/ready`, workspace counts,
 connector records, and a representative impact report. Never point
-`RESTORE_DATABASE_URL` at production.
+`RESTORE_DATABASE_URL` at production. The restore script verifies the checksum
+and refuses an exact match with `DATABASE_URL`.
+
+Run a restore drill at least quarterly and before changing the database engine
+or backup policy. Record recovery-point and recovery-time results.
+
+## Migration procedure
+
+1. Confirm every migration is additive or otherwise compatible with the
+   preceding application release.
+2. Capture and upload a verified database backup.
+3. Stop the release if the backup identifier or checksum is missing.
+4. Run the release's immutable migration image exactly once.
+5. Confirm it exits successfully, then start the new API and worker images.
+6. Check `/v1/ready` and compare workspace, repository, connector, and impact
+   report counts with the pre-deploy record.
+7. Resume synchronization only after the verification owner signs off.
 
 ## Rollback
 
@@ -88,6 +109,17 @@ artifact. Database migrations must be backward compatible with the preceding
 application version. If a migration is not backward compatible, stop the
 release and prepare an explicit forward-fix migration; do not edit an applied
 migration.
+
+For a release-related failure:
+
+1. Stop traffic promotion and pause workers if writes could compound impact.
+2. Capture the failed release logs and active migration journal.
+3. Redeploy the preceding web, API, and worker image tags without rerunning
+   migrations.
+4. Confirm liveness, readiness, authentication, connector state, and a
+   representative impact analysis.
+5. Prefer a forward-fix migration. Restore a backup only for confirmed data
+   corruption and only after preserving the failed database for investigation.
 
 ## Incident response
 
@@ -102,3 +134,7 @@ migration.
    `CONNECTOR_ENCRYPTION_KEY` only through a planned re-encryption procedure.
 5. Roll back the application when the failure is release-related.
 6. Record impact, timeline, resolution, and follow-up controls.
+
+Use `docs/incident-template.md` as the incident record. Do not paste secrets,
+authorization headers, provider tokens, raw OAuth callback URLs, or database
+URLs into tickets or chat.
