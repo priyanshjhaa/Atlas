@@ -8,7 +8,16 @@ describe("validateEnvironment", () => {
     expect(environment.PORT).toBe(4000);
     expect(environment.FRONTEND_ORIGIN).toBe("http://localhost:3000");
     expect(environment.DATABASE_URL).toContain("postgresql://");
+    expect(environment.DATABASE_SSL_MODE).toBe("disable");
+    expect(environment.DATABASE_POOL_MAX).toBe(10);
+    expect(environment.DATABASE_CONNECTION_TIMEOUT_MS).toBe(10_000);
     expect(environment.REDIS_URL).toContain("redis://");
+    expect(environment.REDIS_CONNECT_TIMEOUT_MS).toBe(2_000);
+    expect(environment.API_RATE_LIMIT_TTL_MS).toBe(60_000);
+    expect(environment.API_RATE_LIMIT_MAX).toBe(120);
+    expect(environment.API_RATE_LIMIT_BLOCK_MS).toBe(60_000);
+    expect(environment.API_MAX_BODY_BYTES).toBe(1024 * 1024);
+    expect(environment.TRUST_PROXY_HOPS).toBe(0);
     expect(environment.LLM_EXPLANATIONS_ENABLED).toBe(false);
     expect(environment.LLM_EXPLANATION_TIMEOUT_MS).toBe(15_000);
     expect(environment.LLM_FALLBACK_MODEL).toBeUndefined();
@@ -19,12 +28,27 @@ describe("validateEnvironment", () => {
     expect(environment.LLM_REASONING_EFFORT).toBe("low");
     expect(environment.LLM_MAX_EXPLANATION_CHARACTERS).toBe(20_000);
     expect(environment.PILOT_FEEDBACK_RETENTION_DAYS).toBe(180);
+    expect(environment.ATLAS_RELEASE).toBe("local");
+    expect(environment.OPERATIONS_TOKEN).toBeUndefined();
+    expect(environment.LOG_PRETTY).toBeUndefined();
   });
 
   it("rejects an invalid port", () => {
     expect(() => validateEnvironment({ PORT: "70000" })).toThrow(
       "Invalid backend environment",
     );
+  });
+
+  it("bounds abuse-control configuration", () => {
+    expect(() =>
+      validateEnvironment({ API_RATE_LIMIT_MAX: "0" }),
+    ).toThrow("API_RATE_LIMIT_MAX");
+    expect(() =>
+      validateEnvironment({ API_MAX_BODY_BYTES: "10485761" }),
+    ).toThrow("API_MAX_BODY_BYTES");
+    expect(() =>
+      validateEnvironment({ TRUST_PROXY_HOPS: "6" }),
+    ).toThrow("TRUST_PROXY_HOPS");
   });
 
   it("requires the complete GitHub App configuration as one unit", () => {
@@ -38,10 +62,81 @@ describe("validateEnvironment", () => {
       GITHUB_APP_ID: "12345",
       GITHUB_APP_PRIVATE_KEY: "base64-private-key",
       GITHUB_APP_WEBHOOK_SECRET: "a-long-webhook-secret",
-      CONNECTOR_ENCRYPTION_KEY: "base64-encryption-key",
+      CONNECTOR_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64"),
     });
 
     expect(environment.GITHUB_APP_ID).toBe("12345");
+  });
+
+  it("rejects malformed connector encryption keys", () => {
+    expect(() =>
+      validateEnvironment({
+        CONNECTOR_ENCRYPTION_KEY: "not-a-32-byte-base64-key",
+      }),
+    ).toThrow("base64-encoded 32-byte key");
+    expect(() =>
+      validateEnvironment({
+        CONNECTOR_ENCRYPTION_KEY:
+          `${Buffer.alloc(32).toString("base64")}!!!!`,
+      }),
+    ).toThrow("base64-encoded 32-byte key");
+  });
+
+  it("rejects unsafe production service configuration", () => {
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: "production",
+        CONNECTOR_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64"),
+      }),
+    ).toThrow("must use a non-local HTTPS URL");
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: "production",
+        FRONTEND_ORIGIN: "https://atlas.example.com",
+        AUTH_JWKS_URL: "https://atlas.example.com/api/auth/jwks",
+        AUTH_ISSUER: "https://atlas.example.com",
+        AUTH_AUDIENCE: "https://api.atlas.example.com",
+        DATABASE_URL: "postgresql://atlas:secret@db.example.com:5432/atlas",
+        DATABASE_SSL_MODE: "verify-full",
+        REDIS_URL: "redis://cache.example.com:6379",
+        CONNECTOR_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64"),
+      }),
+    ).toThrow("REDIS_URL must use a non-local rediss URL");
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: "production",
+        LOG_PRETTY: "true",
+      }),
+    ).toThrow("LOG_PRETTY must be disabled in production");
+  });
+
+  it("requires a dedicated operations token in production", () => {
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: "production",
+      }),
+    ).toThrow("OPERATIONS_TOKEN is required in production");
+  });
+
+  it("accepts encrypted non-local production services", () => {
+    expect(
+      validateEnvironment({
+        NODE_ENV: "production",
+        FRONTEND_ORIGIN: "https://atlas.example.com",
+        AUTH_JWKS_URL: "https://atlas.example.com/api/auth/jwks",
+        AUTH_ISSUER: "https://atlas.example.com",
+        AUTH_AUDIENCE: "https://api.atlas.example.com",
+        DATABASE_URL: "postgresql://atlas:secret@db.example.com:5432/atlas",
+        DATABASE_SSL_MODE: "verify-full",
+        REDIS_URL: "rediss://cache.example.com:6380",
+        CONNECTOR_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64"),
+        OPERATIONS_TOKEN: "operations-token-with-at-least-32-characters",
+      }),
+    ).toMatchObject({
+      NODE_ENV: "production",
+      DATABASE_SSL_MODE: "verify-full",
+      REDIS_URL: "rediss://cache.example.com:6380",
+    });
   });
 
   it("requires complete Notion OAuth and encryption configuration", () => {

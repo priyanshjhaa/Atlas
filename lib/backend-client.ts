@@ -3,7 +3,10 @@ import "server-only";
 import { headers } from "next/headers";
 import { auth } from "./auth";
 
-const backendUrl = process.env.BACKEND_URL ?? "http://localhost:4000";
+const backendUrl =
+  process.env.BACKEND_INTERNAL_URL ??
+  process.env.BACKEND_URL ??
+  "http://localhost:4000";
 
 export async function fetchAtlasApi(
   path: string,

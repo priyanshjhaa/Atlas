@@ -1,0 +1,17 @@
+.git
+.github
+.next
+.vercel
+backend
+coverage
+docs
+e2e
+node_modules
+playwright-report
+test-results
+tests
+.env*
+*.log
+*.tsbuildinfo
+Dockerfile*
+compose*.yaml

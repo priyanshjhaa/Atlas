@@ -13,7 +13,48 @@ const environmentSchema = z.object({
   PORT: z.coerce.number().int().positive().max(65_535).default(4000),
   FRONTEND_ORIGIN: z.url().default("http://localhost:3000"),
   DATABASE_URL: z.url().default("postgresql://atlas:atlas@localhost:5432/atlas"),
+  DATABASE_SSL_MODE: z
+    .enum(["disable", "require", "verify-full"])
+    .default("disable"),
+  DATABASE_POOL_MAX: z.coerce.number().int().positive().max(100).default(10),
+  DATABASE_CONNECTION_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(60_000)
+    .default(10_000),
   REDIS_URL: z.url().default("redis://localhost:6379"),
+  REDIS_CONNECT_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(30_000)
+    .default(2_000),
+  API_RATE_LIMIT_TTL_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(3_600_000)
+    .default(60_000),
+  API_RATE_LIMIT_MAX: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(10_000)
+    .default(120),
+  API_RATE_LIMIT_BLOCK_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(3_600_000)
+    .default(60_000),
+  API_MAX_BODY_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(10 * 1024 * 1024)
+    .default(1024 * 1024),
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   AUTH_JWKS_URL: z
     .url()
     .default("http://localhost:3000/api/auth/jwks"),
@@ -25,7 +66,15 @@ const environmentSchema = z.object({
   NOTION_CLIENT_ID: z.string().min(1).optional(),
   NOTION_CLIENT_SECRET: z.string().min(1).optional(),
   NOTION_REDIRECT_URI: z.url().optional(),
-  CONNECTOR_ENCRYPTION_KEY: z.string().min(1).optional(),
+  CONNECTOR_ENCRYPTION_KEY: z
+    .string()
+    .refine(
+      (value) =>
+        /^[A-Za-z0-9+/]{43}=$/.test(value) &&
+        Buffer.from(value, "base64").length === 32,
+      "CONNECTOR_ENCRYPTION_KEY must be a base64-encoded 32-byte key.",
+    )
+    .optional(),
   SYNC_WORKER_CONCURRENCY: z.coerce.number().int().positive().max(20).default(2),
   REPOSITORY_STORAGE_PATH: z.string().min(1).default("/tmp/atlas-repositories"),
   PILOT_FEEDBACK_RETENTION_DAYS: z.coerce
@@ -79,6 +128,9 @@ const environmentSchema = z.object({
     .positive()
     .max(100_000)
     .default(20_000),
+  OPERATIONS_TOKEN: z.string().min(32).optional(),
+  ATLAS_RELEASE: z.string().min(1).max(128).default("local"),
+  LOG_PRETTY: environmentBoolean.optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 }).superRefine((environment, context) => {
   const githubValues = [
@@ -168,7 +220,82 @@ const environmentSchema = z.object({
       });
     }
   }
+  if (environment.NODE_ENV === "production") {
+    if (!environment.OPERATIONS_TOKEN) {
+      context.addIssue({
+        code: "custom",
+        message: "OPERATIONS_TOKEN is required in production.",
+        path: ["OPERATIONS_TOKEN"],
+      });
+    }
+    if (environment.LOG_PRETTY) {
+      context.addIssue({
+        code: "custom",
+        message: "LOG_PRETTY must be disabled in production.",
+        path: ["LOG_PRETTY"],
+      });
+    }
+    const publicUrls = [
+      ["FRONTEND_ORIGIN", environment.FRONTEND_ORIGIN],
+      ["AUTH_JWKS_URL", environment.AUTH_JWKS_URL],
+      ["AUTH_ISSUER", environment.AUTH_ISSUER],
+      ["AUTH_AUDIENCE", environment.AUTH_AUDIENCE],
+    ] as const;
+    for (const [name, value] of publicUrls) {
+      const url = new URL(value);
+      if (url.protocol !== "https:" || isLocalHostname(url.hostname)) {
+        context.addIssue({
+          code: "custom",
+          message: `${name} must use a non-local HTTPS URL in production.`,
+          path: [name],
+        });
+      }
+    }
+    const databaseUrl = new URL(environment.DATABASE_URL);
+    if (isLocalHostname(databaseUrl.hostname)) {
+      context.addIssue({
+        code: "custom",
+        message: "DATABASE_URL must not target a local host in production.",
+        path: ["DATABASE_URL"],
+      });
+    }
+    if (environment.DATABASE_SSL_MODE === "disable") {
+      context.addIssue({
+        code: "custom",
+        message: "DATABASE_SSL_MODE must encrypt database traffic in production.",
+        path: ["DATABASE_SSL_MODE"],
+      });
+    }
+    const redisUrl = new URL(environment.REDIS_URL);
+    if (
+      redisUrl.protocol !== "rediss:" ||
+      isLocalHostname(redisUrl.hostname)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "REDIS_URL must use a non-local rediss URL in production.",
+        path: ["REDIS_URL"],
+      });
+    }
+    if (!environment.CONNECTOR_ENCRYPTION_KEY) {
+      context.addIssue({
+        code: "custom",
+        message: "CONNECTOR_ENCRYPTION_KEY is required in production.",
+        path: ["CONNECTOR_ENCRYPTION_KEY"],
+      });
+    }
+  }
 });
+
+function isLocalHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1" ||
+    normalized.endsWith(".localhost")
+  );
+}
 
 export type Environment = z.infer<typeof environmentSchema>;
 

@@ -11,6 +11,14 @@ import { WorkspacesModule } from "./workspaces/workspaces.module";
 import { SyncModule } from "./sync/sync.module";
 import { IntelligenceModule } from "./intelligence/intelligence.module";
 import { ImpactModule } from "./impact/impact.module";
+import { SecurityModule } from "./security/security.module";
+import {
+  requestIdFromHeader,
+  safeRequestPath,
+} from "./observability/http-logging";
+import { DiagnosticsController } from "./health/diagnostics.controller";
+import { DiagnosticsService } from "./health/diagnostics.service";
+import { OperationsGuard } from "./health/operations.guard";
 
 @Module({
   imports: [
@@ -21,6 +29,7 @@ import { ImpactModule } from "./impact/impact.module";
     }),
     DatabaseModule,
     AuthModule,
+    SecurityModule,
     ConnectorsModule,
     IntelligenceModule,
     ImpactModule,
@@ -34,25 +43,44 @@ import { ImpactModule } from "./impact/impact.module";
           paths: [
             "req.headers.authorization",
             "req.headers.cookie",
+            "req.headers['x-hub-signature-256']",
+            "req.query",
+            "req.url",
             "res.headers.set-cookie",
           ],
           censor: "[REDACTED]",
         },
-        transport:
-          process.env.NODE_ENV === "production"
-            ? undefined
-            : {
+        genReqId: (request, response) => {
+          const requestId = requestIdFromHeader(
+            request.headers["x-request-id"],
+          );
+          response.setHeader("X-Request-Id", requestId);
+          return requestId;
+        },
+        customProps: (request) => ({
+          requestPath: safeRequestPath(request.url),
+        }),
+        transport: shouldPrettyPrintLogs()
+          ? {
                 target: "pino-pretty",
                 options: {
                   colorize: true,
                   singleLine: true,
                   translateTime: "SYS:standard",
                 },
-              },
+            }
+          : undefined,
       },
     }),
   ],
-  controllers: [HealthController],
-  providers: [HealthService],
+  controllers: [HealthController, DiagnosticsController],
+  providers: [HealthService, DiagnosticsService, OperationsGuard],
 })
 export class AppModule {}
+
+function shouldPrettyPrintLogs(): boolean {
+  if (process.env.LOG_PRETTY !== undefined) {
+    return process.env.LOG_PRETTY.toLowerCase() === "true";
+  }
+  return process.env.NODE_ENV !== "production";
+}

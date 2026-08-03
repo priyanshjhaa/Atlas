@@ -26,5 +26,6 @@ import { PullRequestResolverService } from "./pull-request-resolver.service";
     OpenAIExplanationClient,
     PullRequestResolverService,
   ],
+  exports: [ExplanationObservabilityService],
 })
 export class ImpactModule {}
