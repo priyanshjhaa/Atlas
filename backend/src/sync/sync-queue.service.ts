@@ -41,6 +41,21 @@ export class SyncQueueService implements OnModuleDestroy {
     await this.queue.waitUntilReady();
   }
 
+  async counts() {
+    const counts = await this.queue.getJobCounts(
+      "waiting",
+      "active",
+      "delayed",
+      "failed",
+    );
+    return {
+      waiting: counts.waiting ?? 0,
+      active: counts.active ?? 0,
+      delayed: counts.delayed ?? 0,
+      failed: counts.failed ?? 0,
+    };
+  }
+
   async onModuleDestroy(): Promise<void> {
     await this.queue.close();
   }

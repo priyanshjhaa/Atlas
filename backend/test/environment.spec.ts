@@ -28,6 +28,8 @@ describe("validateEnvironment", () => {
     expect(environment.LLM_REASONING_EFFORT).toBe("low");
     expect(environment.LLM_MAX_EXPLANATION_CHARACTERS).toBe(20_000);
     expect(environment.PILOT_FEEDBACK_RETENTION_DAYS).toBe(180);
+    expect(environment.ATLAS_RELEASE).toBe("local");
+    expect(environment.OPERATIONS_TOKEN).toBeUndefined();
     expect(environment.LOG_PRETTY).toBeUndefined();
   });
 
@@ -108,6 +110,14 @@ describe("validateEnvironment", () => {
     ).toThrow("LOG_PRETTY must be disabled in production");
   });
 
+  it("requires a dedicated operations token in production", () => {
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: "production",
+      }),
+    ).toThrow("OPERATIONS_TOKEN is required in production");
+  });
+
   it("accepts encrypted non-local production services", () => {
     expect(
       validateEnvironment({
@@ -120,6 +130,7 @@ describe("validateEnvironment", () => {
         DATABASE_SSL_MODE: "verify-full",
         REDIS_URL: "rediss://cache.example.com:6380",
         CONNECTOR_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64"),
+        OPERATIONS_TOKEN: "operations-token-with-at-least-32-characters",
       }),
     ).toMatchObject({
       NODE_ENV: "production",

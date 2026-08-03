@@ -128,6 +128,8 @@ const environmentSchema = z.object({
     .positive()
     .max(100_000)
     .default(20_000),
+  OPERATIONS_TOKEN: z.string().min(32).optional(),
+  ATLAS_RELEASE: z.string().min(1).max(128).default("local"),
   LOG_PRETTY: environmentBoolean.optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 }).superRefine((environment, context) => {
@@ -219,6 +221,13 @@ const environmentSchema = z.object({
     }
   }
   if (environment.NODE_ENV === "production") {
+    if (!environment.OPERATIONS_TOKEN) {
+      context.addIssue({
+        code: "custom",
+        message: "OPERATIONS_TOKEN is required in production.",
+        path: ["OPERATIONS_TOKEN"],
+      });
+    }
     if (environment.LOG_PRETTY) {
       context.addIssue({
         code: "custom",

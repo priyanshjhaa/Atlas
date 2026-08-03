@@ -16,6 +16,9 @@ import {
   requestIdFromHeader,
   safeRequestPath,
 } from "./observability/http-logging";
+import { DiagnosticsController } from "./health/diagnostics.controller";
+import { DiagnosticsService } from "./health/diagnostics.service";
+import { OperationsGuard } from "./health/operations.guard";
 
 @Module({
   imports: [
@@ -70,8 +73,8 @@ import {
       },
     }),
   ],
-  controllers: [HealthController],
-  providers: [HealthService],
+  controllers: [HealthController, DiagnosticsController],
+  providers: [HealthService, DiagnosticsService, OperationsGuard],
 })
 export class AppModule {}
 

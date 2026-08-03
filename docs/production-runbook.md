@@ -48,6 +48,7 @@ Production requires:
   `verify-full`.
 - A non-local `rediss://` URL.
 - A base64-encoded 32-byte `CONNECTOR_ENCRYPTION_KEY`.
+- A dedicated 32-character-or-longer `OPERATIONS_TOKEN`.
 - The exact `TRUST_PROXY_HOPS` count when a reverse proxy is present.
 
 The API applies a Redis-backed distributed request limit and rejects bodies
@@ -57,6 +58,23 @@ dependency failure.
 
 Prefer `verify-full` for PostgreSQL. Use `require` only when the platform
 encrypts traffic but does not expose a usable CA chain.
+
+## Operational diagnostics
+
+`GET /v1/diagnostics` requires
+`Authorization: Bearer <OPERATIONS_TOKEN>` and bypasses the application rate
+limiter so it remains available while Redis is degraded. Restrict it at the
+network edge as well as with the token.
+
+The response contains only the release identifier, process uptime and memory
+totals, aggregate GitHub and Notion queue counts, and process-local explanation
+outcomes. It excludes environment values, URLs, credentials, prompts,
+workspace identifiers, repository identifiers, and connector metadata.
+
+Treat `status: degraded` or an unavailable queue as an alert. Queue failure
+counts and explanation fallback counts should be monitored as rates rather
+than as raw lifetime totals. Because diagnostics are process-local, collect
+them from every API replica.
 
 ## Database backup and restore
 
