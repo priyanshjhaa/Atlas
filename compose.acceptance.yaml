@@ -1,0 +1,95 @@
+services:
+  db:
+    image: pgvector/pgvector:0.8.2-pg17-bookworm@sha256:feb68f4f15446397d8cac7f4fe48fe4586de83160d1fc48b46283312d1a33966
+    environment:
+      POSTGRES_DB: atlas
+      POSTGRES_USER: atlas
+      POSTGRES_PASSWORD: atlas
+    volumes:
+      - acceptance_database:/var/lib/postgresql/data
+      - acceptance_backups:/backups
+      - ./scripts/operations:/operations:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atlas -d atlas"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7.4-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    image: atlas-migration:acceptance
+    build:
+      context: backend
+      target: migration
+    environment:
+      DATABASE_URL: postgresql://atlas:atlas@db:5432/atlas
+      DATABASE_SSL_MODE: disable
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    image: atlas-api:acceptance
+    build:
+      context: backend
+      target: api
+    environment:
+      NODE_ENV: development
+      LOG_PRETTY: "false"
+      DATABASE_URL: postgresql://atlas:atlas@db:5432/atlas
+      REDIS_URL: redis://redis:6379
+      OPERATIONS_TOKEN: operations-token-with-at-least-32-characters
+      ATLAS_RELEASE: acceptance
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    image: atlas-worker:acceptance
+    build:
+      context: backend
+      target: worker
+    environment:
+      NODE_ENV: development
+      LOG_PRETTY: "false"
+      DATABASE_URL: postgresql://atlas:atlas@db:5432/atlas
+      REDIS_URL: redis://redis:6379
+      OPERATIONS_TOKEN: operations-token-with-at-least-32-characters
+      ATLAS_RELEASE: acceptance
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    image: atlas-web:acceptance
+    build:
+      context: .
+      target: runtime
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://atlas:atlas@db:5432/atlas
+      BETTER_AUTH_SECRET: acceptance-secret-with-at-least-32-characters
+      BETTER_AUTH_URL: http://web:3000
+      BACKEND_URL: http://api:4000
+      BACKEND_INTERNAL_URL: http://api:4000
+      GITHUB_CLIENT_ID: acceptance-client
+      GITHUB_CLIENT_SECRET: acceptance-client-secret
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  acceptance_database:
+  acceptance_backups:

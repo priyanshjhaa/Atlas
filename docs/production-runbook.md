@@ -38,6 +38,18 @@ The frontend uses `BACKEND_URL` as the public JWT audience and
 `BACKEND_INTERNAL_URL` for server-to-server API traffic. The API and worker
 share a persistent repository volume but run as separate non-root processes.
 
+Before promoting a release, run the same container acceptance used by CI:
+
+```bash
+./scripts/operations/container-acceptance.sh
+```
+
+It builds all deployment targets, applies migrations, checks liveness,
+readiness, internal routing, and protected diagnostics, completes a real
+isolated backup/restore drill, and requires clean web, API, and worker
+shutdowns. The acceptance allows a zero exit or the conventional SIGTERM exit
+code 143 and rejects forced termination (137).
+
 ## Required production configuration
 
 The API refuses to start when production URLs are local or unencrypted.
