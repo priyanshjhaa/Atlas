@@ -11,6 +11,11 @@ import { WorkspacesModule } from "./workspaces/workspaces.module";
 import { SyncModule } from "./sync/sync.module";
 import { IntelligenceModule } from "./intelligence/intelligence.module";
 import { ImpactModule } from "./impact/impact.module";
+import { SecurityModule } from "./security/security.module";
+import {
+  requestIdFromHeader,
+  safeRequestPath,
+} from "./observability/http-logging";
 
 @Module({
   imports: [
@@ -21,6 +26,7 @@ import { ImpactModule } from "./impact/impact.module";
     }),
     DatabaseModule,
     AuthModule,
+    SecurityModule,
     ConnectorsModule,
     IntelligenceModule,
     ImpactModule,
@@ -34,10 +40,23 @@ import { ImpactModule } from "./impact/impact.module";
           paths: [
             "req.headers.authorization",
             "req.headers.cookie",
+            "req.headers['x-hub-signature-256']",
+            "req.query",
+            "req.url",
             "res.headers.set-cookie",
           ],
           censor: "[REDACTED]",
         },
+        genReqId: (request, response) => {
+          const requestId = requestIdFromHeader(
+            request.headers["x-request-id"],
+          );
+          response.setHeader("X-Request-Id", requestId);
+          return requestId;
+        },
+        customProps: (request) => ({
+          requestPath: safeRequestPath(request.url),
+        }),
         transport:
           process.env.NODE_ENV === "production"
             ? undefined
