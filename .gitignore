@@ -31,6 +31,9 @@ backend/dist/
 # misc
 .DS_Store
 *.pem
+*.dump
+*.dump.sha256
+backups/
 
 # debug
 npm-debug.log*

@@ -57,17 +57,16 @@ import {
         customProps: (request) => ({
           requestPath: safeRequestPath(request.url),
         }),
-        transport:
-          process.env.NODE_ENV === "production"
-            ? undefined
-            : {
+        transport: shouldPrettyPrintLogs()
+          ? {
                 target: "pino-pretty",
                 options: {
                   colorize: true,
                   singleLine: true,
                   translateTime: "SYS:standard",
                 },
-              },
+            }
+          : undefined,
       },
     }),
   ],
@@ -75,3 +74,10 @@ import {
   providers: [HealthService],
 })
 export class AppModule {}
+
+function shouldPrettyPrintLogs(): boolean {
+  if (process.env.LOG_PRETTY !== undefined) {
+    return process.env.LOG_PRETTY.toLowerCase() === "true";
+  }
+  return process.env.NODE_ENV !== "production";
+}

@@ -128,6 +128,7 @@ const environmentSchema = z.object({
     .positive()
     .max(100_000)
     .default(20_000),
+  LOG_PRETTY: environmentBoolean.optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 }).superRefine((environment, context) => {
   const githubValues = [
@@ -218,6 +219,13 @@ const environmentSchema = z.object({
     }
   }
   if (environment.NODE_ENV === "production") {
+    if (environment.LOG_PRETTY) {
+      context.addIssue({
+        code: "custom",
+        message: "LOG_PRETTY must be disabled in production.",
+        path: ["LOG_PRETTY"],
+      });
+    }
     const publicUrls = [
       ["FRONTEND_ORIGIN", environment.FRONTEND_ORIGIN],
       ["AUTH_JWKS_URL", environment.AUTH_JWKS_URL],

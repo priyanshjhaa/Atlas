@@ -16,12 +16,27 @@ Before deploying:
 1. Confirm the target commit passed `.github/workflows/ci.yml`.
 2. Back up PostgreSQL and record the backup identifier.
 3. Run `npm ci && npm run build` in the repository root and `backend/`.
-4. Run `npm run db:migrate` from `backend/` as a one-off release task.
-5. Start the API with `npm start` and the worker with `npm run start:worker`.
-6. Require `/v1/health` for liveness and `/v1/ready` for readiness.
+4. Build immutable `runtime`, `api`, `worker`, and `migration` container
+   targets from the release commit.
+5. Run the migration target as a one-off release task.
+6. Start the web, API, and worker targets from the same release identifier.
+7. Require `/v1/health` for liveness and `/v1/ready` for readiness.
 
 Do not send traffic to a release until readiness reports PostgreSQL and Redis
 as available.
+
+The reference deployment is `compose.production.yaml`. Populate its required
+variables from a secret manager, then run:
+
+```bash
+docker compose -f compose.production.yaml --profile tools run --rm migrate
+docker compose -f compose.production.yaml up -d web api worker
+docker compose -f compose.production.yaml ps
+```
+
+The frontend uses `BACKEND_URL` as the public JWT audience and
+`BACKEND_INTERNAL_URL` for server-to-server API traffic. The API and worker
+share a persistent repository volume but run as separate non-root processes.
 
 ## Required production configuration
 

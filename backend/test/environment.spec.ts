@@ -28,6 +28,7 @@ describe("validateEnvironment", () => {
     expect(environment.LLM_REASONING_EFFORT).toBe("low");
     expect(environment.LLM_MAX_EXPLANATION_CHARACTERS).toBe(20_000);
     expect(environment.PILOT_FEEDBACK_RETENTION_DAYS).toBe(180);
+    expect(environment.LOG_PRETTY).toBeUndefined();
   });
 
   it("rejects an invalid port", () => {
@@ -99,6 +100,12 @@ describe("validateEnvironment", () => {
         CONNECTOR_ENCRYPTION_KEY: Buffer.alloc(32).toString("base64"),
       }),
     ).toThrow("REDIS_URL must use a non-local rediss URL");
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: "production",
+        LOG_PRETTY: "true",
+      }),
+    ).toThrow("LOG_PRETTY must be disabled in production");
   });
 
   it("accepts encrypted non-local production services", () => {

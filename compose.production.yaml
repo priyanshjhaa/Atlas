@@ -1,0 +1,121 @@
+x-api-environment: &api-environment
+  NODE_ENV: production
+  HOST: 0.0.0.0
+  PORT: 4000
+  FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?Set FRONTEND_ORIGIN}
+  DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+  DATABASE_SSL_MODE: ${DATABASE_SSL_MODE:-verify-full}
+  DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
+  DATABASE_CONNECTION_TIMEOUT_MS: ${DATABASE_CONNECTION_TIMEOUT_MS:-10000}
+  REDIS_URL: ${REDIS_URL:?Set REDIS_URL}
+  REDIS_CONNECT_TIMEOUT_MS: ${REDIS_CONNECT_TIMEOUT_MS:-2000}
+  AUTH_JWKS_URL: ${AUTH_JWKS_URL:?Set AUTH_JWKS_URL}
+  AUTH_ISSUER: ${AUTH_ISSUER:?Set AUTH_ISSUER}
+  AUTH_AUDIENCE: ${AUTH_AUDIENCE:?Set AUTH_AUDIENCE}
+  CONNECTOR_ENCRYPTION_KEY: ${CONNECTOR_ENCRYPTION_KEY:?Set CONNECTOR_ENCRYPTION_KEY}
+  REPOSITORY_STORAGE_PATH: /var/lib/atlas/repositories
+  API_RATE_LIMIT_TTL_MS: ${API_RATE_LIMIT_TTL_MS:-60000}
+  API_RATE_LIMIT_MAX: ${API_RATE_LIMIT_MAX:-120}
+  API_RATE_LIMIT_BLOCK_MS: ${API_RATE_LIMIT_BLOCK_MS:-60000}
+  API_MAX_BODY_BYTES: ${API_MAX_BODY_BYTES:-1048576}
+  TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+  SYNC_WORKER_CONCURRENCY: ${SYNC_WORKER_CONCURRENCY:-2}
+  PILOT_FEEDBACK_RETENTION_DAYS: ${PILOT_FEEDBACK_RETENTION_DAYS:-180}
+  GITHUB_APP_ID: ${GITHUB_APP_ID:?Set GITHUB_APP_ID}
+  GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:?Set GITHUB_APP_PRIVATE_KEY}
+  GITHUB_APP_WEBHOOK_SECRET: ${GITHUB_APP_WEBHOOK_SECRET:?Set GITHUB_APP_WEBHOOK_SECRET}
+  NOTION_CLIENT_ID: ${NOTION_CLIENT_ID:?Set NOTION_CLIENT_ID}
+  NOTION_CLIENT_SECRET: ${NOTION_CLIENT_SECRET:?Set NOTION_CLIENT_SECRET}
+  NOTION_REDIRECT_URI: ${NOTION_REDIRECT_URI:?Set NOTION_REDIRECT_URI}
+  EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-local}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  GROQ_API_KEY: ${GROQ_API_KEY:-}
+  LLM_EXPLANATIONS_ENABLED: ${LLM_EXPLANATIONS_ENABLED:-false}
+  LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+  LLM_BASE_URL: ${LLM_BASE_URL:-}
+  LLM_EXPLANATION_MODEL: ${LLM_EXPLANATION_MODEL:-}
+  LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-}
+  LOG_PRETTY: "false"
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  ATLAS_RELEASE: ${ATLAS_RELEASE:-local}
+
+services:
+  web:
+    image: atlas-web:${ATLAS_RELEASE:-local}
+    build:
+      context: .
+      target: runtime
+    init: true
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?Set BETTER_AUTH_URL}
+      BACKEND_URL: ${BACKEND_URL:?Set BACKEND_URL}
+      BACKEND_INTERNAL_URL: http://api:4000
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?Set GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:?Set GITHUB_CLIENT_SECRET}
+      GITHUB_APP_SLUG: ${GITHUB_APP_SLUG:?Set GITHUB_APP_SLUG}
+      NOTION_CLIENT_ID: ${NOTION_CLIENT_ID:?Set NOTION_CLIENT_ID}
+      NOTION_REDIRECT_URI: ${NOTION_REDIRECT_URI:?Set NOTION_REDIRECT_URI}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  api:
+    image: atlas-api:${ATLAS_RELEASE:-local}
+    build:
+      context: backend
+      target: api
+    init: true
+    restart: unless-stopped
+    environment: *api-environment
+    ports:
+      - "${API_PORT:-4000}:4000"
+    volumes:
+      - atlas_repository_data:/var/lib/atlas/repositories
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  worker:
+    image: atlas-worker:${ATLAS_RELEASE:-local}
+    build:
+      context: backend
+      target: worker
+    init: true
+    restart: unless-stopped
+    environment: *api-environment
+    volumes:
+      - atlas_repository_data:/var/lib/atlas/repositories
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  migrate:
+    image: atlas-migration:${ATLAS_RELEASE:-local}
+    build:
+      context: backend
+      target: migration
+    profiles:
+      - tools
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      DATABASE_SSL_MODE: ${DATABASE_SSL_MODE:-verify-full}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  atlas_repository_data:
