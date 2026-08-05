@@ -164,6 +164,9 @@ integration, and LLM provider are provisioned.
 Read [the production runbook](docs/production-runbook.md) before deploying. It
 defines the release gate, required configuration, migration order, diagnostics,
 backup and restore procedure, rollback, and incident response.
+Track infrastructure provisioning, production credentials, provider callbacks,
+staging acceptance, and release sign-off in the
+[deployment checklist](docs/deployment-checklist.md).
 
 Atlas contains a documented one-time fork of selected repository-intelligence
 services and has no runtime dependency on CodeMap.
