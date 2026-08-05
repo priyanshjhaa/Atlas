@@ -121,4 +121,3 @@ validation rules.
       database, Redis, disk, and certificate-expiration alerts.
 - [ ] Confirm the documented rollback artifact remains available.
 - [ ] Record the deployment outcome and any follow-up work.
-

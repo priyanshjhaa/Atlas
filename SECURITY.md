@@ -24,4 +24,3 @@ Reports will be acknowledged when reviewed. Remediation timing depends on
 severity, exploitability, and the scope of the affected deployment. Please
 allow time for investigation and coordinated disclosure before publishing
 details.
-
