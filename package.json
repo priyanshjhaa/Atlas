@@ -17,14 +17,14 @@
   },
   "dependencies": {
     "@xyflow/react": "^12.11.2",
-    "better-auth": "^1.6.23",
+    "better-auth": "^1.6.25",
     "drizzle-orm": "^0.45.2",
-    "lucide-react": "^1.24.0",
-    "motion": "^12.42.2",
+    "lucide-react": "^1.28.0",
+    "motion": "^12.43.0",
     "next": "^16.2.12",
     "pg": "^8.22.0",
-    "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
@@ -33,8 +33,8 @@
     "@testing-library/react": "^16.3.2",
     "@types/node": "22.19.19",
     "@types/pg": "^8.20.0",
-    "@types/react": "19.2.14",
-    "@types/react-dom": "19.2.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
     "jsdom": "^29.1.1",
