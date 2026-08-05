@@ -2,9 +2,10 @@
 
 ## Release gate
 
-Every release must pass the frontend and backend CI jobs. Production deploys
-must use Node.js 22, immutable application artifacts, and separate API and
-worker processes built from the same commit.
+Every release must pass the frontend, browser acceptance, backend, and
+production-container CI jobs. Production deploys must use Node.js 22,
+immutable application artifacts, and separate API and worker processes built
+from the same commit.
 
 Next.js currently requires tested dependency overrides for PostCSS and Sharp
 because its stable package metadata pins older vulnerable lines. CI runs a
@@ -37,6 +38,9 @@ docker compose -f compose.production.yaml ps
 The frontend uses `BACKEND_URL` as the public JWT audience and
 `BACKEND_INTERNAL_URL` for server-to-server API traffic. The API and worker
 share a persistent repository volume but run as separate non-root processes.
+Do not move these processes to a platform that only supports service-local
+volumes until repository checkout storage has been redesigned or an equivalent
+shared filesystem has been provisioned.
 
 Before promoting a release, run the same container acceptance used by CI:
 

@@ -2,7 +2,7 @@
 
 import { Background, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { graphEdges, graphNodes } from "@/lib/mock-data";
+import { graphEdges, graphNodes } from "@/lib/marketing-demo-data";
 
 export function MarketingGraph() {
   return (
