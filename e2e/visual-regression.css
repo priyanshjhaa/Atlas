@@ -6,4 +6,37 @@ nextjs-portal {
 *::before,
 *::after {
   caret-color: transparent !important;
+  transition: none !important;
+}
+
+html {
+  scroll-behavior: auto !important;
+}
+
+/*
+ * Decorative motion is intentionally excluded from golden screenshots.
+ * These layers do not communicate product state and can land between
+ * compositor frames on Linux, producing a handful of meaningless pixels.
+ */
+.hero::after {
+  content: none !important;
+}
+
+.hero-console,
+.intelligence-marquee__track {
+  animation: none !important;
+}
+
+.intelligence-marquee__track {
+  transform: translate3d(0, 0, 0) !important;
+}
+
+/* Development and authentication diagnostics must not affect visual gates. */
+nextjs-portal,
+[data-testid="auth-status"],
+[data-testid="user-menu"],
+[data-testid="toast"],
+[aria-live="polite"],
+[aria-live="assertive"] {
+  visibility: hidden !important;
 }
