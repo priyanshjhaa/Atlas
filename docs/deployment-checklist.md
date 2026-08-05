@@ -8,8 +8,11 @@ secret manager; never paste production values into tracked files.
 ## Locally completed release preparation
 
 - [x] Frontend and backend typecheck, lint, tests, and production builds pass.
-- [x] Production-only dependency audits pass.
-- [x] Functional browser and Lighthouse acceptance run in CI.
+- [x] Complete frontend and backend dependency audits pass.
+- [x] Functional browser, cross-platform visual regression, and Lighthouse
+      acceptance run in CI.
+- [x] GitHub App and Notion OAuth state signing, tamper rejection, and expiry
+      behavior have automated coverage.
 - [x] Web, API, worker, and migration container targets exist.
 - [x] Container liveness, readiness, protected diagnostics, migration,
       backup/restore, and graceful shutdown acceptance pass.
