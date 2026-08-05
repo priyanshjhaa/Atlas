@@ -55,10 +55,10 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="hero-console" aria-label="Example impact analysis">
+        <div className="hero-console" aria-label="Illustrative impact analysis">
           <div className="window-bar"><span /><span /><span /><em>impact-analysis.atlas</em></div>
           <div className="console-query">
-            <span>Proposed change</span>
+            <span>Illustrative proposed change</span>
             <strong>Replace persistent session tokens with rotating refresh tokens.</strong>
           </div>
           <div className="console-progress">
