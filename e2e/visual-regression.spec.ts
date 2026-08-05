@@ -6,6 +6,11 @@ const screenshotStyles = path.join(
   "e2e/visual-regression.css",
 );
 
+// The illustrated hero uses layered gradients and a low-opacity texture.
+// Chromium's Linux compositor can vary a handful of edge pixels between
+// otherwise identical runs. Keep the allowance far below a visible change.
+const landingHeroMaxDiffPixels = 50;
+
 async function settlePage(page: Page) {
   await page.waitForLoadState("networkidle");
   await page.evaluate(() => document.fonts.ready);
@@ -22,6 +27,7 @@ test.describe("visual regression", () => {
     await expect(page).toHaveScreenshot("landing-hero.png", {
       animations: "disabled",
       caret: "hide",
+      maxDiffPixels: landingHeroMaxDiffPixels,
       scale: "css",
       stylePath: screenshotStyles,
     });
