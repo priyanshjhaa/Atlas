@@ -54,8 +54,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: Run functional browser acceptance
-        run: npm run test:e2e -- e2e/atlas.spec.ts
+      - name: Run functional and visual browser acceptance
+        run: npm run test:e2e
       - name: Run Lighthouse accessibility checks
         run: npm run test:lighthouse
       - name: Upload browser diagnostics
