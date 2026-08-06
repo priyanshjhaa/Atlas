@@ -80,6 +80,51 @@ test("keeps the landing hierarchy separated at every supported viewport", async 
   expect(layout.previewClearRibbon).toBe(true);
 });
 
+test("keeps the hero balanced on a short 13-inch landscape viewport", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop");
+  await page.setViewportSize({ width: 1466, height: 829 });
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: /Know what a change touches/ }),
+  ).toBeVisible();
+
+  const layout = await page.evaluate(() => {
+    const heading = document.querySelector(".hero h1");
+    const actions = document.querySelector(".hero-actions");
+    const preview = document.querySelector(".hero-console");
+    const ribbon = document.querySelector(".intelligence-marquee");
+    const headingStyle = heading ? getComputedStyle(heading) : null;
+    const actionsBounds = actions?.getBoundingClientRect();
+    const previewBounds = preview?.getBoundingClientRect();
+    const ribbonBounds = ribbon?.getBoundingClientRect();
+
+    return {
+      headingSize: headingStyle ? Number.parseFloat(headingStyle.fontSize) : 0,
+      actionsClearPreview: Boolean(
+        actionsBounds &&
+          previewBounds &&
+          (actionsBounds.right <= previewBounds.left ||
+            actionsBounds.bottom <= previewBounds.top),
+      ),
+      previewClearRibbon: Boolean(
+        previewBounds &&
+          ribbonBounds &&
+          previewBounds.bottom <= ribbonBounds.top,
+      ),
+      noHorizontalOverflow:
+        document.documentElement.scrollWidth <=
+        document.documentElement.clientWidth,
+    };
+  });
+
+  expect(layout.headingSize).toBeLessThanOrEqual(80);
+  expect(layout.actionsClearPreview).toBe(true);
+  expect(layout.previewClearRibbon).toBe(true);
+  expect(layout.noHorizontalOverflow).toBe(true);
+});
+
 test("keeps GitHub sign-in inside the viewport", async ({ page }) => {
   await page.goto("/sign-in");
   await expect(page.getByRole("button", { name: /Continue with GitHub/ })).toBeVisible();
