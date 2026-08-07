@@ -130,11 +130,11 @@ export function DashboardPage({
           <span>MAP COVERAGE {String(coverage).padStart(3, "0")}%</span>
         </div>
         <PageHeader
-          eyebrow="Workspace command center"
+          eyebrow="Living engineering system"
           title={`${greeting}, ${firstName}.`}
-          detail={`${workspace.name} has ${repositories.length} ${
+          detail={`${workspace.name} has ${repositories.length} connected ${
             repositories.length === 1 ? "repository" : "repositories"
-          }, with ${indexedRepositories.length} synchronized and ready for analysis.`}
+          }, with ${indexedRepositories.length} synchronized for architecture exploration, indexed search, dependency tracing, and source-backed change analysis.`}
           action={
             <Link className="button button--primary" href="/app/impact/new">
               <Zap size={16} /> Analyze a change
@@ -193,8 +193,8 @@ export function DashboardPage({
         <section className="panel panel--graph">
           <div className="panel-heading">
             <div>
-              <span>Live system map</span>
-              <h2>Connected architecture</h2>
+              <span>Source-backed system model</span>
+              <h2>Connected architecture graph</h2>
             </div>
             <Link href="/app/graph">
               Open graph <ArrowRight size={14} />
@@ -210,7 +210,7 @@ export function DashboardPage({
           <div className="panel-heading">
             <div>
               <span>Suggested investigations</span>
-              <h2>Ask Atlas</h2>
+              <h2>Explore dependencies and change paths</h2>
             </div>
             <Sparkles size={18} />
           </div>
@@ -260,7 +260,7 @@ export function DashboardPage({
               <div className="empty-state">
                 <GitBranch size={20} />
                 <h2>No repositories connected</h2>
-                <p>Connect GitHub to populate the workspace overview.</p>
+                <p>Connect a GitHub App installation, select repositories, and synchronize them to build the architecture graph and enable search and impact analysis.</p>
               </div>
             )}
           </div>
@@ -300,7 +300,7 @@ export function DashboardPage({
               <div className="empty-state">
                 <RefreshCw size={20} />
                 <h2>No synchronization activity</h2>
-                <p>Queued repository jobs will appear here.</p>
+                <p>GitHub repository and Notion document synchronization jobs will appear here with stage, progress, and outcome details.</p>
               </div>
             )}
           </div>

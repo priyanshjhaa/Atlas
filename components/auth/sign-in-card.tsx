@@ -27,8 +27,8 @@ export function SignInCard({ error }: { error?: string }) {
   return (
     <section className="sign-in-card">
       <div className="sign-in-card__eyebrow"><span /> Sign in to Atlas</div>
-      <h1>Open your<br />workspace.</h1>
-      <p>Continue with GitHub to access your engineering intelligence workspace.</p>
+      <h1>Open your<br />system map.</h1>
+      <p>Continue with GitHub to explore synchronized architecture, search indexed engineering context, and analyze changes with source-backed evidence.</p>
       <button className="button button--primary sign-in-button" onClick={signIn} disabled={pending}>
         {pending ? <LoaderCircle className="spin" size={18} /> : <GitBranch size={18} />}
         {pending ? "Connecting to GitHub…" : "Continue with GitHub"}

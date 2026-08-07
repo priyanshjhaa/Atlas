@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("moves from the landing page to GitHub sign-in", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /Know what a change touches/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /See your whole system/ })).toBeVisible();
 
   const workspaceLink = page.locator("a:visible").filter({ hasText: "Open workspace" });
   if (!(await workspaceLink.isVisible())) {
@@ -22,7 +22,7 @@ test("protects direct workspace routes", async ({ page }) => {
 
 test("keeps the landing hierarchy separated at every supported viewport", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /Know what a change touches/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /See your whole system/ })).toBeVisible();
 
   const layout = await page.evaluate(() => {
     const rectangle = (selector: string) => {
@@ -78,6 +78,51 @@ test("keeps the landing hierarchy separated at every supported viewport", async 
   expect(layout.noHorizontalOverflow).toBe(true);
   expect(layout.actionsClearPreview).toBe(true);
   expect(layout.previewClearRibbon).toBe(true);
+});
+
+test("keeps the hero balanced on a short 13-inch landscape viewport", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop");
+  await page.setViewportSize({ width: 1466, height: 829 });
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: /See your whole system/ }),
+  ).toBeVisible();
+
+  const layout = await page.evaluate(() => {
+    const heading = document.querySelector(".hero h1");
+    const actions = document.querySelector(".hero-actions");
+    const preview = document.querySelector(".hero-console");
+    const ribbon = document.querySelector(".intelligence-marquee");
+    const headingStyle = heading ? getComputedStyle(heading) : null;
+    const actionsBounds = actions?.getBoundingClientRect();
+    const previewBounds = preview?.getBoundingClientRect();
+    const ribbonBounds = ribbon?.getBoundingClientRect();
+
+    return {
+      headingSize: headingStyle ? Number.parseFloat(headingStyle.fontSize) : 0,
+      actionsClearPreview: Boolean(
+        actionsBounds &&
+          previewBounds &&
+          (actionsBounds.right <= previewBounds.left ||
+            actionsBounds.bottom <= previewBounds.top),
+      ),
+      previewClearRibbon: Boolean(
+        previewBounds &&
+          ribbonBounds &&
+          previewBounds.bottom <= ribbonBounds.top,
+      ),
+      noHorizontalOverflow:
+        document.documentElement.scrollWidth <=
+        document.documentElement.clientWidth,
+    };
+  });
+
+  expect(layout.headingSize).toBeLessThanOrEqual(80);
+  expect(layout.actionsClearPreview).toBe(true);
+  expect(layout.previewClearRibbon).toBe(true);
+  expect(layout.noHorizontalOverflow).toBe(true);
 });
 
 test("keeps GitHub sign-in inside the viewport", async ({ page }) => {

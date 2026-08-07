@@ -129,21 +129,21 @@ export function SourcesPage({
 
   return (
     <>
-      <PageHeader eyebrow="Connected context" title="Sources" detail="Control what Atlas can index and see the freshness of every engineering source." action={<button className="button button--primary" onClick={() => setDialog("connect")}><Plus size={15} /> Connect source</button>} />
+      <PageHeader eyebrow="Approved engineering context" title="Sources" detail="Connect a GitHub App installation and a Notion workspace, choose the repositories and shared resources Atlas may access, and monitor the indexed revision and freshness of each source." action={<button className="button button--primary" onClick={() => setDialog("connect")}><Plus size={15} /> Connect source</button>} />
       {notice && <p className="action-notice" aria-live="polite">{notice}</p>}
 
       <div className="connector-grid">
         <article className="connector-card">
           <div className="connector-top"><i><GitBranch size={22} /></i><ConfidenceBadge type="observed" /></div>
           <h2>GitHub</h2>
-          <p>Code, pull requests, commits, authors, and reviews from {workspace.name}.</p>
+          <p>Selected repositories, default-branch source, bounded commit history, pull requests, authors, and reviews for {workspace.name}.</p>
           <div className="connector-stats"><div><b>{repositories.length}</b><span>repositories</span></div><div><b>{synchronizedRepositories.length}</b><span>synchronized</span></div><div><b>{lastSynchronizedAt ? formatLastSync(lastSynchronizedAt) : "—"}</b><span>last sync</span></div></div>
           <div className="connector-footer"><StatusDot state={githubConnector ? "ready" : "warning"} /><b>{githubConnector ? `Connected to ${githubConnector.configuration.account ?? "GitHub"}` : "Not connected"}</b><button onClick={() => githubConnector ? setDialog("github") : connectGitHub()} disabled={!canManageGitHub}>{githubConnector ? "Manage" : "Connect"}</button></div>
         </article>
         <article className="connector-card">
           <div className="connector-top"><i className="notion-icon">N</i><ConfidenceBadge type="observed" /></div>
           <h2>Notion</h2>
-          <p>Architecture decisions, runbooks, and technical design documents.</p>
+          <p>Selected pages and data sources containing specifications, ADRs, runbooks, technical designs, and operational knowledge.</p>
           <div className="connector-stats"><div><b>{notionPages.length}</b><span>pages</span></div><div><b>{notionDataSources.length}</b><span>data sources</span></div><div><b>{notionLastSyncedAt ? formatLastSync(notionLastSyncedAt) : "—"}</b><span>last sync</span></div></div>
           <div className="connector-footer"><StatusDot state={notionConnector ? "ready" : "warning"} /><b>{notionConnector ? `Connected to ${notionConnector.configuration.workspaceName ?? "Notion"}` : "Not connected"}</b><button onClick={() => notionConnector ? setDialog("notion") : connectNotion()} disabled={!canManageNotion}>{notionConnector ? "Manage" : "Connect"}</button></div>
         </article>
@@ -370,7 +370,7 @@ export function ActivityPage({
 
   return (
     <>
-      <PageHeader eyebrow="Source intelligence" title="Sync activity" detail="Watch Atlas synchronize GitHub and Notion context before the indexing pipeline processes it." action={<button className="button button--primary" onClick={() => void syncAll()} disabled={syncing || !canSynchronize}><RefreshCw className={syncing ? "spin" : ""} size={15} /> {syncing ? "Queueing…" : "Sync all"}</button>} />
+      <PageHeader eyebrow="Source ingestion and freshness" title="Sync activity" detail="Track GitHub revision checks, bounded history capture, source discovery, parsing, embeddings, graph persistence, and Notion document versioning. Cancel active repository jobs, retry failures, and verify no-change work that Atlas safely skipped." action={<button className="button button--primary" onClick={() => void syncAll()} disabled={syncing || !canSynchronize}><RefreshCw className={syncing ? "spin" : ""} size={15} /> {syncing ? "Queueing…" : "Sync all"}</button>} />
       {notice && <p className="action-notice" aria-live="polite">{notice}</p>}
       <div className="activity-grid">
         <section className="panel active-sync">
@@ -397,11 +397,11 @@ export function SettingsPage({
 }) {
   return (
     <>
-      <PageHeader eyebrow="Workspace administration" title="Settings" detail={`Review the live configuration and access level for ${workspace.name}.`} />
+      <PageHeader eyebrow="Workspace administration" title="Settings" detail={`Review the live workspace identity, repository coverage, and your role-based access level for ${workspace.name}. Connector permissions and indexed data remain controlled from Sources.`} />
       <div className="settings-layout">
         <aside><button className="active"><Settings size={15} />Workspace</button><button disabled><Users size={15} />Members</button><button disabled><ShieldCheck size={15} />Access & roles</button><button disabled><Bell size={15} />Notifications</button><button disabled><Database size={15} />Data & privacy</button></aside>
         <main className="panel settings-panel">
-          <span>Live configuration</span><h2>{workspace.name}</h2><p>Workspace values are loaded from Atlas rather than frontend fixtures.</p>
+          <span>Live configuration</span><h2>{workspace.name}</h2><p>These values come from the authenticated Atlas workspace and determine the scope used by repositories, connectors, synchronization, search, graphs, and impact reports.</p>
           <div className="settings-form">
             <div className="entity-meta"><div><span>Name</span><b>{workspace.name}</b></div><div><span>Slug</span><b>{workspace.slug}</b></div><div><span>Your role</span><b>{workspace.role}</b></div><div><span>Repositories</span><b>{workspace.repositoryCount}</b></div></div>
           </div>

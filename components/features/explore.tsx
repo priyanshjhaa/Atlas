@@ -116,8 +116,8 @@ export function GraphPage({
         detail={
           architectureSnapshot?.summary ??
           (graph
-            ? `${graph.nodes.length} indexed entities and ${graph.edges.length} relationships from synchronized source.`
-            : "Synchronize a repository to build a source-backed engineering graph.")
+            ? `${graph.nodes.length} current and historical repository, package, file, and symbol entities connected by ${graph.edges.length} observed, historical, or inferred relationships at a specific source revision.`
+            : "Synchronize a GitHub repository to resolve packages, files, symbols, imports, API relationships, and cross-repository paths into a source-backed graph.")
         }
         action={
           <button
@@ -309,9 +309,9 @@ export function SearchPage({
   return (
     <>
       <PageHeader
-        eyebrow="Engineering search"
+        eyebrow="Cited engineering retrieval"
         title={`Search ${workspace.name}`}
-        detail="Search synchronized source, symbols, and graph-connected code with repository-scoped citations."
+        detail="Search synchronized source chunks, files, symbols, packages, and public APIs. Atlas ranks direct matches, expands relevant current graph neighbors, and keeps every result scoped to its repository and source citation."
       />
       <div className="search-hero">
         <Search size={20} />
@@ -361,7 +361,7 @@ export function SearchPage({
             <span>
               {response
                 ? `${response.results.length} results for “${response.query}”`
-                : "Run a search against synchronized repository intelligence"}
+                : "Search a synchronized repository to retrieve cited source and graph-connected engineering context"}
             </span>
           </div>
           {response?.results.map((item) => {
@@ -409,8 +409,8 @@ export function SearchPage({
             {response
               ? response.lowConfidence
                 ? "Atlas found only low-confidence matches."
-                : "Results are ranked from indexed source and current graph context."
-              : "Select a synchronized repository and enter a query."}
+                : "Results combine ranked indexed source with relevant one-hop relationships from the current engineering graph."
+              : "Select a synchronized repository and search for a file, symbol, API, package, behavior, or system concept."}
           </p>
           <div>
             <ConfidenceBadge type="observed" />{" "}

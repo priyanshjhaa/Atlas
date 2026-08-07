@@ -20,7 +20,7 @@ test.describe("visual regression", () => {
   test("keeps the landing hero visually stable", async ({ page }) => {
     await page.goto("/");
     await expect(
-      page.getByRole("heading", { name: /Know what a change touches/ }),
+      page.getByRole("heading", { name: /See your whole system/ }),
     ).toBeVisible();
     await settlePage(page);
 
