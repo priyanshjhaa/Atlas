@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("moves from the landing page to GitHub sign-in", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /Know what a change touches/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /See your whole system/ })).toBeVisible();
 
   const workspaceLink = page.locator("a:visible").filter({ hasText: "Open workspace" });
   if (!(await workspaceLink.isVisible())) {
@@ -22,7 +22,7 @@ test("protects direct workspace routes", async ({ page }) => {
 
 test("keeps the landing hierarchy separated at every supported viewport", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /Know what a change touches/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /See your whole system/ })).toBeVisible();
 
   const layout = await page.evaluate(() => {
     const rectangle = (selector: string) => {
@@ -87,7 +87,7 @@ test("keeps the hero balanced on a short 13-inch landscape viewport", async ({
   await page.setViewportSize({ width: 1466, height: 829 });
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: /Know what a change touches/ }),
+    page.getByRole("heading", { name: /See your whole system/ }),
   ).toBeVisible();
 
   const layout = await page.evaluate(() => {

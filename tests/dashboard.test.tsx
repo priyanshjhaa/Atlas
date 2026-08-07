@@ -62,7 +62,7 @@ describe("DashboardPage", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Atlas Engineering has 1 repository, with 1 synchronized and ready for analysis.",
+        "Atlas Engineering has 1 connected repository, with 1 synchronized for architecture exploration, indexed search, dependency tracing, and source-backed change analysis.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Northstar Labs/i)).not.toBeInTheDocument();

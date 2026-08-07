@@ -520,9 +520,9 @@ export function ImpactNewPage({
   return (
     <>
       <PageHeader
-        eyebrow="Change intelligence"
-        title="Analyze a change"
-        detail="Describe what you plan to change. Atlas resolves indexed code entities, follows observed relationships, and keeps unknowns explicit."
+        eyebrow="Evidence-backed change intelligence"
+        title="Analyze a planned change or pull request"
+        detail="Describe a proposed change or select a GitHub pull request. Atlas resolves modification anchors, traverses direct and downstream relationships across the chosen scope, retrieves relevant history and documentation, scores risk, and returns cited findings, unknowns, recommendations, and a verification plan."
       />
       {error && (
         <p className="action-notice action-notice--error" role="alert">
@@ -1000,8 +1000,8 @@ export function ImpactReportPage({
               <span>Source-backed analysis</span>
               <h2 id="verified-report-title">Verified Atlas report</h2>
               <p>
-                The deterministic conclusion remains separate from the generated
-                explanation.
+                Review the deterministic, revision-bound conclusion separately
+                from the optional generated explanation that summarizes it.
               </p>
             </header>
             <section className="executive-summary panel">
@@ -1033,8 +1033,9 @@ export function ImpactReportPage({
             <span>Impact map</span>
             <h2 id="findings-title">Findings</h2>
             <p>
-              Review what Atlas resolved directly, the observed consumers, and
-              the relationship path behind the blast radius.
+              Review resolved modification anchors, direct impacts, downstream
+              consumers, cross-repository paths, and the relationship evidence
+              behind the reported blast radius.
             </p>
           </header>
           <AIExplanation
