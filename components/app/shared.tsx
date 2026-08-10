@@ -14,5 +14,5 @@ export interface Metric {
 }
 
 export function MetricCard({ metric }: { metric: Metric }) {
-  return <article className={`metric-card metric-card--${metric.tone}`}><span>{metric.label}</span><strong>{metric.value}</strong><p>{metric.change}</p></article>;
+  return <article className={`system-readout system-readout--${metric.tone}`}><i aria-hidden="true" /><div><span>{metric.label}</span><p>{metric.change}</p></div><strong>{metric.value}</strong></article>;
 }

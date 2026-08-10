@@ -4,8 +4,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
-  GitBranch,
-  RefreshCw,
   Sparkles,
   Zap,
 } from "lucide-react";
@@ -13,7 +11,6 @@ import { AtlasGraph } from "@/components/atlas-graph";
 import {
   MetricCard,
   PageHeader,
-  StatusDot,
   type Metric,
 } from "@/components/app/shared";
 import type {
@@ -30,20 +27,12 @@ export function greetingForHour(hour: number) {
   return "Good evening";
 }
 
-function formatJobTime(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
 export function DashboardPage({
   userName,
   workspace,
   repositories,
   jobs,
   graph,
-  pilotMetrics = null,
 }: {
   userName: string;
   workspace: AtlasWorkspace;
@@ -123,7 +112,7 @@ export function DashboardPage({
   }, [indexedRepositories, workspace.name]);
 
   return (
-    <>
+    <div className="dashboard-page">
       <section className="dashboard-command">
         <div className="command-coordinates">
           <span>LIVING SYSTEM / {workspace.slug.toUpperCase()}</span>
@@ -145,56 +134,22 @@ export function DashboardPage({
           <i /><span /><span /><span /><span />
         </div>
       </section>
-      <div className="metrics-grid">
+      <section className="system-readouts" aria-label="Workspace health">
         {metrics.map((metric) => (
           <MetricCard key={metric.label} metric={metric} />
         ))}
-      </div>
+      </section>
       <div className="dashboard-grid">
-        {pilotMetrics && (
-          <section className="panel">
-            <div className="panel-heading">
-              <div>
-                <span>Pilot readiness</span>
-                <h2>Measured outcomes</h2>
-              </div>
-              <Sparkles size={18} />
-            </div>
-            <div className="pilot-metric-list">
-              <p>
-                <b>
-                  {pilotMetrics.feedback.usefulnessRate === null
-                    ? "—"
-                    : `${pilotMetrics.feedback.usefulnessRate}%`}
-                </b>
-                <span>useful reports</span>
-              </p>
-              <p><b>{pilotMetrics.feedback.responses}</b><span>feedback responses</span></p>
-              <p><b>{pilotMetrics.feedback.missedImpacts}</b><span>reported misses</span></p>
-              <p>
-                <b>
-                  {pilotMetrics.synchronization.successRate === null
-                    ? "—"
-                    : `${pilotMetrics.synchronization.successRate}%`}
-                </b>
-                <span>sync success</span>
-              </p>
-              <p><b>{pilotMetrics.explanations.modelFallbacks}</b><span>model fallbacks</span></p>
-              <p><b>{pilotMetrics.explanations.deterministicFallbacks}</b><span>deterministic fallbacks</span></p>
-            </div>
-            <a
-              className="button button--ghost button--small"
-              href={`/api/pilot-metrics/export?workspaceId=${encodeURIComponent(workspace.id)}`}
-            >
-              Export bounded CSV
-            </a>
-          </section>
-        )}
         <section className="panel panel--graph">
           <div className="panel-heading">
             <div>
               <span>Source-backed system model</span>
               <h2>Connected architecture graph</h2>
+              {activeRepositories[0] && (
+                <small className="panel-context">
+                  {activeRepositories[0].owner}/{activeRepositories[0].name}
+                </small>
+              )}
             </div>
             <Link href="/app/graph">
               Open graph <ArrowRight size={14} />
@@ -227,85 +182,7 @@ export function DashboardPage({
             ))}
           </div>
         </section>
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <span>Repository coverage</span>
-              <h2>Sources to inspect</h2>
-            </div>
-            <GitBranch size={18} />
-          </div>
-          <div className="pr-list">
-            {activeRepositories.slice(0, 4).map((repository) => (
-              <article key={repository.id}>
-                <StatusDot
-                  state={repository.lastSyncedAt ? "ready" : "warning"}
-                />
-                <div>
-                  <b>
-                    {repository.owner}/{repository.name}
-                  </b>
-                  <p>
-                    {repository.defaultBranch ?? "No default branch"} ·{" "}
-                    {repository.lastSyncedAt
-                      ? `indexed ${new Intl.DateTimeFormat("en", {
-                          dateStyle: "medium",
-                        }).format(new Date(repository.lastSyncedAt))}`
-                      : "not synchronized"}
-                  </p>
-                </div>
-              </article>
-            ))}
-            {!activeRepositories.length && (
-              <div className="empty-state">
-                <GitBranch size={20} />
-                <h2>No repositories connected</h2>
-                <p>Connect a GitHub App installation, select repositories, and synchronize them to build the architecture graph and enable search and impact analysis.</p>
-              </div>
-            )}
-          </div>
-        </section>
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <span>Repository intelligence</span>
-              <h2>Index activity</h2>
-            </div>
-            <Link href="/app/activity">View all</Link>
-          </div>
-          <div className="timeline timeline--compact">
-            {jobs.slice(0, 3).map((job) => (
-              <div key={job.id}>
-                <StatusDot
-                  state={
-                    ["queued", "running"].includes(job.status)
-                      ? "running"
-                      : job.status === "failed"
-                        ? "warning"
-                        : "ready"
-                  }
-                />
-                <span>{formatJobTime(job.createdAt)}</span>
-                <p>
-                  <b>
-                    {job.repositoryOwner}/{job.repositoryName}
-                  </b>
-                  <small>
-                    {job.stage.replaceAll("_", " ")} · {job.progress}%
-                  </small>
-                </p>
-              </div>
-            ))}
-            {!jobs.length && (
-              <div className="empty-state">
-                <RefreshCw size={20} />
-                <h2>No synchronization activity</h2>
-                <p>GitHub repository and Notion document synchronization jobs will appear here with stage, progress, and outcome details.</p>
-              </div>
-            )}
-          </div>
-        </section>
       </div>
-    </>
+    </div>
   );
 }
