@@ -780,24 +780,27 @@ function ReportNavigation({
   const items: Array<{
     view: ImpactReportView;
     label: string;
+    detail: string;
     href: string;
   }> = [
-    { view: "overview", label: "Overview", href: basePath },
-    { view: "findings", label: "Findings", href: `${basePath}/findings` },
-    { view: "plan", label: "Plan", href: `${basePath}/plan` },
-    { view: "evidence", label: "Evidence", href: `${basePath}/evidence` },
+    { view: "overview", label: "Brief", detail: "Decision", href: basePath },
+    { view: "findings", label: "Findings", detail: "Blast radius", href: `${basePath}/findings` },
+    { view: "plan", label: "Plan", detail: "Execution", href: `${basePath}/plan` },
+    { view: "evidence", label: "Evidence", detail: "Sources", href: `${basePath}/evidence` },
   ];
 
   return (
     <nav className="report-navigation" aria-label="Impact report sections">
-      {items.map((item) => (
+      {items.map((item, index) => (
         <Link
           key={item.view}
           href={item.href}
           className={activeView === item.view ? "active" : ""}
+          aria-label={item.label}
           aria-current={activeView === item.view ? "page" : undefined}
         >
-          {item.label}
+          <i>0{index + 1}</i>
+          <span>{item.label}<small>{item.detail}</small></span>
         </Link>
       ))}
     </nav>
@@ -904,7 +907,7 @@ export function ImpactReportPage({
   }
 
   return (
-    <>
+    <div className={`impact-report impact-report--${view}`}>
       <div className="report-top">
         <Link href="/app/impact/new">
           <ArrowLeft size={15} /> New analysis
@@ -979,9 +982,11 @@ export function ImpactReportPage({
           <p>{result.risk.reasons.join(" · ")}</p>
         </div>
       </section>
-      <ReportNavigation reportId={currentReport.id} activeView={view} />
+      <div className="report-workspace">
+        <ReportNavigation reportId={currentReport.id} activeView={view} />
+        <div className="report-workspace__content">
 
-      {view === "overview" && (
+          {view === "overview" && (
         <div className="report-overview">
           <AIExplanation
             state={currentReport.explanation}
@@ -1027,7 +1032,7 @@ export function ImpactReportPage({
         </div>
       )}
 
-      {view === "findings" && (
+          {view === "findings" && (
         <section className="report-detail-page" aria-labelledby="findings-title">
           <header className="report-detail-intro">
             <span>Impact map</span>
@@ -1119,7 +1124,7 @@ export function ImpactReportPage({
         </section>
       )}
 
-      {view === "plan" && (
+          {view === "plan" && (
         <section className="report-detail-page" aria-labelledby="plan-title">
           <header className="report-detail-intro">
             <span>Execution workspace</span>
@@ -1173,7 +1178,7 @@ export function ImpactReportPage({
         </section>
       )}
 
-      {view === "evidence" && (
+          {view === "evidence" && (
         <section className="report-detail-page" aria-labelledby="evidence-title">
           <header className="report-detail-intro">
             <span>Source records</span>
@@ -1233,14 +1238,19 @@ export function ImpactReportPage({
             </aside>
           </div>
         </section>
-      )}
-      <section className="feedback-panel pilot-feedback panel">
-        <span>Pilot feedback</span>
-        <h2>Did this report help you understand the change?</h2>
-        <p>
-          Confirm the findings that were useful and record anything Atlas
-          missed. This feedback is scoped to your workspace.
-        </p>
+          )}
+        </div>
+      </div>
+      <details className="feedback-panel pilot-feedback panel">
+        <summary>
+          <span>Report feedback</span>
+          <b>Help improve Atlas</b>
+        </summary>
+        <div className="pilot-feedback__body">
+          <p>
+            Confirm useful findings or record anything Atlas missed. This
+            feedback stays scoped to your workspace.
+          </p>
         <div className="pilot-feedback__findings">
           {[
             ...result.directImpacts,
@@ -1294,8 +1304,9 @@ export function ImpactReportPage({
             <ThumbsDown size={14} /> Not useful
           </button>
         </div>
-        {feedbackStatus && <p role="status">{feedbackStatus}</p>}
-      </section>
-    </>
+          {feedbackStatus && <p role="status">{feedbackStatus}</p>}
+        </div>
+      </details>
+    </div>
   );
 }

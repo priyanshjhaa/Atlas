@@ -101,25 +101,21 @@ export function GraphPage({
     : null;
 
   return (
-    <>
-      <PageHeader
-        eyebrow={
-          architecture
-            ? "System architecture"
-            : "Engineering knowledge graph"
-        }
-        title={
-          architecture
-            ? `How ${workspace.name} fits together`
-            : `Explore ${workspace.name}`
-        }
-        detail={
-          architectureSnapshot?.summary ??
-          (graph
-            ? `${graph.nodes.length} current and historical repository, package, file, and symbol entities connected by ${graph.edges.length} observed, historical, or inferred relationships at a specific source revision.`
-            : "Synchronize a GitHub repository to resolve packages, files, symbols, imports, API relationships, and cross-repository paths into a source-backed graph.")
-        }
-        action={
+    <div className={`explore-page ${architecture ? "explore-page--architecture" : "explore-page--graph"}`}>
+      <header className="explore-intro">
+        <div className="explore-intro__copy">
+          <span>{architecture ? "System architecture" : "Engineering knowledge graph"}</span>
+          <h1>{architecture ? `How ${workspace.name} fits together` : `Explore ${workspace.name}`}</h1>
+          <p>
+            {architectureSnapshot?.summary ??
+              (graph
+                ? `${graph.nodes.length} current and historical repository, package, file, and symbol entities connected by ${graph.edges.length} observed, historical, or inferred relationships at a specific source revision.`
+                : "Synchronize a GitHub repository to resolve packages, files, symbols, imports, API relationships, and cross-repository paths into a source-backed graph.")}
+          </p>
+        </div>
+        <div className="explore-intro__telemetry">
+          <div><strong>{visibleGraph?.nodes.length ?? 0}</strong><span>entities in view</span></div>
+          <div><strong>{visibleGraph?.edges.length ?? 0}</strong><span>relationships</span></div>
           <button
             className="button button--ghost"
             onClick={() => startRefresh(() => router.refresh())}
@@ -132,8 +128,8 @@ export function GraphPage({
                 ? `Generated ${lastGenerated}`
                 : "Refresh"}
           </button>
-        }
-      />
+        </div>
+      </header>
 
       <div className="graph-toolbar">
         <label className="search-input">
@@ -145,40 +141,43 @@ export function GraphPage({
             placeholder="Find an indexed repository, package, file, or symbol…"
           />
         </label>
-        <div className="filter-pills" aria-label="Graph entity filters">
-          {entityTypes.map((item) => (
-            <button
-              className={entityType === item ? "active" : ""}
-              onClick={() => setEntityType(item)}
-              key={item}
-            >
-              {item === "all" ? "All entities" : readable(item)}
-            </button>
-          ))}
-        </div>
         <button
           className="button button--ghost"
           onClick={() => setFiltersOpen((current) => !current)}
           aria-expanded={filtersOpen}
         >
-          <Filter size={14} /> Relationships
+          <Filter size={14} /> Filters
         </button>
       </div>
 
       {filtersOpen && (
         <div className="inline-filter-panel">
-          <span>Relationship classification</span>
-          {(["all", "observed", "historical", "inferred"] as const).map(
-            (item) => (
+          <div>
+            <span>Entity type</span>
+            {entityTypes.map((item) => (
               <button
-                className={classification === item ? "active" : ""}
-                onClick={() => setClassification(item)}
+                className={entityType === item ? "active" : ""}
+                onClick={() => setEntityType(item)}
                 key={item}
               >
-                {readable(item)}
+                {item === "all" ? "All entities" : readable(item)}
               </button>
-            ),
-          )}
+            ))}
+          </div>
+          <div>
+            <span>Relationship</span>
+            {(["all", "observed", "historical", "inferred"] as const).map(
+              (item) => (
+                <button
+                  className={classification === item ? "active" : ""}
+                  onClick={() => setClassification(item)}
+                  key={item}
+                >
+                  {readable(item)}
+                </button>
+              ),
+            )}
+          </div>
         </div>
       )}
 
@@ -223,18 +222,23 @@ export function GraphPage({
                   <b>{selectedRelationships.length}</b>
                 </div>
               </div>
-              <h3>Connected relationships</h3>
-              <div className="relationship-list">
-                {selectedRelationships.slice(0, 6).map((edge) => (
-                  <div key={edge.id}>
-                    <span>{readable(edge.kind)}</span>
-                    <b>{readable(edge.classification)}</b>
-                  </div>
-                ))}
-                {!selectedRelationships.length && (
-                  <p>No relationships match the current filters.</p>
-                )}
-              </div>
+              <details className="relationship-disclosure">
+                <summary>
+                  Connected relationships
+                  <span>{selectedRelationships.length}</span>
+                </summary>
+                <div className="relationship-list">
+                  {selectedRelationships.slice(0, 6).map((edge) => (
+                    <div key={edge.id}>
+                      <span>{readable(edge.kind)}</span>
+                      <b>{readable(edge.classification)}</b>
+                    </div>
+                  ))}
+                  {!selectedRelationships.length && (
+                    <p>No relationships match the current filters.</p>
+                  )}
+                </div>
+              </details>
               <Link
                 href="/app/impact/new"
                 className="button button--primary"
@@ -251,7 +255,7 @@ export function GraphPage({
           )}
         </aside>
       </div>
-    </>
+    </div>
   );
 }
 
