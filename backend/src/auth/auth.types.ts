@@ -18,6 +18,7 @@ export interface WorkspaceAccess {
   slug: string;
   role: WorkspaceRole;
   repositoryCount: number;
+  onboardingCompletedAt: Date | null;
 }
 
 export interface AtlasRequest {

@@ -52,6 +52,16 @@ export class WorkspacesController {
     return this.workspaces.update(workspaceId, body.name, identity);
   }
 
+  @Post(":workspaceId/onboarding/complete")
+  @HttpCode(200)
+  @WorkspaceRoles("owner", "admin")
+  completeOnboarding(
+    @Param("workspaceId", ParseUUIDPipe) workspaceId: string,
+    @CurrentIdentity() identity: AuthenticatedIdentity,
+  ) {
+    return this.workspaces.completeOnboarding(workspaceId, identity);
+  }
+
   @Get(":workspaceId/members")
   @WorkspaceRoles("owner", "admin", "member", "viewer")
   listMembers(@Param("workspaceId", ParseUUIDPipe) workspaceId: string) {
