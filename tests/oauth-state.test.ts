@@ -108,3 +108,27 @@ describe("Notion OAuth return destination", () => {
     ).toMatchObject({ returnTo: "sources" });
   });
 });
+
+describe("GitHub App return destination", () => {
+  beforeEach(() => {
+    vi.stubEnv(
+      "BETTER_AUTH_SECRET",
+      "test-only-state-secret-with-at-least-32-characters",
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("round-trips the onboarding return destination", () => {
+    expect(
+      verifyGitHubAppState(
+        createGitHubAppState("workspace-123", "onboarding"),
+      ),
+    ).toMatchObject({
+      workspaceId: "workspace-123",
+      returnTo: "onboarding",
+    });
+  });
+});

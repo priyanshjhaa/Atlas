@@ -4,6 +4,10 @@ import { getAtlasMe } from "@/lib/workspace-api";
 
 export async function GET(request: Request) {
   const workspaceId = new URL(request.url).searchParams.get("workspaceId");
+  const returnTo =
+    new URL(request.url).searchParams.get("returnTo") === "onboarding"
+      ? "onboarding"
+      : "sources";
   if (!workspaceId) {
     return NextResponse.json(
       { message: "A workspace identifier is required." },
@@ -30,7 +34,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const state = createGitHubAppState(workspaceId);
+  const state = createGitHubAppState(workspaceId, returnTo);
   return NextResponse.redirect(
     `https://github.com/apps/${encodeURIComponent(slug)}/installations/new?state=${encodeURIComponent(state)}`,
   );

@@ -2,10 +2,13 @@ import "server-only";
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
+export type GitHubAppReturnTo = "sources" | "onboarding";
+
 interface GitHubAppState {
   workspaceId: string;
   expiresAt: number;
   nonce: string;
+  returnTo: GitHubAppReturnTo;
 }
 
 function stateSecret(): string {
@@ -14,11 +17,15 @@ function stateSecret(): string {
   return secret;
 }
 
-export function createGitHubAppState(workspaceId: string): string {
+export function createGitHubAppState(
+  workspaceId: string,
+  returnTo: GitHubAppReturnTo = "sources",
+): string {
   const payload: GitHubAppState = {
     workspaceId,
     expiresAt: Date.now() + 10 * 60 * 1000,
     nonce: randomBytes(16).toString("base64url"),
+    returnTo,
   };
   const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const signature = createHmac("sha256", stateSecret())
@@ -51,11 +58,19 @@ export function verifyGitHubAppState(value: string): GitHubAppState | null {
       typeof state.workspaceId !== "string" ||
       typeof state.expiresAt !== "number" ||
       typeof state.nonce !== "string" ||
+      (state.returnTo !== undefined &&
+        state.returnTo !== "sources" &&
+        state.returnTo !== "onboarding") ||
       state.expiresAt < Date.now()
     ) {
       return null;
     }
-    return state as GitHubAppState;
+    return {
+      workspaceId: state.workspaceId,
+      expiresAt: state.expiresAt,
+      nonce: state.nonce,
+      returnTo: state.returnTo ?? "sources",
+    };
   } catch {
     return null;
   }
