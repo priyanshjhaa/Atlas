@@ -4,6 +4,10 @@ import { getAtlasMe } from "@/lib/workspace-api";
 
 export async function GET(request: Request) {
   const workspaceId = new URL(request.url).searchParams.get("workspaceId");
+  const returnTo =
+    new URL(request.url).searchParams.get("returnTo") === "onboarding"
+      ? "onboarding"
+      : "sources";
   if (!workspaceId) {
     return NextResponse.json(
       { message: "A workspace identifier is required." },
@@ -38,6 +42,9 @@ export async function GET(request: Request) {
   target.searchParams.set("response_type", "code");
   target.searchParams.set("owner", "user");
   target.searchParams.set("redirect_uri", redirectUri);
-  target.searchParams.set("state", createNotionOAuthState(workspaceId));
+  target.searchParams.set(
+    "state",
+    createNotionOAuthState(workspaceId, returnTo),
+  );
   return NextResponse.redirect(target);
 }

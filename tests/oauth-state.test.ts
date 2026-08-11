@@ -78,3 +78,33 @@ describe.each(connectors)("$name state", ({ create, verify }) => {
     );
   });
 });
+
+describe("Notion OAuth return destination", () => {
+  beforeEach(() => {
+    vi.stubEnv(
+      "BETTER_AUTH_SECRET",
+      "test-only-state-secret-with-at-least-32-characters",
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("round-trips the onboarding return destination", () => {
+    expect(
+      verifyNotionOAuthState(
+        createNotionOAuthState("workspace-123", "onboarding"),
+      ),
+    ).toMatchObject({
+      workspaceId: "workspace-123",
+      returnTo: "onboarding",
+    });
+  });
+
+  it("defaults connector flows to the Sources page", () => {
+    expect(
+      verifyNotionOAuthState(createNotionOAuthState("workspace-123")),
+    ).toMatchObject({ returnTo: "sources" });
+  });
+});

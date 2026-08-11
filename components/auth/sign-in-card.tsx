@@ -14,7 +14,7 @@ export function SignInCard({ error }: { error?: string }) {
 
     const result = await authClient.signIn.social({
       provider: "github",
-      callbackURL: "/app",
+      callbackURL: "/app/onboarding",
       errorCallbackURL: "/sign-in?error=oauth",
     });
 

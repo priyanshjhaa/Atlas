@@ -1,32 +1,39 @@
 import { NextResponse } from "next/server";
 import { fetchAtlasApi } from "@/lib/backend-client";
 import { verifyNotionOAuthState } from "@/lib/notion-oauth-state";
+import type { NotionOAuthReturnTo } from "@/lib/notion-oauth-state";
 import { getAtlasMe } from "@/lib/workspace-api";
 
 function sourcesRedirect(
   request: Request,
+  returnTo: NotionOAuthReturnTo,
   result: "connected" | "cancelled" | "error",
 ) {
-  const target = new URL("/app/sources", request.url);
+  const target = new URL(
+    returnTo === "onboarding" ? "/app/onboarding" : "/app/sources",
+    request.url,
+  );
   target.searchParams.set("notion", result);
   return NextResponse.redirect(target);
 }
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
-  if (params.get("error")) return sourcesRedirect(request, "cancelled");
-
   const code = params.get("code");
   const rawState = params.get("state");
   const state = rawState ? verifyNotionOAuthState(rawState) : null;
-  if (!code || !state) return sourcesRedirect(request, "error");
+  if (!state) return sourcesRedirect(request, "sources", "error");
+  if (params.get("error")) {
+    return sourcesRedirect(request, state.returnTo, "cancelled");
+  }
+  if (!code) return sourcesRedirect(request, state.returnTo, "error");
 
   const me = await getAtlasMe();
   const membership = me.workspaces.find(
     (workspace) => workspace.id === state.workspaceId,
   );
   if (!membership || !["owner", "admin"].includes(membership.role)) {
-    return sourcesRedirect(request, "error");
+    return sourcesRedirect(request, state.returnTo, "error");
   }
 
   const response = await fetchAtlasApi(
@@ -41,5 +48,9 @@ export async function GET(request: Request) {
       body: JSON.stringify({ code }),
     },
   );
-  return sourcesRedirect(request, response.ok ? "connected" : "error");
+  return sourcesRedirect(
+    request,
+    state.returnTo,
+    response.ok ? "connected" : "error",
+  );
 }
