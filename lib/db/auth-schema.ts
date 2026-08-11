@@ -119,6 +119,9 @@ export const workspaces = pgTable("workspaces", {
   createdByUserId: text("created_by_user_id")
     .notNull()
     .references(() => users.id, { onDelete: "restrict" }),
+  onboardingCompletedAt: timestamp("onboarding_completed_at", {
+    withTimezone: true,
+  }),
   ...timestamps,
 });
 

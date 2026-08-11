@@ -52,6 +52,18 @@ export class WorkspacesService {
     return workspace;
   }
 
+  async completeOnboarding(
+    workspaceId: string,
+    identity: AuthenticatedIdentity,
+  ): Promise<WorkspaceRecord> {
+    const workspace = await this.workspaces.completeOnboarding(
+      workspaceId,
+      identity.user.id,
+    );
+    if (!workspace) throw new NotFoundException("Workspace not found.");
+    return workspace;
+  }
+
   listMembers(workspaceId: string): Promise<MemberRecord[]> {
     return this.workspaces.listMembers(workspaceId);
   }

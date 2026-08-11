@@ -62,6 +62,7 @@ export class AuthRepository {
         slug: workspaces.slug,
         role: workspaceMembers.role,
         repositoryCount: count(repositories.id),
+        onboardingCompletedAt: workspaces.onboardingCompletedAt,
       })
       .from(workspaceMembers)
       .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
@@ -71,6 +72,7 @@ export class AuthRepository {
         workspaces.id,
         workspaces.name,
         workspaces.slug,
+        workspaces.onboardingCompletedAt,
         workspaceMembers.role,
       );
   }
@@ -86,6 +88,7 @@ export class AuthRepository {
         slug: workspaces.slug,
         role: workspaceMembers.role,
         repositoryCount: count(repositories.id),
+        onboardingCompletedAt: workspaces.onboardingCompletedAt,
       })
       .from(workspaceMembers)
       .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
@@ -100,6 +103,7 @@ export class AuthRepository {
         workspaces.id,
         workspaces.name,
         workspaces.slug,
+        workspaces.onboardingCompletedAt,
         workspaceMembers.role,
       )
       .limit(1);

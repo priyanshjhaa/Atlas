@@ -2,10 +2,13 @@ import "server-only";
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
+export type NotionOAuthReturnTo = "sources" | "onboarding";
+
 interface NotionOAuthState {
   workspaceId: string;
   expiresAt: number;
   nonce: string;
+  returnTo: NotionOAuthReturnTo;
 }
 
 function stateSecret(): string {
@@ -14,11 +17,15 @@ function stateSecret(): string {
   return secret;
 }
 
-export function createNotionOAuthState(workspaceId: string): string {
+export function createNotionOAuthState(
+  workspaceId: string,
+  returnTo: NotionOAuthReturnTo = "sources",
+): string {
   const payload: NotionOAuthState = {
     workspaceId,
     expiresAt: Date.now() + 10 * 60 * 1000,
     nonce: randomBytes(16).toString("base64url"),
+    returnTo,
   };
   const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const signature = createHmac("sha256", stateSecret())
@@ -50,11 +57,19 @@ export function verifyNotionOAuthState(value: string): NotionOAuthState | null {
       typeof state.workspaceId !== "string" ||
       typeof state.expiresAt !== "number" ||
       typeof state.nonce !== "string" ||
+      (state.returnTo !== undefined &&
+        state.returnTo !== "sources" &&
+        state.returnTo !== "onboarding") ||
       state.expiresAt < Date.now()
     ) {
       return null;
     }
-    return state as NotionOAuthState;
+    return {
+      workspaceId: state.workspaceId,
+      expiresAt: state.expiresAt,
+      nonce: state.nonce,
+      returnTo: state.returnTo ?? "sources",
+    };
   } catch {
     return null;
   }

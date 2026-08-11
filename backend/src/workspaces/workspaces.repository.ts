@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, count, desc, eq, lt } from "drizzle-orm";
+import { and, count, desc, eq, isNull, lt } from "drizzle-orm";
 import { DatabaseService } from "../database/database.service";
 import {
   auditEvents,
@@ -21,6 +21,7 @@ export interface WorkspaceRecord {
   createdAt: Date;
   updatedAt: Date;
   repositoryCount: number;
+  onboardingCompletedAt: Date | null;
 }
 
 export interface MemberRecord {
@@ -86,6 +87,7 @@ export class WorkspacesRepository {
         createdAt: workspaces.createdAt,
         updatedAt: workspaces.updatedAt,
         repositoryCount: count(repositories.id),
+        onboardingCompletedAt: workspaces.onboardingCompletedAt,
       })
       .from(workspaces)
       .leftJoin(repositories, eq(repositories.workspaceId, workspaces.id))
@@ -124,6 +126,36 @@ export class WorkspacesRepository {
     );
 
     return updated ? this.findById(workspaceId) : null;
+  }
+
+  async completeOnboarding(
+    workspaceId: string,
+    actorUserId: string,
+  ): Promise<WorkspaceRecord | null> {
+    await this.database.client.transaction(async (transaction) => {
+      const [updated] = await transaction
+        .update(workspaces)
+        .set({ onboardingCompletedAt: new Date(), updatedAt: new Date() })
+        .where(
+          and(
+            eq(workspaces.id, workspaceId),
+            isNull(workspaces.onboardingCompletedAt),
+          ),
+        )
+        .returning({ id: workspaces.id });
+
+      if (updated) {
+        await transaction.insert(auditEvents).values({
+          workspaceId,
+          actorUserId,
+          action: "workspace.onboarding.completed",
+          targetType: "workspace",
+          targetId: workspaceId,
+        });
+      }
+    });
+
+    return this.findById(workspaceId);
   }
 
   listMembers(workspaceId: string): Promise<MemberRecord[]> {

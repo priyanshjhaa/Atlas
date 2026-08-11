@@ -12,12 +12,21 @@ test("moves from the landing page to GitHub sign-in", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/sign-in/);
   await expect(page.getByRole("button", { name: /Continue with GitHub/ })).toBeVisible();
+  await expect(page.getByText("Optional decisions and docs")).toBeVisible();
 });
 
 test("protects direct workspace routes", async ({ page }) => {
   await page.goto("/app/impact/new");
   await expect(page).toHaveURL(/\/sign-in/);
   await expect(page.getByText(/profile and email only/i)).toBeVisible();
+});
+
+test("protects the workspace onboarding route", async ({ page }) => {
+  await page.goto("/app/onboarding");
+  await expect(page).toHaveURL(/\/sign-in/);
+  await expect(
+    page.getByText(/Repository and Notion access are connected explicitly/i),
+  ).toBeVisible();
 });
 
 test("keeps the landing hierarchy separated at every supported viewport", async ({ page }) => {
@@ -141,11 +150,15 @@ test("keeps GitHub sign-in inside the viewport", async ({ page }) => {
           card.right <= document.documentElement.clientWidth &&
           card.top >= 0,
       ),
+      cardBottomInsideViewport: Boolean(
+        card && card.bottom <= document.documentElement.clientHeight,
+      ),
     };
   });
 
   expect(layout.noHorizontalOverflow).toBe(true);
   expect(layout.cardInsideViewport).toBe(true);
+  expect(layout.cardBottomInsideViewport).toBe(true);
 });
 
 test("shows a strong focus indicator during keyboard navigation", async ({

@@ -120,6 +120,13 @@
       "when": 1785676781039,
       "tag": "20260802131941_romantic_goblin_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1786467549880,
+      "tag": "20260811165909_spooky_squadron_sinister",
+      "breakpoints": true
     }
   ]
 }

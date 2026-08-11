@@ -16,6 +16,7 @@ const workspace: AtlasWorkspace = {
   slug: "atlas-engineering",
   role: "owner",
   repositoryCount: 1,
+  onboardingCompletedAt: new Date().toISOString(),
 };
 
 const repositories: AtlasRepository[] = [

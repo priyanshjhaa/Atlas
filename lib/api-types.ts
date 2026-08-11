@@ -13,6 +13,7 @@ export interface AtlasWorkspace {
   slug: string;
   role: AtlasWorkspaceRole;
   repositoryCount: number;
+  onboardingCompletedAt: string | null;
 }
 
 export interface AtlasMe {

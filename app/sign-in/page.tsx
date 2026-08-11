@@ -5,7 +5,7 @@ import { getAtlasSession } from "@/lib/auth-session";
 
 export const metadata = {
   title: "Sign in · Atlas",
-  description: "Sign in to explore your synchronized engineering graph, search indexed context, and run evidence-backed change analysis.",
+  description: "Sign in with GitHub, then connect approved repository and Notion context for evidence-backed engineering analysis.",
 };
 
 export default async function SignInPage({
@@ -28,7 +28,7 @@ export default async function SignInPage({
         <span>Living engineering intelligence</span>
       </header>
       <SignInCard error={error} />
-      <p className="auth-footer">Atlas · Architecture, search, and change impact in one living map</p>
+      <p className="auth-footer">Atlas · Code, history, and decisions in one living map</p>
     </main>
   );
 }

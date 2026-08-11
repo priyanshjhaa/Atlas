@@ -29,6 +29,7 @@ const ownerWorkspace: WorkspaceAccess = {
   slug: "northstar",
   role: "owner",
   repositoryCount: 1,
+  onboardingCompletedAt: null,
 };
 
 function member(role: WorkspaceAccess["role"] = "member") {
@@ -48,6 +49,7 @@ describe("WorkspacesService", () => {
     create: ReturnType<typeof vi.fn>;
     findById: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
+    completeOnboarding: ReturnType<typeof vi.fn>;
     listMembers: ReturnType<typeof vi.fn>;
     findMember: ReturnType<typeof vi.fn>;
     addMember: ReturnType<typeof vi.fn>;
@@ -64,6 +66,7 @@ describe("WorkspacesService", () => {
       create: vi.fn(),
       findById: vi.fn(),
       update: vi.fn(),
+      completeOnboarding: vi.fn(),
       listMembers: vi.fn(),
       findMember: vi.fn(),
       addMember: vi.fn(),
@@ -113,6 +116,30 @@ describe("WorkspacesService", () => {
     await expect(service.get(ownerWorkspace.id)).rejects.toBeInstanceOf(
       NotFoundException,
     );
+  });
+
+  it("completes onboarding for the current workspace", async () => {
+    const completed = {
+      ...ownerWorkspace,
+      onboardingCompletedAt: new Date(),
+    };
+    repository.completeOnboarding.mockResolvedValue(completed);
+
+    await expect(
+      service.completeOnboarding(ownerWorkspace.id, identity),
+    ).resolves.toBe(completed);
+    expect(repository.completeOnboarding).toHaveBeenCalledWith(
+      ownerWorkspace.id,
+      identity.user.id,
+    );
+  });
+
+  it("returns not found when onboarding targets an unknown workspace", async () => {
+    repository.completeOnboarding.mockResolvedValue(null);
+
+    await expect(
+      service.completeOnboarding(ownerWorkspace.id, identity),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it("requires invited users to exist and not already be members", async () => {
