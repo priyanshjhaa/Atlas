@@ -53,6 +53,105 @@ function setup() {
 }
 
 describe("RetrievalService", () => {
+  it("ranks repository and Notion context together with distinct citations", async () => {
+    const repository = {
+      repositoryExists: vi.fn().mockResolvedValue(true),
+      workspaceVectorCandidates: vi.fn().mockResolvedValue([
+        {
+          id: "code-1",
+          repositoryId: "repository-core",
+          repositoryName: "core",
+          repositoryOwner: "atlas",
+          filePath: "src/session.ts",
+          content: "rotate refresh token",
+          summary: "Session rotation",
+          metadata: { symbol: "rotateSession" },
+          language: "typescript",
+          distance: 0.12,
+        },
+      ]),
+      workspaceLexicalCandidates: vi.fn().mockResolvedValue([]),
+      notionVectorCandidates: vi.fn().mockResolvedValue([
+        {
+          id: "notion-1",
+          content: "The ADR requires rotating refresh tokens.",
+          tokenCount: 10,
+          metadata: { heading: "Decision" },
+          sourceRevision: "revision-1",
+          title: "ADR 12: Session security",
+          url: "https://notion.so/adr-12",
+          lastEditedAt: new Date("2026-08-01T12:00:00.000Z"),
+          lastSyncedAt: new Date("2026-08-02T12:00:00.000Z"),
+          distance: 0.1,
+        },
+      ]),
+      notionLexicalCandidates: vi.fn().mockResolvedValue([]),
+    };
+    const service = new RetrievalService(
+      repository as unknown as IntelligenceRepository,
+      {
+        embedTexts: vi.fn().mockResolvedValue([[0.1, 0.2]]),
+      } as unknown as EmbeddingsService,
+    );
+
+    const result = await service.workspaceSearch(
+      "workspace-1",
+      "rotate refresh token",
+    );
+
+    expect(result.results.map((item) => item.provider).sort()).toEqual([
+      "github",
+      "notion",
+    ]);
+    expect(
+      result.results.find((item) => item.provider === "notion")?.citation,
+    ).toMatchObject({
+      provider: "notion",
+      url: "https://notion.so/adr-12",
+      provenance: "indexed_notion_chunk",
+    });
+    expect(
+      result.results.find((item) => item.provider === "github")?.citation,
+    ).toMatchObject({
+      provider: "github",
+      repositoryId: "repository-core",
+      provenance: "indexed_source_chunk",
+    });
+  });
+
+  it("honors provider and repository filters", async () => {
+    const repository = {
+      repositoryExists: vi.fn().mockResolvedValue(true),
+      workspaceVectorCandidates: vi.fn().mockResolvedValue([]),
+      workspaceLexicalCandidates: vi.fn().mockResolvedValue([]),
+      notionVectorCandidates: vi.fn(),
+      notionLexicalCandidates: vi.fn(),
+    };
+    const service = new RetrievalService(
+      repository as unknown as IntelligenceRepository,
+      {
+        embedTexts: vi.fn().mockResolvedValue([[0.1, 0.2]]),
+      } as unknown as EmbeddingsService,
+    );
+
+    const result = await service.workspaceSearch(
+      "workspace-1",
+      "session",
+      { repositoryId: "repository-core", providers: ["github"] },
+    );
+
+    expect(repository.workspaceVectorCandidates).toHaveBeenCalledWith(
+      "workspace-1",
+      "repository-core",
+      [0.1, 0.2],
+    );
+    expect(repository.notionVectorCandidates).not.toHaveBeenCalled();
+    expect(result.filters).toEqual({
+      repositoryId: "repository-core",
+      providers: ["github"],
+    });
+  });
+
   it("expands credible matches through current graph edges with source-accurate citations", async () => {
     const { repository, service } = setup();
 

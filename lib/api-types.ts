@@ -113,6 +113,58 @@ export interface AtlasIntelligenceSearchResponse {
   lowConfidence: boolean;
 }
 
+export type AtlasWorkspaceIntelligenceSearchResult =
+  | {
+      id: string;
+      provider: "github";
+      score: number;
+      lexicalMatches: number;
+      title: string;
+      excerpt: string;
+      reason: string;
+      freshness: null;
+      citation: {
+        provider: "github";
+        repositoryId: string;
+        repositoryName: string;
+        repositoryOwner: string;
+        filePath: string;
+        lineStart: number | null;
+        lineEnd: number | null;
+        symbol: string | null;
+        provenance: "indexed_source_chunk";
+      };
+    }
+  | {
+      id: string;
+      provider: "notion";
+      score: number;
+      lexicalMatches: number;
+      title: string;
+      excerpt: string;
+      reason: string;
+      freshness: string | null;
+      citation: {
+        provider: "notion";
+        title: string;
+        url: string | null;
+        sourceRevision: string;
+        lastEditedAt: string | null;
+        heading: string | null;
+        provenance: "indexed_notion_chunk";
+      };
+    };
+
+export interface AtlasWorkspaceIntelligenceSearchResponse {
+  query: string;
+  filters: {
+    repositoryId: string | null;
+    providers: Array<"github" | "notion">;
+  };
+  results: AtlasWorkspaceIntelligenceSearchResult[];
+  lowConfidence: boolean;
+}
+
 export interface AtlasGitHubConnector {
   id: string;
   status: "pending" | "active" | "failed" | "revoked";

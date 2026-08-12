@@ -18,7 +18,7 @@ import { PageHeader } from "@/components/app/shared";
 import type {
   AtlasArchitectureSnapshot,
   AtlasGraph as AtlasGraphData,
-  AtlasIntelligenceSearchResponse,
+  AtlasWorkspaceIntelligenceSearchResponse,
   AtlasRepository,
   AtlasWorkspace,
 } from "@/lib/api-types";
@@ -274,7 +274,7 @@ export function SearchPage({
   );
   const [query, setQuery] = useState("");
   const [response, setResponse] =
-    useState<AtlasIntelligenceSearchResponse | null>(null);
+    useState<AtlasWorkspaceIntelligenceSearchResponse | null>(null);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
   const repositoryById = new Map(
@@ -295,7 +295,7 @@ export function SearchPage({
       }),
     });
     const body = (await result.json()) as
-      | AtlasIntelligenceSearchResponse
+      | AtlasWorkspaceIntelligenceSearchResponse
       | { message?: string };
     if (result.ok && "results" in body) {
       setResponse(body);
@@ -369,9 +369,9 @@ export function SearchPage({
             </span>
           </div>
           {response?.results.map((item) => {
-            const repository = repositoryById.get(
-              item.citation.repositoryId,
-            );
+            const repository = item.provider === "github"
+              ? repositoryById.get(item.citation.repositoryId)
+              : null;
             return (
               <Link href="/app/graph" key={item.id}>
                 <div className="search-result-icon">
@@ -379,15 +379,19 @@ export function SearchPage({
                 </div>
                 <div>
                   <span>
-                    {repository
+                    {item.provider === "notion"
+                      ? "Notion · "
+                      : repository
                       ? `${repository.owner}/${repository.name} · `
                       : ""}
-                    {item.citation.filePath}
-                    {item.citation.lineStart
+                    {item.provider === "github"
+                      ? item.citation.filePath
+                      : item.citation.title}
+                    {item.provider === "github" && item.citation.lineStart
                       ? `:${item.citation.lineStart}`
                       : ""}
                   </span>
-                  <h3>{item.citation.symbol ?? item.citation.filePath}</h3>
+                  <h3>{item.title}</h3>
                   <p>{item.reason}</p>
                 </div>
                 <ArrowRight size={15} />

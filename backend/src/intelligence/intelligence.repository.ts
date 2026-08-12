@@ -13,6 +13,10 @@ import {
   codeSymbols,
   graphEntities,
   graphRelationships,
+  connectors,
+  notionDocumentChunks,
+  notionDocuments,
+  notionResources,
   packageRelationships,
   relationshipObservations,
   repositoryCommits,
@@ -90,6 +94,25 @@ interface RetrievedGraphChunkRow {
     provenance: string;
     confidence: number;
   };
+}
+
+export interface WorkspaceCodeChunkRow extends RetrievedChunkRow {
+  repositoryId: string;
+  repositoryName: string;
+  repositoryOwner: string;
+}
+
+export interface WorkspaceNotionChunkRow extends Record<string, unknown> {
+  id: string;
+  content: string;
+  tokenCount: number;
+  metadata: Record<string, unknown>;
+  sourceRevision: string;
+  title: string;
+  url: string | null;
+  lastEditedAt: Date | null;
+  lastSyncedAt: Date | null;
+  distance?: number;
 }
 
 @Injectable()
@@ -813,6 +836,165 @@ export class IntelligenceRepository {
       limit 24
     `);
     return result.rows;
+  }
+
+  async workspaceVectorCandidates(
+    workspaceId: string,
+    repositoryId: string | undefined,
+    embedding: number[],
+  ): Promise<WorkspaceCodeChunkRow[]> {
+    const vectorValue = `[${embedding.join(",")}]`;
+    const repositoryFilter = repositoryId
+      ? sql`and c.repository_id = ${repositoryId}`
+      : sql``;
+    const result = await this.database.client.execute<WorkspaceCodeChunkRow>(sql`
+      select
+        c.id,
+        c.repository_id as "repositoryId",
+        r.name as "repositoryName",
+        r.owner as "repositoryOwner",
+        c.content,
+        c.summary,
+        c.language,
+        c.metadata,
+        f.path as "filePath",
+        c.embedding <=> ${vectorValue}::vector as distance
+      from ${codeChunks} c
+      inner join ${codeFiles} f on f.id = c.file_id
+      inner join ${repositories} r on r.id = c.repository_id
+      where c.workspace_id = ${workspaceId}
+        and r.workspace_id = ${workspaceId}
+        and r.is_active = true
+        and c.embedding is not null
+        ${repositoryFilter}
+      order by c.embedding <=> ${vectorValue}::vector
+      limit 32
+    `);
+    return result.rows;
+  }
+
+  async workspaceLexicalCandidates(
+    workspaceId: string,
+    repositoryId: string | undefined,
+    terms: string[],
+  ): Promise<WorkspaceCodeChunkRow[]> {
+    const termFilters = terms.flatMap((term) => [
+      ilike(codeFiles.path, `%${term}%`),
+      ilike(codeChunks.summary, `%${term}%`),
+      ilike(codeChunks.content, `%${term}%`),
+    ]);
+    if (!termFilters.length) return [];
+    return this.database.client
+      .select({
+        id: codeChunks.id,
+        repositoryId: codeChunks.repositoryId,
+        repositoryName: repositories.name,
+        repositoryOwner: repositories.owner,
+        content: codeChunks.content,
+        summary: codeChunks.summary,
+        language: codeChunks.language,
+        metadata: codeChunks.metadata,
+        filePath: codeFiles.path,
+        distance: sql<number>`1`,
+      })
+      .from(codeChunks)
+      .innerJoin(codeFiles, eq(codeFiles.id, codeChunks.fileId))
+      .innerJoin(repositories, eq(repositories.id, codeChunks.repositoryId))
+      .where(
+        and(
+          eq(codeChunks.workspaceId, workspaceId),
+          eq(repositories.workspaceId, workspaceId),
+          eq(repositories.isActive, true),
+          repositoryId
+            ? eq(codeChunks.repositoryId, repositoryId)
+            : undefined,
+          or(...termFilters),
+        ),
+      )
+      .limit(320);
+  }
+
+  async notionVectorCandidates(
+    workspaceId: string,
+    embedding: number[],
+  ): Promise<WorkspaceNotionChunkRow[]> {
+    const vectorValue = `[${embedding.join(",")}]`;
+    const result = await this.database.client.execute<WorkspaceNotionChunkRow>(sql`
+      select
+        c.id,
+        c.content,
+        c.token_count as "tokenCount",
+        c.metadata,
+        c.source_revision as "sourceRevision",
+        d.title,
+        r.url,
+        r.last_edited_at as "lastEditedAt",
+        r.last_synced_at as "lastSyncedAt",
+        c.embedding <=> ${vectorValue}::vector as distance
+      from ${notionDocumentChunks} c
+      inner join ${notionDocuments} d on d.id = c.document_id
+      inner join ${notionResources} r on r.id = c.resource_id
+      inner join ${connectors} connector on connector.id = c.connector_id
+      where c.workspace_id = ${workspaceId}
+        and d.workspace_id = ${workspaceId}
+        and r.workspace_id = ${workspaceId}
+        and connector.workspace_id = ${workspaceId}
+        and connector.provider = 'notion'
+        and connector.status = 'active'
+        and r.is_selected = true
+        and r.is_active = true
+      order by c.embedding <=> ${vectorValue}::vector
+      limit 32
+    `);
+    return result.rows;
+  }
+
+  async notionLexicalCandidates(
+    workspaceId: string,
+    terms: string[],
+  ): Promise<WorkspaceNotionChunkRow[]> {
+    const filters = terms.flatMap((term) => [
+      ilike(notionDocuments.title, `%${term}%`),
+      ilike(notionDocumentChunks.content, `%${term}%`),
+    ]);
+    if (!filters.length) return [];
+    return this.database.client
+      .select({
+        id: notionDocumentChunks.id,
+        content: notionDocumentChunks.content,
+        tokenCount: notionDocumentChunks.tokenCount,
+        metadata: notionDocumentChunks.metadata,
+        sourceRevision: notionDocumentChunks.sourceRevision,
+        title: notionDocuments.title,
+        url: notionResources.url,
+        lastEditedAt: notionResources.lastEditedAt,
+        lastSyncedAt: notionResources.lastSyncedAt,
+        distance: sql<number>`1`,
+      })
+      .from(notionDocumentChunks)
+      .innerJoin(
+        notionDocuments,
+        eq(notionDocuments.id, notionDocumentChunks.documentId),
+      )
+      .innerJoin(
+        notionResources,
+        eq(notionResources.id, notionDocumentChunks.resourceId),
+      )
+      .innerJoin(connectors, eq(connectors.id, notionDocumentChunks.connectorId))
+      .where(
+        and(
+          eq(notionDocumentChunks.workspaceId, workspaceId),
+          eq(notionDocuments.workspaceId, workspaceId),
+          eq(notionResources.workspaceId, workspaceId),
+          eq(connectors.workspaceId, workspaceId),
+          eq(connectors.provider, "notion"),
+          eq(connectors.status, "active"),
+          eq(notionResources.isSelected, true),
+          eq(notionResources.isActive, true),
+          or(...filters),
+        ),
+      )
+      .limit(320);
   }
 
   async lexicalCandidates(

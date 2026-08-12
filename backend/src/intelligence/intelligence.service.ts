@@ -3,6 +3,7 @@ import type { GraphTraversalQueryDto } from "./dto/graph-traversal-query.dto";
 import { GraphTraversalService } from "./graph-traversal.service";
 import { IntelligenceRepository } from "./intelligence.repository";
 import { RetrievalService } from "./retrieval.service";
+import type { WorkspaceSearchProvider } from "./retrieval.service";
 
 @Injectable()
 export class IntelligenceService {
@@ -47,5 +48,16 @@ export class IntelligenceService {
 
   search(workspaceId: string, repositoryId: string, query: string) {
     return this.retrieval.search(workspaceId, repositoryId, query.trim());
+  }
+
+  workspaceSearch(
+    workspaceId: string,
+    query: string,
+    options: {
+      repositoryId?: string;
+      providers?: WorkspaceSearchProvider[];
+    },
+  ) {
+    return this.retrieval.workspaceSearch(workspaceId, query.trim(), options);
   }
 }
