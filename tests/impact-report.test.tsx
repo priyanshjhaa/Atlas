@@ -151,6 +151,61 @@ describe("ImpactReportPage", () => {
     ).toBeVisible();
   });
 
+  it("shows cited Notion decisions and an unavailable state without changing risk", () => {
+    const documentedReport: AtlasImpactReport = {
+      ...report,
+      result: {
+        ...report.result,
+        documentationContext: {
+          status: "available",
+          evidence: [
+            {
+              id: "notion:adr-12",
+              provider: "notion",
+              title: "ADR 12: Session validation",
+              url: "https://notion.so/adr-12",
+              excerpt: "Preserve the public session validation contract.",
+              sourceRevision: "notion-revision-1",
+              lastEditedAt: "2026-07-28T12:00:00.000Z",
+              freshness: "2026-07-29T11:00:00.000Z",
+              relevance: 0.87,
+            },
+          ],
+        },
+      },
+    };
+
+    const { unmount } = render(
+      <ImpactReportPage report={documentedReport} />,
+    );
+    expect(
+      screen.getByRole("heading", { name: "Notion context" }),
+    ).toBeVisible();
+    expect(screen.getByText("ADR 12: Session validation")).toBeVisible();
+    expect(screen.getByText("87% relevant", { exact: false })).toBeVisible();
+    expect(
+      screen.getByText("Medium", { selector: ".risk-score strong" }),
+    ).toBeVisible();
+
+    unmount();
+    render(
+      <ImpactReportPage
+        report={{
+          ...report,
+          result: {
+            ...report.result,
+            documentationContext: { status: "unavailable", evidence: [] },
+          },
+        }}
+      />,
+    );
+    expect(
+      screen.getByRole("heading", {
+        name: "No documentation context available",
+      }),
+    ).toBeVisible();
+  });
+
   it("separates a generated explanation from verified findings and links its citations", () => {
     const explainedReport: AtlasImpactReport = {
       ...report,
