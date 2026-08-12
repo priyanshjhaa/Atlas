@@ -1,19 +1,27 @@
 import { Injectable } from "@nestjs/common";
 import { and, desc, eq, inArray, or } from "drizzle-orm";
-import { createHash } from "node:crypto";
 import { DatabaseService } from "../database/database.service";
 import {
   auditEvents,
   connectors,
+  notionDocumentChunks,
   notionDocuments,
   notionDocumentVersions,
   notionResources,
   notionSyncJobs,
 } from "../database/schema";
 import type { NotionPageContent } from "../connectors/notion-api.service";
+import {
+  notionContentHash,
+  type NotionDocumentChunk,
+} from "./notion-document-chunker.service";
 
 const activeStatuses = ["queued", "running"] as const;
 const MAX_DOCUMENT_VERSIONS = 50;
+
+export interface EmbeddedNotionDocumentChunk extends NotionDocumentChunk {
+  embedding: number[];
+}
 
 @Injectable()
 export class NotionSyncJobsRepository {
@@ -126,6 +134,7 @@ export class NotionSyncJobsRepository {
       .select({
         resource: notionResources,
         sourceRevision: notionDocuments.sourceRevision,
+        contentHash: notionDocuments.contentHash,
       })
       .from(notionResources)
       .leftJoin(
@@ -145,10 +154,9 @@ export class NotionSyncJobsRepository {
   async persistDocument(
     resource: typeof notionResources.$inferSelect,
     page: NotionPageContent,
-  ): Promise<{ versionCreated: boolean }> {
-    const contentHash = createHash("sha256")
-      .update(page.markdown)
-      .digest("hex");
+    embeddedChunks?: EmbeddedNotionDocumentChunk[],
+  ): Promise<{ versionCreated: boolean; chunksCreated: number }> {
+    const contentHash = notionContentHash(page.markdown);
     const sourceRevision =
       resource.lastEditedAt?.toISOString() ?? contentHash;
     const citation = {
@@ -218,11 +226,41 @@ export class NotionSyncJobsRepository {
             ),
           );
       }
+
+      if (embeddedChunks) {
+        await transaction
+          .delete(notionDocumentChunks)
+          .where(eq(notionDocumentChunks.documentId, document.id));
+        if (embeddedChunks.length) {
+          await transaction.insert(notionDocumentChunks).values(
+            embeddedChunks.map((chunk) => ({
+              workspaceId: resource.workspaceId,
+              connectorId: resource.connectorId,
+              resourceId: resource.id,
+              documentId: document.id,
+              chunkIndex: chunk.chunkIndex,
+              content: chunk.content,
+              tokenCount: chunk.tokenCount,
+              sourceRevision,
+              metadata: chunk.metadata,
+              embedding: chunk.embedding,
+            })),
+          );
+        }
+      } else {
+        await transaction
+          .update(notionDocumentChunks)
+          .set({ sourceRevision, updatedAt: new Date() })
+          .where(eq(notionDocumentChunks.documentId, document.id));
+      }
       await transaction
         .update(notionResources)
         .set({ lastSyncedAt: new Date(), updatedAt: new Date() })
         .where(eq(notionResources.id, resource.id));
-      return { versionCreated: Boolean(version) };
+      return {
+        versionCreated: Boolean(version),
+        chunksCreated: embeddedChunks?.length ?? 0,
+      };
     });
   }
 

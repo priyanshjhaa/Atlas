@@ -39,6 +39,6 @@ import { WorkspaceAnalyzerService } from "./workspace-analyzer.service";
     TypeCheckerService,
     WorkspaceAnalyzerService,
   ],
-  exports: [IngestionService, RetrievalService],
+  exports: [EmbeddingsService, IngestionService, RetrievalService],
 })
 export class IntelligenceModule {}

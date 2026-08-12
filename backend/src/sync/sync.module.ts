@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConnectorsModule } from "../connectors/connectors.module";
 import { IntelligenceModule } from "../intelligence/intelligence.module";
 import { NotionSyncJobsController } from "./notion-sync-jobs.controller";
+import { NotionDocumentChunkerService } from "./notion-document-chunker.service";
 import { NotionSyncJobsRepository } from "./notion-sync-jobs.repository";
 import { NotionSyncJobsService } from "./notion-sync-jobs.service";
 import { NotionSyncQueueService } from "./notion-sync-queue.service";
@@ -21,6 +22,7 @@ import { SyncWorkerService } from "./sync-worker.service";
     SyncQueueService,
     SyncWorkerService,
     NotionSyncJobsRepository,
+    NotionDocumentChunkerService,
     NotionSyncJobsService,
     NotionSyncQueueService,
     NotionSyncWorkerService,
