@@ -105,6 +105,23 @@ export interface ImpactResolvedEntity {
   confidence: number;
 }
 
+export interface ImpactDocumentationEvidence {
+  id: string;
+  provider: "notion";
+  title: string;
+  url: string | null;
+  excerpt: string;
+  sourceRevision: string;
+  lastEditedAt: string | null;
+  freshness: string | null;
+  relevance: number;
+}
+
+export interface ImpactDocumentationContext {
+  status: "available" | "unavailable";
+  evidence: ImpactDocumentationEvidence[];
+}
+
 export interface ImpactReportResult {
   status: ImpactAnalysisStatus;
   title: string;
@@ -128,6 +145,7 @@ export interface ImpactReportResult {
   downstreamImpacts: ImpactFinding[];
   unknownImpacts: ImpactFinding[];
   evidence: ImpactCitation[];
+  documentationContext?: ImpactDocumentationContext;
   relationshipPath: Array<{
     repository: string;
     filePath: string;

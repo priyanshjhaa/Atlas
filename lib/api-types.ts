@@ -530,6 +530,20 @@ export interface AtlasImpactReport {
     downstreamImpacts: AtlasImpactFinding[];
     unknownImpacts: AtlasImpactFinding[];
     evidence: AtlasImpactCitation[];
+    documentationContext?: {
+      status: "available" | "unavailable";
+      evidence: Array<{
+        id: string;
+        provider: "notion";
+        title: string;
+        url: string | null;
+        excerpt: string;
+        sourceRevision: string;
+        lastEditedAt: string | null;
+        freshness: string | null;
+        relevance: number;
+      }>;
+    };
     relationshipPath: Array<{
       repository: string;
       filePath: string;

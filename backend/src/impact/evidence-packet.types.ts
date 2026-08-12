@@ -70,6 +70,15 @@ export interface ImpactEvidencePacket {
     hop: number;
   }>;
   evidence: ImpactEvidencePacketCitation[];
+  documentationContext?: Array<{
+    id: string;
+    provider: "notion";
+    title: string;
+    url: string | null;
+    excerpt: string;
+    sourceRevision: string;
+    relevance: number;
+  }>;
   limitations: string[];
 }
 

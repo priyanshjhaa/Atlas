@@ -102,6 +102,12 @@ function setup() {
         },
       ],
     }),
+    workspaceSearch: vi.fn().mockResolvedValue({
+      query: "rotate refresh session",
+      lowConfidence: false,
+      filters: { repositoryId: null, providers: ["notion"] },
+      results: [],
+    }),
   };
   return {
     repository,
@@ -114,6 +120,63 @@ function setup() {
 }
 
 describe("ImpactAnalysisService", () => {
+  it("adds cited Notion documentation without changing deterministic risk or findings", async () => {
+    const { retrieval, service } = setup();
+    retrieval.workspaceSearch.mockResolvedValue({
+      query: "rotate refresh session",
+      lowConfidence: false,
+      filters: { repositoryId: null, providers: ["notion"] },
+      results: [
+        {
+          id: "notion-adr",
+          provider: "notion",
+          score: 0.82,
+          lexicalMatches: 2,
+          title: "ADR: Session rotation",
+          excerpt: "Rotate refresh tokens after every successful exchange.",
+          reason: "Notion documentation directly matched the search.",
+          freshness: "2026-08-02T12:00:00.000Z",
+          citation: {
+            provider: "notion",
+            title: "ADR: Session rotation",
+            url: "https://notion.so/session-rotation",
+            sourceRevision: "notion-revision-1",
+            lastEditedAt: "2026-08-01T12:00:00.000Z",
+            heading: "Decision",
+            provenance: "indexed_notion_chunk",
+          },
+        },
+      ],
+    });
+
+    const report = await service.analyze(workspaceId, {
+      mode: "planned",
+      repositoryId,
+      description: "Rotate refresh session tokens",
+      scope: "repository",
+      anchors: ["src/session.ts"],
+    });
+
+    expect(report.documentationContext).toEqual({
+      status: "available",
+      evidence: [
+        expect.objectContaining({
+          id: "notion:notion-adr",
+          provider: "notion",
+          title: "ADR: Session rotation",
+          sourceRevision: "notion-revision-1",
+          relevance: 0.82,
+        }),
+      ],
+    });
+    expect(report.risk.level).toBe("low");
+    expect(report.directImpacts).toHaveLength(1);
+    expect(report.downstreamImpacts).toHaveLength(1);
+    expect(report.evidence.every((item) => !item.id.startsWith("notion:"))).toBe(
+      true,
+    );
+  });
+
   it("resolves indexed anchors and traverses observed incoming imports", async () => {
     const { repository, service } = setup();
 

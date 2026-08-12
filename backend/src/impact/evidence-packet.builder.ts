@@ -149,6 +149,17 @@ export class EvidencePacketBuilder {
         canonicalRepository,
       ).slice(0, limits.maxRelationshipPaths),
       evidence,
+      documentationContext: result.documentationContext?.evidence
+        .slice(0, 4)
+        .map((item) => ({
+          id: item.id,
+          provider: item.provider,
+          title: this.sanitize(item.title).slice(0, 300),
+          url: item.url,
+          excerpt: this.sanitize(item.excerpt).slice(0, 1_200),
+          sourceRevision: item.sourceRevision,
+          relevance: item.relevance,
+        })),
       limitations: result.limitations
         .slice(0, limits.maxLimitations)
         .map((item) => this.sanitize(item).slice(0, 500)),
@@ -514,6 +525,10 @@ export class EvidencePacketBuilder {
     };
 
     while (size() > maxCharacters) {
+      if (packet.documentationContext?.length) {
+        packet.documentationContext.pop();
+        continue;
+      }
       if (removeLast(packet.downstreamImpacts, 4)) continue;
       if (removeLast(packet.relationshipPaths, 2)) continue;
       if (removeLast(packet.limitations, 1)) continue;

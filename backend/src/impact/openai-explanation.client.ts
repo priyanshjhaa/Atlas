@@ -609,6 +609,15 @@ export class OpenAIExplanationClient implements ExplanationClient {
         excerpt: item.excerpt,
         provenance: item.provenance,
       })),
+      documentationContext: packet.documentationContext?.map((item) => ({
+        id: item.id,
+        provider: item.provider,
+        title: item.title,
+        url: item.url,
+        excerpt: item.excerpt,
+        sourceRevision: item.sourceRevision,
+        relevance: item.relevance,
+      })),
       limitations: packet.limitations,
     };
   }
@@ -622,9 +631,15 @@ export class OpenAIExplanationClient implements ExplanationClient {
     aliasToFilePath: Map<string, string>;
     repair?: ExplanationGenerationOptions["repair"];
   } {
-    const evidenceIdToAlias = new Map(
-      packet.evidence.map((item, index) => [item.id, `E${index + 1}`]),
-    );
+    const evidenceIdToAlias = new Map([
+      ...packet.evidence.map(
+        (item, index) => [item.id, `E${index + 1}`] as const,
+      ),
+      ...(packet.documentationContext ?? []).map(
+        (item, index) =>
+          [item.id, `D${index + 1}`] as const,
+      ),
+    ]);
     const aliasToEvidenceId = new Map(
       [...evidenceIdToAlias].map(([evidenceId, alias]) => [
         alias,
@@ -741,6 +756,12 @@ export class OpenAIExplanationClient implements ExplanationClient {
           ...item,
           id: evidenceIdToAlias.get(item.id) ?? item.id,
           filePath: filePathToAlias.get(item.filePath) ?? item.filePath,
+          excerpt: aliasText(item.excerpt),
+        })),
+        documentationContext: packet.documentationContext?.map((item) => ({
+          ...item,
+          id: evidenceIdToAlias.get(item.id) ?? item.id,
+          title: aliasText(item.title),
           excerpt: aliasText(item.excerpt),
         })),
         limitations: packet.limitations.map(aliasText),

@@ -223,6 +223,10 @@ export class ImpactAnalysisService {
     );
     const status =
       directImpacts.length > 0 ? "complete" : "insufficient_evidence";
+    const documentationContext = await this.documentationContext(
+      workspaceId,
+      query,
+    );
 
     return {
       status,
@@ -253,6 +257,7 @@ export class ImpactAnalysisService {
       downstreamImpacts: downstreamFindings,
       unknownImpacts,
       evidence,
+      documentationContext,
       relationshipPath: this.relationshipPath(
         sourceRepository,
         resolvedEntities,
@@ -271,6 +276,35 @@ export class ImpactAnalysisService {
       ),
       limitations,
       generatedAt: new Date().toISOString(),
+    };
+  }
+
+  private async documentationContext(
+    workspaceId: string,
+    query: string,
+  ): Promise<ImpactReportResult["documentationContext"]> {
+    const retrieval = await this.retrieval.workspaceSearch(
+      workspaceId,
+      query,
+      { providers: ["notion"] },
+    );
+    const evidence = retrieval.results
+      .filter((result) => result.provider === "notion")
+      .slice(0, 8)
+      .map((result) => ({
+        id: `notion:${result.id}`,
+        provider: "notion" as const,
+        title: result.citation.title,
+        url: result.citation.url,
+        excerpt: result.excerpt.slice(0, 1_200),
+        sourceRevision: result.citation.sourceRevision,
+        lastEditedAt: result.citation.lastEditedAt,
+        freshness: result.freshness,
+        relevance: result.score,
+      }));
+    return {
+      status: evidence.length ? "available" : "unavailable",
+      evidence,
     };
   }
 
