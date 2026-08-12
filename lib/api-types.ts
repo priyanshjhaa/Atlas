@@ -291,6 +291,7 @@ export interface AtlasNotionSyncJob {
     documentsSkipped?: number;
     resourcesRemoved?: number;
     versionsCreated?: number;
+    chunksCreated?: number;
     truncatedDocuments?: number;
   } | null;
   errorCode: string | null;

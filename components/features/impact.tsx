@@ -1028,6 +1028,48 @@ export function ImpactReportPage({
                 </p>
               </div>
             </section>
+            <section className="report-section panel documentation-context">
+              <div className="panel-heading">
+                <div>
+                  <span>Decisions and documentation</span>
+                  <h2>Notion context</h2>
+                </div>
+                <FileText size={17} />
+              </div>
+              {result.documentationContext?.status === "available" ? (
+                <div className="documentation-context__list">
+                  {result.documentationContext.evidence.map((item) => (
+                    <a
+                      href={item.url ?? "/app/sources"}
+                      target={item.url ? "_blank" : undefined}
+                      rel={item.url ? "noreferrer" : undefined}
+                      key={item.id}
+                    >
+                      <span>
+                        Notion · {Math.round(item.relevance * 100)}% relevant
+                      </span>
+                      <h3>{item.title}</h3>
+                      <p>{item.excerpt}</p>
+                      <small>
+                        {item.freshness
+                          ? `Synchronized ${new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(item.freshness))}`
+                          : `Revision ${item.sourceRevision.slice(0, 12)}`}
+                      </small>
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <FileText size={18} />
+                  <h3>No documentation context available</h3>
+                  <p>
+                    Connect and synchronize selected Notion pages to cite ADRs,
+                    specifications, decisions, and runbooks alongside this report.
+                  </p>
+                  <Link href="/app/sources">Review Notion sources</Link>
+                </div>
+              )}
+            </section>
           </section>
         </div>
       )}
@@ -1228,6 +1270,25 @@ export function ImpactReportPage({
                   </div>
                 )}
               </div>
+              {result.documentationContext?.evidence.length ? (
+                <div className="documentation-evidence">
+                  <span>
+                    {result.documentationContext.evidence.length} Notion records
+                  </span>
+                  <h3>Decisions and documentation</h3>
+                  {result.documentationContext.evidence.map((item) => (
+                    <a
+                      href={item.url ?? "/app/sources"}
+                      target={item.url ? "_blank" : undefined}
+                      rel={item.url ? "noreferrer" : undefined}
+                      key={item.id}
+                    >
+                      <b>{item.title}</b>
+                      <small>{item.sourceRevision.slice(0, 12)}</small>
+                    </a>
+                  ))}
+                </div>
+              ) : null}
             </section>
             <aside className="panel evidence-workspace__boundaries">
               <span>Analysis boundaries</span>
