@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   FileCode2,
+  FileText,
   Filter,
   Network,
   RefreshCw,
@@ -18,7 +19,7 @@ import { PageHeader } from "@/components/app/shared";
 import type {
   AtlasArchitectureSnapshot,
   AtlasGraph as AtlasGraphData,
-  AtlasIntelligenceSearchResponse,
+  AtlasWorkspaceIntelligenceSearchResponse,
   AtlasRepository,
   AtlasWorkspace,
 } from "@/lib/api-types";
@@ -273,8 +274,9 @@ export function SearchPage({
     searchableRepositories[0]?.id ?? "",
   );
   const [query, setQuery] = useState("");
+  const [scope, setScope] = useState<"all" | "github" | "notion">("all");
   const [response, setResponse] =
-    useState<AtlasIntelligenceSearchResponse | null>(null);
+    useState<AtlasWorkspaceIntelligenceSearchResponse | null>(null);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
   const repositoryById = new Map(
@@ -282,7 +284,7 @@ export function SearchPage({
   );
 
   async function search() {
-    if (!repositoryId || query.trim().length < 2) return;
+    if (query.trim().length < 2) return;
     setSearching(true);
     setError("");
     const result = await fetch("/api/intelligence/search", {
@@ -290,12 +292,14 @@ export function SearchPage({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         workspaceId: workspace.id,
-        repositoryId,
+        ...(repositoryId ? { repositoryId } : {}),
+        providers:
+          scope === "all" ? ["github", "notion"] : [scope],
         query: query.trim(),
       }),
     });
     const body = (await result.json()) as
-      | AtlasIntelligenceSearchResponse
+      | AtlasWorkspaceIntelligenceSearchResponse
       | { message?: string };
     if (result.ok && "results" in body) {
       setResponse(body);
@@ -324,11 +328,23 @@ export function SearchPage({
           onChange={(event) => setRepositoryId(event.target.value)}
           aria-label="Repository to search"
         >
+          <option value="">All repositories</option>
           {searchableRepositories.map((repository) => (
             <option value={repository.id} key={repository.id}>
               {repository.owner}/{repository.name}
             </option>
           ))}
+        </select>
+        <select
+          value={scope}
+          onChange={(event) =>
+            setScope(event.target.value as "all" | "github" | "notion")
+          }
+          aria-label="Context provider"
+        >
+          <option value="all">Code + Notion</option>
+          <option value="github">GitHub code</option>
+          <option value="notion">Notion context</option>
         </select>
         <input
           value={query}
@@ -339,16 +355,15 @@ export function SearchPage({
           aria-label="Engineering search"
           placeholder={
             searchableRepositories.length
-              ? "Search indexed source…"
-              : "Synchronize a repository to search"
+              ? "Search code, decisions, ADRs, and runbooks…"
+              : "Search synchronized Notion context…"
           }
-          disabled={!searchableRepositories.length}
         />
         <button
           className="button button--primary"
           onClick={() => void search()}
           disabled={
-            searching || !repositoryId || query.trim().length < 2
+            searching || query.trim().length < 2
           }
         >
           {searching ? "Searching…" : "Search"}
@@ -369,29 +384,53 @@ export function SearchPage({
             </span>
           </div>
           {response?.results.map((item) => {
-            const repository = repositoryById.get(
-              item.citation.repositoryId,
-            );
+            const repository = item.provider === "github"
+              ? repositoryById.get(item.citation.repositoryId)
+              : null;
             return (
-              <Link href="/app/graph" key={item.id}>
+              <a
+                href={
+                  item.provider === "notion"
+                    ? item.citation.url ?? "/app/sources"
+                    : "/app/graph"
+                }
+                key={`${item.provider}:${item.id}`}
+                target={item.provider === "notion" && item.citation.url ? "_blank" : undefined}
+                rel={item.provider === "notion" && item.citation.url ? "noreferrer" : undefined}
+              >
                 <div className="search-result-icon">
-                  <FileCode2 size={17} />
+                  {item.provider === "notion" ? (
+                    <FileText size={17} />
+                  ) : (
+                    <FileCode2 size={17} />
+                  )}
                 </div>
                 <div>
                   <span>
-                    {repository
+                    {item.provider === "notion"
+                      ? "Notion · "
+                      : repository
                       ? `${repository.owner}/${repository.name} · `
                       : ""}
-                    {item.citation.filePath}
-                    {item.citation.lineStart
+                    {item.provider === "github"
+                      ? item.citation.filePath
+                      : item.citation.title}
+                    {item.provider === "github" && item.citation.lineStart
                       ? `:${item.citation.lineStart}`
                       : ""}
                   </span>
-                  <h3>{item.citation.symbol ?? item.citation.filePath}</h3>
+                  <h3>{item.title}</h3>
                   <p>{item.reason}</p>
+                  {item.provider === "notion" && (
+                    <small>
+                      {item.freshness
+                        ? `Synchronized ${new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(item.freshness))}`
+                        : "Freshness unavailable"}
+                    </small>
+                  )}
                 </div>
                 <ArrowRight size={15} />
-              </Link>
+              </a>
             );
           })}
           {response && !response.results.length && (
@@ -407,7 +446,7 @@ export function SearchPage({
           <h3>
             {repositoryId
               ? repositoryById.get(repositoryId)?.name
-              : "No synchronized repository"}
+              : "Entire workspace"}
           </h3>
           <p>
             {response
@@ -423,6 +462,9 @@ export function SearchPage({
           <div>
             <ConfidenceBadge type="inferred" />{" "}
             <span>Graph-expanded context</span>
+          </div>
+          <div>
+            <FileText size={13} /> <span>Cited Notion documentation</span>
           </div>
           <Link
             href="/app/impact/new"

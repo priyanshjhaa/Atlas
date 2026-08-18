@@ -9,6 +9,11 @@ import {
   NotionApiService,
 } from "../connectors/notion-api.service";
 import { NotionConnectorsRepository } from "../connectors/notion-connectors.repository";
+import { EmbeddingsService } from "../intelligence/embeddings.service";
+import {
+  notionContentHash,
+  NotionDocumentChunkerService,
+} from "./notion-document-chunker.service";
 import { NotionSyncJobsRepository } from "./notion-sync-jobs.repository";
 import { redisConnectionFromUrl } from "./redis-connection";
 import {
@@ -22,6 +27,7 @@ export interface NotionSyncResult {
   documentsSkipped: number;
   resourcesRemoved: number;
   versionsCreated: number;
+  chunksCreated: number;
   truncatedDocuments: number;
 }
 
@@ -36,6 +42,8 @@ export class NotionSyncWorkerService implements OnModuleDestroy {
     private readonly connectors: NotionConnectorsRepository,
     private readonly encryption: ConnectorEncryptionService,
     private readonly notion: NotionApiService,
+    private readonly chunker: NotionDocumentChunkerService,
+    private readonly embeddings: EmbeddingsService,
   ) {}
 
   start(): void {
@@ -98,6 +106,7 @@ export class NotionSyncWorkerService implements OnModuleDestroy {
       let documentsSkipped = 0;
       let resourcesRemoved = 0;
       let versionsCreated = 0;
+      let chunksCreated = 0;
       let truncatedDocuments = 0;
       for (const [index, selected] of selectedPages.entries()) {
         const revision =
@@ -116,12 +125,47 @@ export class NotionSyncWorkerService implements OnModuleDestroy {
             credentials.accessToken,
             selected.resource.providerResourceId,
           );
+          const contentHash = notionContentHash(page.markdown);
+          const sourceRevision =
+            selected.resource.lastEditedAt?.toISOString() ?? contentHash;
+          const chunks = selected.contentHash === contentHash
+            ? undefined
+            : this.chunker.chunk(page.markdown, {
+                resourceId: selected.resource.providerResourceId,
+                title: selected.resource.title,
+                url: selected.resource.url,
+                sourceRevision,
+                truncated: page.truncated,
+              });
+          const vectors = chunks
+            ? await this.embeddings.embedTexts(
+                chunks.map((chunk) =>
+                  [
+                    `Notion page: ${selected.resource.title}`,
+                    typeof chunk.metadata.heading === "string"
+                      ? `Section: ${chunk.metadata.heading}`
+                      : "",
+                    chunk.content,
+                  ]
+                    .filter(Boolean)
+                    .join("\n"),
+                ),
+              )
+            : [];
+          if (chunks && vectors.length !== chunks.length) {
+            throw new Error("Notion embedding count did not match chunk count.");
+          }
           const persisted = await this.jobs.persistDocument(
             selected.resource,
             page,
+            chunks?.map((chunk, chunkIndex) => ({
+              ...chunk,
+              embedding: vectors[chunkIndex],
+            })),
           );
           documentsUpdated += 1;
           versionsCreated += persisted.versionCreated ? 1 : 0;
+          chunksCreated += persisted.chunksCreated;
           truncatedDocuments += page.truncated ? 1 : 0;
         } catch (error) {
           if (error instanceof NotionApiRequestError && error.status === 404) {
@@ -139,6 +183,7 @@ export class NotionSyncWorkerService implements OnModuleDestroy {
         documentsSkipped,
         resourcesRemoved,
         versionsCreated,
+        chunksCreated,
         truncatedDocuments,
       };
       await this.progress(job, 95, "persisting_notion_documents");

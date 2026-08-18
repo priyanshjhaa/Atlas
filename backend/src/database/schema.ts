@@ -345,6 +345,49 @@ export const notionDocumentVersions = pgTable(
   ],
 );
 
+export const notionDocumentChunks = pgTable(
+  "notion_document_chunks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    connectorId: uuid("connector_id")
+      .notNull()
+      .references(() => connectors.id, { onDelete: "cascade" }),
+    resourceId: uuid("resource_id")
+      .notNull()
+      .references(() => notionResources.id, { onDelete: "cascade" }),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => notionDocuments.id, { onDelete: "cascade" }),
+    chunkIndex: integer("chunk_index").notNull(),
+    content: text("content").notNull(),
+    tokenCount: integer("token_count").notNull(),
+    sourceRevision: text("source_revision").notNull(),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    embedding: vector("embedding", { dimensions: 1536 }).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("notion_document_chunks_document_chunk_unique").on(
+      table.documentId,
+      table.chunkIndex,
+    ),
+    index("notion_document_chunks_workspace_id_idx").on(table.workspaceId),
+    index("notion_document_chunks_connector_id_idx").on(table.connectorId),
+    index("notion_document_chunks_resource_id_idx").on(table.resourceId),
+    index("notion_document_chunks_document_id_idx").on(table.documentId),
+    index("notion_document_chunks_embedding_hnsw_idx").using(
+      "hnsw",
+      table.embedding.op("vector_cosine_ops"),
+    ),
+  ],
+);
+
 export const notionSyncJobs = pgTable(
   "notion_sync_jobs",
   {

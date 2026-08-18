@@ -113,6 +113,58 @@ export interface AtlasIntelligenceSearchResponse {
   lowConfidence: boolean;
 }
 
+export type AtlasWorkspaceIntelligenceSearchResult =
+  | {
+      id: string;
+      provider: "github";
+      score: number;
+      lexicalMatches: number;
+      title: string;
+      excerpt: string;
+      reason: string;
+      freshness: null;
+      citation: {
+        provider: "github";
+        repositoryId: string;
+        repositoryName: string;
+        repositoryOwner: string;
+        filePath: string;
+        lineStart: number | null;
+        lineEnd: number | null;
+        symbol: string | null;
+        provenance: "indexed_source_chunk";
+      };
+    }
+  | {
+      id: string;
+      provider: "notion";
+      score: number;
+      lexicalMatches: number;
+      title: string;
+      excerpt: string;
+      reason: string;
+      freshness: string | null;
+      citation: {
+        provider: "notion";
+        title: string;
+        url: string | null;
+        sourceRevision: string;
+        lastEditedAt: string | null;
+        heading: string | null;
+        provenance: "indexed_notion_chunk";
+      };
+    };
+
+export interface AtlasWorkspaceIntelligenceSearchResponse {
+  query: string;
+  filters: {
+    repositoryId: string | null;
+    providers: Array<"github" | "notion">;
+  };
+  results: AtlasWorkspaceIntelligenceSearchResult[];
+  lowConfidence: boolean;
+}
+
 export interface AtlasGitHubConnector {
   id: string;
   status: "pending" | "active" | "failed" | "revoked";
@@ -239,6 +291,7 @@ export interface AtlasNotionSyncJob {
     documentsSkipped?: number;
     resourcesRemoved?: number;
     versionsCreated?: number;
+    chunksCreated?: number;
     truncatedDocuments?: number;
   } | null;
   errorCode: string | null;
@@ -478,6 +531,20 @@ export interface AtlasImpactReport {
     downstreamImpacts: AtlasImpactFinding[];
     unknownImpacts: AtlasImpactFinding[];
     evidence: AtlasImpactCitation[];
+    documentationContext?: {
+      status: "available" | "unavailable";
+      evidence: Array<{
+        id: string;
+        provider: "notion";
+        title: string;
+        url: string | null;
+        excerpt: string;
+        sourceRevision: string;
+        lastEditedAt: string | null;
+        freshness: string | null;
+        relevance: number;
+      }>;
+    };
     relationshipPath: Array<{
       repository: string;
       filePath: string;

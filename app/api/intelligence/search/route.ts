@@ -7,18 +7,26 @@ export async function POST(request: Request) {
     workspaceId?: unknown;
     repositoryId?: unknown;
     query?: unknown;
+    providers?: unknown;
   };
   if (
     typeof body.workspaceId !== "string" ||
-    typeof body.repositoryId !== "string" ||
+    (body.repositoryId !== undefined &&
+      body.repositoryId !== null &&
+      typeof body.repositoryId !== "string") ||
     typeof body.query !== "string" ||
     body.query.trim().length < 2 ||
-    body.query.length > 500
+    body.query.length > 500 ||
+    (body.providers !== undefined &&
+      (!Array.isArray(body.providers) ||
+        body.providers.some(
+          (provider) => provider !== "github" && provider !== "notion",
+        )))
   ) {
     return NextResponse.json(
       {
         message:
-          "Workspace, repository, and a search query between 2 and 500 characters are required.",
+          "A workspace and search query between 2 and 500 characters are required. Repository and provider filters must be valid when supplied.",
       },
       { status: 400 },
     );
@@ -33,7 +41,7 @@ export async function POST(request: Request) {
   }
 
   const response = await fetchAtlasApi(
-    `/v1/workspaces/${body.workspaceId}/repositories/${body.repositoryId}/intelligence/search`,
+    `/v1/workspaces/${body.workspaceId}/intelligence/search`,
     {
       method: "POST",
       cache: "no-store",
@@ -41,7 +49,15 @@ export async function POST(request: Request) {
         "Content-Type": "application/json",
         "X-Atlas-Workspace-Id": body.workspaceId,
       },
-      body: JSON.stringify({ query: body.query.trim() }),
+      body: JSON.stringify({
+        query: body.query.trim(),
+        ...(typeof body.repositoryId === "string" && body.repositoryId
+          ? { repositoryId: body.repositoryId }
+          : {}),
+        ...(Array.isArray(body.providers)
+          ? { providers: body.providers }
+          : {}),
+      }),
     },
   );
   const responseBody = await response.json().catch(() => ({

@@ -17,9 +17,10 @@ import { RetrievalService } from "./retrieval.service";
 import { SourceDiscoveryService } from "./source-discovery.service";
 import { TypeCheckerService } from "./type-checker.service";
 import { WorkspaceAnalyzerService } from "./workspace-analyzer.service";
+import { WorkspaceIntelligenceController } from "./workspace-intelligence.controller";
 
 @Module({
-  controllers: [IntelligenceController],
+  controllers: [IntelligenceController, WorkspaceIntelligenceController],
   providers: [
     ArchitectureBuilderService,
     ApiSymbolLinkerService,
@@ -39,6 +40,6 @@ import { WorkspaceAnalyzerService } from "./workspace-analyzer.service";
     TypeCheckerService,
     WorkspaceAnalyzerService,
   ],
-  exports: [IngestionService, RetrievalService],
+  exports: [EmbeddingsService, IngestionService, RetrievalService],
 })
 export class IntelligenceModule {}

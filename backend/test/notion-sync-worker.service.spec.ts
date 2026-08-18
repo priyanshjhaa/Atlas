@@ -1,5 +1,6 @@
 import type { ConfigService } from "@nestjs/config";
 import type { Job } from "bullmq";
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import type { Environment } from "../src/config/environment";
 import type { ConnectorEncryptionService } from "../src/connectors/connector-encryption.service";
@@ -8,6 +9,8 @@ import {
   type NotionApiService,
 } from "../src/connectors/notion-api.service";
 import type { NotionConnectorsRepository } from "../src/connectors/notion-connectors.repository";
+import type { EmbeddingsService } from "../src/intelligence/embeddings.service";
+import type { NotionDocumentChunkerService } from "../src/sync/notion-document-chunker.service";
 import type { NotionSyncJobsRepository } from "../src/sync/notion-sync-jobs.repository";
 import {
   NotionSyncWorkerService,
@@ -44,6 +47,21 @@ function worker(
   jobs: object,
   connectors: object,
   notion: object,
+  chunker: object = {
+    chunk: vi.fn(() => [
+      {
+        chunkIndex: 0,
+        content: "# Current",
+        tokenCount: 3,
+        metadata: { heading: "Current" },
+      },
+    ]),
+  },
+  embeddings: object = {
+    embedTexts: vi.fn(async (inputs: string[]) =>
+      inputs.map(() => new Array<number>(1536).fill(0)),
+    ),
+  },
 ) {
   return new NotionSyncWorkerService(
     {} as ConfigService<Environment, true>,
@@ -53,6 +71,8 @@ function worker(
       decrypt: vi.fn(() => ({ accessToken: "access-token" })),
     } as unknown as ConnectorEncryptionService,
     notion as unknown as NotionApiService,
+    chunker as unknown as NotionDocumentChunkerService,
+    embeddings as unknown as EmbeddingsService,
   );
 }
 
@@ -93,18 +113,37 @@ describe("NotionSyncWorkerService", () => {
   });
 
   it("persists changed page content and records a bounded version", async () => {
-    const persistDocument = vi.fn(async () => ({ versionCreated: true }));
     const resource = {
       id: "resource-1",
       providerResourceId: "page-1",
+      title: "Current",
+      url: "https://notion.so/page-1",
       lastEditedAt: new Date("2026-08-01T12:00:00.000Z"),
     };
+    const persistDocument = vi.fn(
+      async (
+        resourceInput: typeof resource,
+        pageInput: { markdown: string; truncated: boolean },
+        chunksInput?: Array<{
+          chunkIndex: number;
+          content: string;
+          embedding: number[];
+        }>,
+      ) => ({
+        versionCreated: Boolean(resourceInput && pageInput),
+        chunksCreated: chunksInput?.length ?? 0,
+      }),
+    );
     const result = await worker(
       {
         markRunning: vi.fn(async () => undefined),
         executionContext: vi.fn(async () => context()),
         selectedPages: vi.fn(async () => [
-          { resource, sourceRevision: "old-revision" },
+          {
+            resource,
+            sourceRevision: "old-revision",
+            contentHash: "old-hash",
+          },
         ]),
         updateProgress: vi.fn(async () => undefined),
         persistDocument,
@@ -125,10 +164,125 @@ describe("NotionSyncWorkerService", () => {
       outcome: "updated",
       documentsUpdated: 1,
       versionsCreated: 1,
+      chunksCreated: 1,
     });
+    expect(persistDocument).toHaveBeenCalledOnce();
+    const [persistedResource, persistedPage, persistedChunks] =
+      persistDocument.mock.calls[0] ?? [];
+    expect(persistedResource).toBe(resource);
+    expect(persistedPage).toMatchObject({ markdown: "# Current" });
+    expect(persistedChunks).toHaveLength(1);
+    expect(persistedChunks?.[0]).toMatchObject({
+      chunkIndex: 0,
+      content: "# Current",
+    });
+    expect(persistedChunks?.[0]?.embedding).toHaveLength(1536);
+  });
+
+  it("does not rebuild chunks when only the Notion revision changes", async () => {
+    const markdown = "# Current";
+    const contentHash = createHash("sha256").update(markdown).digest("hex");
+    const persistDocument = vi.fn(async () => ({
+      versionCreated: false,
+      chunksCreated: 0,
+    }));
+    const chunk = vi.fn();
+    const embedTexts = vi.fn();
+
+    const result = await worker(
+      {
+        markRunning: vi.fn(async () => undefined),
+        executionContext: vi.fn(async () => context()),
+        selectedPages: vi.fn(async () => [
+          {
+            resource: {
+              id: "resource-1",
+              providerResourceId: "page-1",
+              title: "Current",
+              url: null,
+              lastEditedAt: new Date("2026-08-02T12:00:00.000Z"),
+            },
+            sourceRevision: "old-revision",
+            contentHash,
+          },
+        ]),
+        updateProgress: vi.fn(async () => undefined),
+        persistDocument,
+        complete: vi.fn(async () => undefined),
+      },
+      { refreshResources: vi.fn(async () => undefined) },
+      {
+        listAccessibleResources: vi.fn(async () => []),
+        retrievePageMarkdown: vi.fn(async () => ({
+          markdown,
+          truncated: false,
+          unknownBlockIdsVisited: 0,
+        })),
+      },
+      { chunk },
+      { embedTexts },
+    ).processJob(syncJob());
+
+    expect(result).toMatchObject({ chunksCreated: 0, documentsUpdated: 1 });
+    expect(chunk).not.toHaveBeenCalled();
+    expect(embedTexts).not.toHaveBeenCalled();
     expect(persistDocument).toHaveBeenCalledWith(
-      resource,
-      expect.objectContaining({ markdown: "# Current" }),
+      expect.any(Object),
+      expect.any(Object),
+      undefined,
+    );
+  });
+
+  it("fails the sync before persistence when embeddings cannot be generated", async () => {
+    const persistDocument = vi.fn();
+    const markFailure = vi.fn(async () => undefined);
+
+    await expect(
+      worker(
+        {
+          markRunning: vi.fn(async () => undefined),
+          executionContext: vi.fn(async () => context()),
+          selectedPages: vi.fn(async () => [
+            {
+              resource: {
+                id: "resource-1",
+                providerResourceId: "page-1",
+                title: "Current",
+                url: null,
+                lastEditedAt: new Date("2026-08-02T12:00:00.000Z"),
+              },
+              sourceRevision: "old-revision",
+              contentHash: "old-hash",
+            },
+          ]),
+          updateProgress: vi.fn(async () => undefined),
+          persistDocument,
+          markFailure,
+        },
+        { refreshResources: vi.fn(async () => undefined) },
+        {
+          listAccessibleResources: vi.fn(async () => []),
+          retrievePageMarkdown: vi.fn(async () => ({
+            markdown: "# Changed",
+            truncated: false,
+            unknownBlockIdsVisited: 0,
+          })),
+        },
+        undefined,
+        {
+          embedTexts: vi.fn(async () => {
+            throw new Error("embedding provider unavailable");
+          }),
+        },
+      ).processJob(syncJob()),
+    ).rejects.toThrow("embedding provider unavailable");
+
+    expect(persistDocument).not.toHaveBeenCalled();
+    expect(markFailure).toHaveBeenCalledWith(
+      "job-1",
+      1,
+      true,
+      "embedding provider unavailable",
     );
   });
 

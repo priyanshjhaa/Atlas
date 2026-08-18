@@ -113,7 +113,10 @@ export class ExplanationGroundingValidator {
       };
     }
 
-    const evidenceIds = new Set(packet.evidence.map((item) => item.id));
+    const evidenceIds = new Set([
+      ...packet.evidence.map((item) => item.id),
+      ...(packet.documentationContext ?? []).map((item) => item.id),
+    ]);
     if (
       units.some((unit) =>
         unit.evidenceIds.some((id) => !evidenceIds.has(id)),
