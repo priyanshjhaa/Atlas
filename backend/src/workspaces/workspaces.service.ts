@@ -252,18 +252,22 @@ export class WorkspacesService {
     const notionActive = snapshot.notionJobs.filter((item) =>
       ["queued", "running"].includes(item.status),
     ).length;
-    const repositoryFailed = snapshot.repositoryJobs.filter(
-      (item) => item.status === "failed",
-    ).length;
-    const notionFailed = snapshot.notionJobs.filter(
-      (item) => item.status === "failed",
-    ).length;
     const latestRepositorySync = this.latestDate(
       readyRepositories.map((item) => item.lastSyncedAt),
     );
     const latestNotionSync = this.latestDate(
       selectedNotionResources.map((item) => item.lastSyncedAt),
     );
+    const repositoryFailed = snapshot.repositoryJobs.filter(
+      (item) =>
+        item.status === "failed" &&
+        (!latestRepositorySync || item.updatedAt > latestRepositorySync),
+    ).length;
+    const notionFailed = snapshot.notionJobs.filter(
+      (item) =>
+        item.status === "failed" &&
+        (!latestNotionSync || item.updatedAt > latestNotionSync),
+    ).length;
 
     const githubStatus: SourceReadinessStatus =
       githubConnector?.status === "failed" || repositoryFailed > 0

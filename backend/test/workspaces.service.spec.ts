@@ -299,6 +299,27 @@ describe("WorkspacesService", () => {
     ]);
   });
 
+  it("does not keep a source failed after a newer successful sync", async () => {
+    const now = new Date();
+    const oldFailure = new Date(now.getTime() - 60 * 60 * 1_000);
+    repository.overview.mockResolvedValue({
+      workspace: { onboardingCompletedAt: now },
+      repositories: [{ id: "repository-1", owner: "atlas", name: "web", defaultBranch: "main", isPrivate: true, isActive: true, lastSyncedAt: now }],
+      connectors: [{ provider: "github", status: "active", updatedAt: now }],
+      notionResources: [],
+      repositoryJobs: [{ status: "failed", updatedAt: oldFailure }],
+      notionJobs: [],
+      counts: { codeFiles: 1, codeChunks: 2, relationships: 1, notionDocuments: 0, notionChunks: 0 },
+      recentReports: [],
+    });
+
+    const result = await service.overview(ownerWorkspace.id);
+
+    expect(result.readiness.github.status).toBe("ready");
+    expect(result.jobs.failed).toBe(0);
+    expect(result.attention[0]?.id).toBe("connect-notion");
+  });
+
   it("returns not found for an unknown overview workspace", async () => {
     repository.overview.mockResolvedValue(null);
     await expect(service.overview(ownerWorkspace.id)).rejects.toBeInstanceOf(
