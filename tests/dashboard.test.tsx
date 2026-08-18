@@ -4,7 +4,7 @@ import {
   DashboardPage,
   greetingForHour,
 } from "@/components/features/dashboard";
-import type { AtlasRepository, AtlasWorkspace } from "@/lib/api-types";
+import type { AtlasRepository, AtlasWorkspace, AtlasWorkspaceOverview } from "@/lib/api-types";
 
 vi.mock("@/components/atlas-graph", () => ({
   AtlasGraph: () => <div data-testid="live-graph" />,
@@ -31,6 +31,20 @@ const repositories: AtlasRepository[] = [
   },
 ];
 
+const overview: AtlasWorkspaceOverview = {
+  generatedAt: "2026-08-01T10:00:00.000Z",
+  staleAfterHours: 24,
+  readiness: {
+    overall: "ready",
+    github: { status: "ready", repositoriesConnected: 1, repositoriesReady: 1, lastSyncedAt: "2026-08-01T09:00:00.000Z" },
+    notion: { status: "skipped", resourcesSelected: 0, documentsIndexed: 0, lastSyncedAt: null },
+  },
+  jobs: { active: 0, failed: 0 },
+  intelligence: { repositoriesIndexed: 1, codeFiles: 14, codeChunks: 28, relationships: 7, notionDocuments: 0, notionChunks: 0 },
+  recentReports: [],
+  attention: [{ id: "connect-notion", severity: "info", title: "Add decisions and documentation", detail: "Connect Notion for richer context.", action: { label: "Connect Notion", href: "/app/sources" } }],
+};
+
 describe("DashboardPage", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -51,7 +65,7 @@ describe("DashboardPage", () => {
         userName="Priyansh Jha"
         workspace={workspace}
         repositories={repositories}
-        jobs={[]}
+        overview={overview}
         graph={null}
       />,
     );
@@ -62,11 +76,11 @@ describe("DashboardPage", () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "Atlas Engineering has 1 connected repository, with 1 synchronized for architecture exploration, indexed search, dependency tracing, and source-backed change analysis.",
-      ),
+      screen.getByText("Your current context is ready for a source-backed change analysis."),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Northstar Labs/i)).not.toBeInTheDocument();
     expect(screen.getByText("atlas/web")).toBeInTheDocument();
+    expect(screen.getByText("Ready for analysis")).toBeInTheDocument();
+    expect(screen.getByText("Optional · not connected")).toBeInTheDocument();
   });
 });

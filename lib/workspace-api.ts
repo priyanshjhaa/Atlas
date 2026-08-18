@@ -15,6 +15,7 @@ import type {
   AtlasRepository,
   AtlasSyncJob,
   AtlasWorkspaceData,
+  AtlasWorkspaceOverview,
 } from "./api-types";
 import { fetchAtlasApi } from "./backend-client";
 
@@ -115,6 +116,19 @@ export async function getAtlasSyncJobs(
     },
   );
   return readApiResponse<AtlasSyncJob[]>(response);
+}
+
+export async function getAtlasWorkspaceOverview(
+  workspaceId: string,
+): Promise<AtlasWorkspaceOverview> {
+  const response = await fetchAtlasApi(
+    `/v1/workspaces/${workspaceId}/overview`,
+    {
+      cache: "no-store",
+      headers: { "X-Atlas-Workspace-Id": workspaceId },
+    },
+  );
+  return readApiResponse<AtlasWorkspaceOverview>(response);
 }
 
 export async function getAtlasNotionSyncJobs(
