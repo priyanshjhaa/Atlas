@@ -1,11 +1,18 @@
 import { Injectable } from "@nestjs/common";
-import { and, count, desc, eq, isNull, lt } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, lt } from "drizzle-orm";
 import { DatabaseService } from "../database/database.service";
 import {
   auditEvents,
+  codeChunks,
+  codeFiles,
+  codeRelationships,
+  connectors,
   impactReportFeedback,
   impactReports,
   notionSyncJobs,
+  notionDocumentChunks,
+  notionDocuments,
+  notionResources,
   repositories,
   syncJobs,
   users,
@@ -42,6 +49,44 @@ export interface RepositoryRecord {
   isPrivate: boolean;
   isActive: boolean;
   lastSyncedAt: Date | null;
+}
+
+export interface WorkspaceOverviewSnapshot {
+  workspace: { onboardingCompletedAt: Date | null };
+  repositories: RepositoryRecord[];
+  connectors: Array<{
+    provider: "github" | "notion";
+    status: "pending" | "active" | "revoked" | "failed";
+    updatedAt: Date;
+  }>;
+  notionResources: Array<{
+    isSelected: boolean;
+    isActive: boolean;
+    lastSyncedAt: Date | null;
+  }>;
+  repositoryJobs: Array<{
+    status: "queued" | "running" | "completed" | "failed" | "cancelled";
+    updatedAt: Date;
+  }>;
+  notionJobs: Array<{
+    status: "queued" | "running" | "completed" | "failed" | "cancelled";
+    updatedAt: Date;
+  }>;
+  counts: {
+    codeFiles: number;
+    codeChunks: number;
+    relationships: number;
+    notionDocuments: number;
+    notionChunks: number;
+  };
+  recentReports: Array<{
+    id: string;
+    result: Record<string, unknown>;
+    repositoryId: string;
+    repositoryOwner: string;
+    repositoryName: string;
+    createdAt: Date;
+  }>;
 }
 
 @Injectable()
@@ -323,6 +368,108 @@ export class WorkspacesRepository {
       })
       .from(repositories)
       .where(eq(repositories.workspaceId, workspaceId));
+  }
+
+  async overview(workspaceId: string): Promise<WorkspaceOverviewSnapshot | null> {
+    const workspace = await this.findById(workspaceId);
+    if (!workspace) return null;
+
+    const countFor = async (table: typeof codeFiles | typeof codeChunks | typeof codeRelationships | typeof notionDocuments | typeof notionDocumentChunks) => {
+      const [row] = await this.database.client
+        .select({ value: count() })
+        .from(table)
+        .where(eq(table.workspaceId, workspaceId));
+      return row?.value ?? 0;
+    };
+
+    const [
+      repositoryRows,
+      connectorRows,
+      resourceRows,
+      repositoryJobRows,
+      notionJobRows,
+      codeFileCount,
+      codeChunkCount,
+      relationshipCount,
+      notionDocumentCount,
+      notionChunkCount,
+      reportRows,
+    ] = await Promise.all([
+      this.listRepositories(workspaceId),
+      this.database.client
+        .select({
+          provider: connectors.provider,
+          status: connectors.status,
+          updatedAt: connectors.updatedAt,
+        })
+        .from(connectors)
+        .where(eq(connectors.workspaceId, workspaceId)),
+      this.database.client
+        .select({
+          isSelected: notionResources.isSelected,
+          isActive: notionResources.isActive,
+          lastSyncedAt: notionResources.lastSyncedAt,
+        })
+        .from(notionResources)
+        .where(eq(notionResources.workspaceId, workspaceId)),
+      this.database.client
+        .select({ status: syncJobs.status, updatedAt: syncJobs.updatedAt })
+        .from(syncJobs)
+        .where(
+          and(
+            eq(syncJobs.workspaceId, workspaceId),
+            inArray(syncJobs.status, ["queued", "running", "failed"]),
+          ),
+        ),
+      this.database.client
+        .select({
+          status: notionSyncJobs.status,
+          updatedAt: notionSyncJobs.updatedAt,
+        })
+        .from(notionSyncJobs)
+        .where(
+          and(
+            eq(notionSyncJobs.workspaceId, workspaceId),
+            inArray(notionSyncJobs.status, ["queued", "running", "failed"]),
+          ),
+        ),
+      countFor(codeFiles),
+      countFor(codeChunks),
+      countFor(codeRelationships),
+      countFor(notionDocuments),
+      countFor(notionDocumentChunks),
+      this.database.client
+        .select({
+          id: impactReports.id,
+          result: impactReports.result,
+          repositoryId: repositories.id,
+          repositoryOwner: repositories.owner,
+          repositoryName: repositories.name,
+          createdAt: impactReports.createdAt,
+        })
+        .from(impactReports)
+        .innerJoin(repositories, eq(repositories.id, impactReports.repositoryId))
+        .where(eq(impactReports.workspaceId, workspaceId))
+        .orderBy(desc(impactReports.createdAt))
+        .limit(5),
+    ]);
+
+    return {
+      workspace: { onboardingCompletedAt: workspace.onboardingCompletedAt },
+      repositories: repositoryRows,
+      connectors: connectorRows,
+      notionResources: resourceRows,
+      repositoryJobs: repositoryJobRows,
+      notionJobs: notionJobRows,
+      counts: {
+        codeFiles: codeFileCount,
+        codeChunks: codeChunkCount,
+        relationships: relationshipCount,
+        notionDocuments: notionDocumentCount,
+        notionChunks: notionChunkCount,
+      },
+      recentReports: reportRows,
+    };
   }
 
   async pilotMetrics(workspaceId: string) {

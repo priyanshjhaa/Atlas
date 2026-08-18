@@ -42,6 +42,12 @@ export class WorkspacesController {
     return this.workspaces.get(workspaceId);
   }
 
+  @Get(":workspaceId/overview")
+  @WorkspaceRoles("owner", "admin", "member", "viewer")
+  overview(@Param("workspaceId", ParseUUIDPipe) workspaceId: string) {
+    return this.workspaces.overview(workspaceId);
+  }
+
   @Patch(":workspaceId")
   @WorkspaceRoles("owner", "admin")
   update(
