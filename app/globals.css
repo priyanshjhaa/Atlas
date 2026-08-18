@@ -4359,6 +4359,26 @@ body {
   .onboarding-footer__actions .button { width: 100%; justify-content: center; }
 }
 
+.context-source-switch {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  margin: -14px 0 18px;
+  padding: 6px;
+  border: 1px solid rgba(77, 80, 60, .13);
+  border-radius: 999px;
+  background: rgba(255, 250, 238, .7);
+}
+.context-source-switch > span { padding: 0 10px; color: var(--muted-2); font: 7px var(--mono); text-transform: uppercase; }
+.context-source-switch button { min-height: 32px; padding: 0 13px; border: 0; border-radius: 999px; color: var(--muted); background: transparent; cursor: pointer; font-size: 9px; }
+.context-source-switch button.active { color: #fffaf0; background: var(--app-moss); }
+@media (max-width: 560px) {
+  .context-source-switch { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); border-radius: 14px; }
+  .context-source-switch > span { grid-column: 1 / -1; padding: 6px 8px 2px; }
+  .context-source-switch button { padding: 0 7px; }
+}
+
 /* Dashboard cockpit — keeps the warm washi, moss, and clay application language. */
 .cockpit { --cockpit-rule: rgba(77, 80, 60, .13); }
 .cockpit-command {
@@ -4522,4 +4542,63 @@ body {
   .risk-mark { width: 55px; }
   .cockpit-empty { align-items: flex-start; flex-wrap: wrap; }
   .cockpit-empty > a { width: 100%; margin-left: 34px; }
+}
+
+.context-workspaces { margin: 28px 0 18px; }
+.context-workspaces__heading { display: grid; grid-template-columns: 1fr 1fr; align-items: end; gap: 10px 36px; margin: 0 3px 16px; }
+.context-workspaces__heading > span { grid-column: 1 / -1; color: var(--app-clay); font: 8px var(--mono); letter-spacing: .11em; text-transform: uppercase; }
+.context-workspaces__heading h2 { margin: 0; color: var(--paper); font: 560 clamp(25px, 2.5vw, 36px)/1 var(--serif); letter-spacing: -.025em; }
+.context-workspaces__heading p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.context-workspaces__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.context-stream { position: relative; min-width: 0; padding: 24px; border: 1px solid var(--cockpit-rule); border-radius: 18px; background: rgba(255, 250, 238, .76); overflow: hidden; }
+.context-stream::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: var(--app-moss); }
+.context-stream--notion { background: linear-gradient(145deg, rgba(255, 250, 238, .85), rgba(242, 231, 210, .72)); }
+.context-stream--notion::before { background: var(--app-clay); }
+.context-stream > header { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 13px; }
+.context-stream__mark { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; color: #fffaf0; background: var(--app-moss); }
+.context-stream--notion .context-stream__mark { background: #45473e; }
+.context-stream header span,
+.context-stream__activity > span { color: var(--muted-2); font: 7px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.context-stream h2 { margin: 5px 0 0; font: 560 23px var(--serif); }
+.context-stream__status { padding: 6px 9px; border: 1px solid var(--cockpit-rule); border-radius: 999px; color: var(--muted); font: normal 7px var(--mono); white-space: nowrap; }
+.context-stream__status--ready { color: #506a4b; border-color: rgba(100, 125, 91, .25); background: rgba(100, 125, 91, .08); }
+.context-stream__status--failed,
+.context-stream__status--stale { color: #934d40; border-color: rgba(184, 100, 85, .23); background: rgba(184, 100, 85, .07); }
+.context-stream > p { min-height: 42px; margin: 18px 0; color: var(--muted); font-size: 10px; line-height: 1.65; }
+.context-stream dl { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0; border: 1px solid var(--cockpit-rule); border-radius: 11px; overflow: hidden; }
+.context-stream dl div { min-width: 0; padding: 13px; border-right: 1px solid var(--cockpit-rule); }
+.context-stream dl div:last-child { border-right: 0; }
+.context-stream dt { color: var(--muted-2); font: 7px var(--mono); text-transform: uppercase; }
+.context-stream dd { margin: 7px 0 0; font: 560 20px var(--serif); }
+.context-stream__activity { min-height: 152px; padding: 18px 2px 8px; }
+.context-stream__activity > div { min-height: 38px; display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 9px; border-bottom: 1px solid rgba(77, 80, 60, .08); }
+.context-stream__activity > div:last-child { border-bottom: 0; }
+.context-stream__activity p { display: flex; flex-direction: column; gap: 3px; margin: 0; }
+.context-stream__activity strong { font-size: 9px; }
+.context-stream__activity small,
+.context-stream__activity time { color: var(--muted-2); font: 7px var(--mono); }
+.stream-event { width: 6px; height: 6px; border-radius: 50%; background: var(--app-moss); }
+.stream-event--failed { background: var(--danger); }
+.stream-event--queued,
+.stream-event--running { background: var(--warning); }
+.context-stream__empty { grid-template-columns: 20px minmax(0, 1fr) !important; padding-top: 10px; }
+.context-stream__empty > svg { color: var(--muted-2); }
+.context-stream footer { display: flex; align-items: center; gap: 18px; padding-top: 17px; border-top: 1px solid var(--cockpit-rule); }
+.context-stream footer .button { min-height: 38px; padding: 0 15px; font-size: 10px; }
+.context-stream footer > a:last-child { display: inline-flex; align-items: center; gap: 6px; color: var(--app-moss); font-size: 9px; font-weight: 700; }
+
+@media (max-width: 900px) {
+  .context-workspaces__heading { grid-template-columns: 1fr; }
+  .context-workspaces__heading > span { grid-column: auto; }
+  .context-workspaces__grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .context-stream { padding: 20px; }
+  .context-stream > header { grid-template-columns: 40px 1fr; }
+  .context-stream__status { grid-column: 2; width: fit-content; }
+  .context-stream dl { grid-template-columns: 1fr 1fr; }
+  .context-stream dl div:nth-child(2) { border-right: 0; }
+  .context-stream dl div:last-child { grid-column: 1 / -1; border-top: 1px solid var(--cockpit-rule); }
+  .context-stream footer { align-items: stretch; flex-direction: column; gap: 12px; }
+  .context-stream footer .button { width: 100%; }
 }

@@ -65,11 +65,17 @@ export interface WorkspaceOverviewSnapshot {
     lastSyncedAt: Date | null;
   }>;
   repositoryJobs: Array<{
+    id: string;
     status: "queued" | "running" | "completed" | "failed" | "cancelled";
+    result: Record<string, unknown> | null;
+    repositoryOwner: string;
+    repositoryName: string;
     updatedAt: Date;
   }>;
   notionJobs: Array<{
+    id: string;
     status: "queued" | "running" | "completed" | "failed" | "cancelled";
+    result: Record<string, unknown> | null;
     updatedAt: Date;
   }>;
   counts: {
@@ -413,8 +419,16 @@ export class WorkspacesRepository {
         .from(notionResources)
         .where(eq(notionResources.workspaceId, workspaceId)),
       this.database.client
-        .select({ status: syncJobs.status, updatedAt: syncJobs.updatedAt })
+        .select({
+          id: syncJobs.id,
+          status: syncJobs.status,
+          result: syncJobs.result,
+          repositoryOwner: repositories.owner,
+          repositoryName: repositories.name,
+          updatedAt: syncJobs.updatedAt,
+        })
         .from(syncJobs)
+        .innerJoin(repositories, eq(repositories.id, syncJobs.repositoryId))
         .where(
           and(
             eq(syncJobs.workspaceId, workspaceId),
@@ -423,7 +437,9 @@ export class WorkspacesRepository {
         ),
       this.database.client
         .select({
+          id: notionSyncJobs.id,
           status: notionSyncJobs.status,
+          result: notionSyncJobs.result,
           updatedAt: notionSyncJobs.updatedAt,
         })
         .from(notionSyncJobs)

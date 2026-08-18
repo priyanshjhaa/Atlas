@@ -61,6 +61,34 @@ function ReadinessCard({ provider, overview }: { provider: "github" | "notion"; 
   );
 }
 
+function ContextStream({ provider, overview }: { provider: "github" | "notion"; overview: AtlasWorkspaceOverview }) {
+  const github = provider === "github";
+  const source = overview.readiness[provider];
+  const activity = overview.streams[provider];
+  const Icon = github ? GitBranch : BookOpenText;
+  return (
+    <article className={`context-stream context-stream--${provider}`}>
+      <header>
+        <div className="context-stream__mark"><Icon size={20} /></div>
+        <div><span>{github ? "Implementation stream" : "Knowledge stream"}</span><h2>{github ? "GitHub changes" : "Notion changes"}</h2></div>
+        <i className={`context-stream__status context-stream__status--${source.status}`}>{STATUS_LABELS[source.status]}</i>
+      </header>
+      <p>{github ? "Review synchronized repository revisions, files, APIs, and dependency relationships." : "Review synchronized decisions, ADRs, specifications, runbooks, and document revisions."}</p>
+      <dl>
+        {github ? <><div><dt>Repositories</dt><dd>{overview.intelligence.repositoriesIndexed}</dd></div><div><dt>Code files</dt><dd>{overview.intelligence.codeFiles.toLocaleString()}</dd></div><div><dt>Relationships</dt><dd>{overview.intelligence.relationships.toLocaleString()}</dd></div></> : <><div><dt>Documents</dt><dd>{overview.intelligence.notionDocuments.toLocaleString()}</dd></div><div><dt>Selected sources</dt><dd>{overview.readiness.notion.resourcesSelected}</dd></div><div><dt>Search chunks</dt><dd>{overview.intelligence.notionChunks.toLocaleString()}</dd></div></>}
+      </dl>
+      <div className="context-stream__activity">
+        <span>Recent {github ? "GitHub" : "Notion"} updates</span>
+        {activity.length ? activity.map((item) => <div key={item.id}><i className={`stream-event stream-event--${item.status}`} /><p><strong>{item.title}</strong><small>{item.summary}</small></p><time>{timeAgo(item.occurredAt, overview.generatedAt).replace("Updated ", "")}</time></div>) : <div className="context-stream__empty"><CircleDashed size={15} /><p><strong>No updates recorded yet</strong><small>{github ? "Synchronize a repository to see implementation changes." : "Connect and synchronize Notion to see documentation changes."}</small></p></div>}
+      </div>
+      <footer>
+        <Link className="button button--ghost" href={`/app/activity?source=${provider}`}>Review {github ? "GitHub" : "Notion"} activity <ArrowRight size={13} /></Link>
+        <Link href={`/app/search?source=${provider}`}>Search {github ? "code" : "documentation"} <Search size={13} /></Link>
+      </footer>
+    </article>
+  );
+}
+
 export function DashboardPage({ userName, workspace, repositories, overview, graph }: {
   userName: string;
   workspace: AtlasWorkspace;
@@ -110,6 +138,11 @@ export function DashboardPage({ userName, workspace, repositories, overview, gra
         <div className="readiness-rail__intro"><span>Context readiness</span><strong>{overview.readiness.overall === "ready" ? "Atlas is ready" : "Review workspace context"}</strong></div>
         <ReadinessCard provider="github" overview={overview} />
         <ReadinessCard provider="notion" overview={overview} />
+      </section>
+
+      <section className="context-workspaces" aria-labelledby="context-workspaces-title">
+        <div className="context-workspaces__heading"><span>Separate context workspaces</span><h2 id="context-workspaces-title">Choose what you want to inspect</h2><p>Implementation history and team knowledge stay distinct, while Atlas can combine both when you run an impact analysis.</p></div>
+        <div className="context-workspaces__grid"><ContextStream provider="github" overview={overview} /><ContextStream provider="notion" overview={overview} /></div>
       </section>
 
       <div className="cockpit-priority-grid">

@@ -64,6 +64,10 @@ export interface WorkspaceOverview {
     repository: { id: string; owner: string; name: string };
     createdAt: string;
   }>;
+  streams: {
+    github: WorkspaceContextActivity[];
+    notion: WorkspaceContextActivity[];
+  };
   attention: Array<{
     id: string;
     severity: "critical" | "warning" | "info";
@@ -71,6 +75,14 @@ export interface WorkspaceOverview {
     detail: string;
     action: { label: string; href: string };
   }>;
+}
+
+export interface WorkspaceContextActivity {
+  id: string;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  title: string;
+  summary: string;
+  occurredAt: string;
 }
 
 @Injectable()
@@ -363,8 +375,52 @@ export class WorkspacesService {
           createdAt: report.createdAt.toISOString(),
         };
       }),
+      streams: {
+        github: snapshot.repositoryJobs
+          .toSorted((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
+          .slice(0, 3)
+          .map((job) => ({
+            id: job.id,
+            status: job.status,
+            title: `${job.repositoryOwner}/${job.repositoryName}`,
+            summary: this.githubActivitySummary(job.status, job.result),
+            occurredAt: job.updatedAt.toISOString(),
+          })),
+        notion: snapshot.notionJobs
+          .toSorted((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
+          .slice(0, 3)
+          .map((job) => ({
+            id: job.id,
+            status: job.status,
+            title: "Notion documentation",
+            summary: this.notionActivitySummary(job.status, job.result),
+            occurredAt: job.updatedAt.toISOString(),
+          })),
+      },
       attention,
     };
+  }
+
+  private githubActivitySummary(
+    status: WorkspaceContextActivity["status"],
+    result: Record<string, unknown> | null,
+  ): string {
+    if (status !== "completed") return `Synchronization ${status}`;
+    if (result?.outcome === "no_change") return "No implementation changes detected";
+    const files = typeof result?.filesIndexed === "number" ? result.filesIndexed : 0;
+    const relationships = typeof result?.relationshipsExtracted === "number" ? result.relationshipsExtracted : 0;
+    return `${files} files and ${relationships} relationships indexed`;
+  }
+
+  private notionActivitySummary(
+    status: WorkspaceContextActivity["status"],
+    result: Record<string, unknown> | null,
+  ): string {
+    if (status !== "completed") return `Synchronization ${status}`;
+    if (result?.outcome === "no_change") return "No documentation changes detected";
+    const documents = typeof result?.documentsUpdated === "number" ? result.documentsUpdated : 0;
+    const versions = typeof result?.versionsCreated === "number" ? result.versionsCreated : 0;
+    return `${documents} documents and ${versions} revisions indexed`;
   }
 
   private latestDate(values: Array<Date | null>): Date | null {

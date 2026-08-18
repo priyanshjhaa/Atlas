@@ -215,8 +215,8 @@ describe("WorkspacesService", () => {
       notionResources: [
         { isSelected: true, isActive: true, lastSyncedAt: now },
       ],
-      repositoryJobs: [{ status: "failed", updatedAt: now }],
-      notionJobs: [],
+      repositoryJobs: [{ id: "github-job-1", status: "failed", result: null, repositoryOwner: "atlas", repositoryName: "web", updatedAt: now }],
+      notionJobs: [{ id: "notion-job-1", status: "completed", result: { documentsUpdated: 3, versionsCreated: 2 }, updatedAt: now }],
       counts: {
         codeFiles: 14,
         codeChunks: 28,
@@ -257,6 +257,10 @@ describe("WorkspacesService", () => {
       title: "Change authentication",
       riskLevel: "high",
       unknownCount: 1,
+    });
+    expect(overview.streams).toMatchObject({
+      github: [{ title: "atlas/web", summary: "Synchronization failed" }],
+      notion: [{ title: "Notion documentation", summary: "3 documents and 2 revisions indexed" }],
     });
   });
 
@@ -307,7 +311,7 @@ describe("WorkspacesService", () => {
       repositories: [{ id: "repository-1", owner: "atlas", name: "web", defaultBranch: "main", isPrivate: true, isActive: true, lastSyncedAt: now }],
       connectors: [{ provider: "github", status: "active", updatedAt: now }],
       notionResources: [],
-      repositoryJobs: [{ status: "failed", updatedAt: oldFailure }],
+      repositoryJobs: [{ id: "github-job-old", status: "failed", result: null, repositoryOwner: "atlas", repositoryName: "web", updatedAt: oldFailure }],
       notionJobs: [],
       counts: { codeFiles: 1, codeChunks: 2, relationships: 1, notionDocuments: 0, notionChunks: 0 },
       recentReports: [],

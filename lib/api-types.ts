@@ -326,8 +326,20 @@ export interface AtlasWorkspaceOverview {
   };
   jobs: { active: number; failed: number };
   intelligence: { repositoriesIndexed: number; codeFiles: number; codeChunks: number; relationships: number; notionDocuments: number; notionChunks: number };
+  streams: {
+    github: AtlasWorkspaceContextActivity[];
+    notion: AtlasWorkspaceContextActivity[];
+  };
   recentReports: Array<{ id: string; title: string; status: "complete" | "insufficient_evidence"; riskLevel: "insufficient" | "low" | "medium" | "high"; riskScore: number | null; unknownCount: number; repository: { id: string; owner: string; name: string }; createdAt: string }>;
   attention: Array<{ id: string; severity: "critical" | "warning" | "info"; title: string; detail: string; action: { label: string; href: string } }>;
+}
+
+export interface AtlasWorkspaceContextActivity {
+  id: string;
+  status: AtlasSyncJobStatus;
+  title: string;
+  summary: string;
+  occurredAt: string;
 }
 
 export type AtlasImpactScope = "repository" | "workspace";

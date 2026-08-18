@@ -240,15 +240,18 @@ export function ActivityPage({
   initialJobs,
   initialNotionJobs,
   workspace,
+  initialSource = "all",
 }: {
   initialJobs: AtlasSyncJob[];
   initialNotionJobs: AtlasNotionSyncJob[];
   workspace: AtlasWorkspace;
+  initialSource?: "all" | "github" | "notion";
 }) {
   const [jobs, setJobs] = useState(initialJobs);
   const [notionJobs, setNotionJobs] = useState(initialNotionJobs);
   const [syncing, setSyncing] = useState(false);
   const [filter, setFilter] = useState<"all" | "running" | "completed">("all");
+  const [sourceFilter, setSourceFilter] = useState<"all" | "github" | "notion">(initialSource);
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const canSynchronize = workspace.role !== "viewer";
@@ -259,17 +262,18 @@ export function ActivityPage({
     (left, right) =>
       new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
   );
-  const activeJob = activityJobs.find((job) =>
+  const sourceJobs = activityJobs.filter((job) => sourceFilter === "all" || job.source === sourceFilter);
+  const activeJob = sourceJobs.find((job) =>
     ["queued", "running"].includes(job.status),
   );
-  const visibleJobs = activityJobs.filter(
+  const visibleJobs = sourceJobs.filter(
     (job) =>
       filter === "all" ||
       (filter === "running"
         ? ["queued", "running"].includes(job.status)
         : job.status === "completed"),
   );
-  const completedJobs = activityJobs.filter(
+  const completedJobs = sourceJobs.filter(
     (job) => job.status === "completed",
   );
   const successfulJobs = completedJobs.length;
@@ -372,6 +376,10 @@ export function ActivityPage({
     <>
       <PageHeader eyebrow="Source ingestion and freshness" title="Sync activity" detail="Track GitHub revision checks, bounded history capture, source discovery, parsing, embeddings, graph persistence, and Notion document versioning. Cancel active repository jobs, retry failures, and verify no-change work that Atlas safely skipped." action={<button className="button button--primary" onClick={() => void syncAll()} disabled={syncing || !canSynchronize}><RefreshCw className={syncing ? "spin" : ""} size={15} /> {syncing ? "Queueing…" : "Sync all"}</button>} />
       {notice && <p className="action-notice" aria-live="polite">{notice}</p>}
+      <nav className="context-source-switch" aria-label="Activity source">
+        <span>Inspect activity for</span>
+        {(["github", "notion", "all"] as const).map((source) => <button className={sourceFilter === source ? "active" : ""} onClick={() => setSourceFilter(source)} key={source}>{source === "all" ? "All context" : source === "github" ? "GitHub changes" : "Notion changes"}</button>)}
+      </nav>
       <div className="activity-grid">
         <section className="panel active-sync">
           <div className="panel-heading"><div><span>{activeJob ? "Current synchronization" : "Queue status"}</span><h2>{activeJob ? activeJob.source === "github" ? `${activeJob.repositoryOwner}/${activeJob.repositoryName}` : activeJob.configuration.workspaceName ?? "Notion" : "No active jobs"}</h2></div>{activeJob && <span className="running-badge"><RefreshCw className={activeJob.status === "running" ? "spin" : ""} size={13} /> {activeJob.source === "github" && activeJob.cancelRequestedAt ? "Cancelling" : syncStageLabel(activeJob.status)}</span>}</div>
@@ -379,7 +387,7 @@ export function ActivityPage({
           <div className="sync-stages">{syncStages.map((step, index) => { const progress = activeJob?.progress ?? -1; const currentIndex = progress >= 90 ? 5 : progress >= 52 ? 4 : progress >= 32 ? 3 : progress >= 15 ? 2 : progress >= 8 ? 1 : progress >= 0 ? 0 : -1; return <div className={index < currentIndex ? "done" : index === currentIndex ? "current" : ""} key={step}><i>{index < currentIndex ? <Check size={12} /> : index + 1}</i><span>{syncStageLabel(step)}</span></div>; })}</div>
           {activeJob?.source === "github" && canSynchronize && <div className="settings-actions"><button className="button button--ghost" onClick={() => void jobAction(activeJob.id, "cancel")} disabled={Boolean(activeJob.cancelRequestedAt)}>Cancel synchronization</button></div>}
         </section>
-        <section className="panel activity-stats"><div><span>Successful syncs</span><strong>{successfulJobs}</strong><p>{activityJobs.length ? `${Math.round((successfulJobs / activityJobs.length) * 100)}% of recent jobs` : "No jobs yet"}</p></div><div><span>Median duration</span><strong>{medianDuration}s</strong><p>across completed jobs</p></div><div><span>No-change syncs</span><strong>{noChangeJobs}</strong><p>work safely skipped</p></div></section>
+        <section className="panel activity-stats"><div><span>Successful syncs</span><strong>{successfulJobs}</strong><p>{sourceJobs.length ? `${Math.round((successfulJobs / sourceJobs.length) * 100)}% of recent jobs` : "No jobs yet"}</p></div><div><span>Median duration</span><strong>{medianDuration}s</strong><p>across completed jobs</p></div><div><span>No-change syncs</span><strong>{noChangeJobs}</strong><p>work safely skipped</p></div></section>
       </div>
       <section className="panel activity-log">
         <div className="panel-heading"><div><span>Workspace events</span><h2>Recent activity</h2></div><div className="activity-filters"><Filter size={14} />{(["all", "running", "completed"] as const).map((item) => <button className={filter === item ? "active" : ""} onClick={() => setFilter(item)} key={item}>{item}</button>)}</div></div>
