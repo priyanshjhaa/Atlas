@@ -83,4 +83,65 @@ describe("DashboardPage", () => {
     expect(screen.getByText("Ready for analysis")).toBeInTheDocument();
     expect(screen.getByText("Optional · not connected")).toBeInTheDocument();
   });
+
+  it("puts corrective source actions ahead of secondary graph exploration", () => {
+    render(
+      <DashboardPage
+        userName="Priyansh Jha"
+        workspace={workspace}
+        repositories={[]}
+        overview={{
+          ...overview,
+          readiness: {
+            overall: "needs_setup",
+            github: { status: "disconnected", repositoriesConnected: 0, repositoriesReady: 0, lastSyncedAt: null },
+            notion: { status: "skipped", resourcesSelected: 0, documentsIndexed: 0, lastSyncedAt: null },
+          },
+          intelligence: { repositoriesIndexed: 0, codeFiles: 0, codeChunks: 0, relationships: 0, notionDocuments: 0, notionChunks: 0 },
+          attention: [
+            { id: "connect-github", severity: "warning", title: "Connect a GitHub repository", detail: "Atlas needs synchronized code.", action: { label: "Connect GitHub", href: "/app/sources" } },
+            { id: "connect-notion", severity: "info", title: "Add decisions and documentation", detail: "Connect Notion for cited context.", action: { label: "Connect Notion", href: "/app/sources" } },
+          ],
+        }}
+        graph={null}
+      />,
+    );
+
+    expect(screen.getByText("Connect a GitHub repository")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Connect GitHub/ })).toHaveAttribute("href", "/app/sources");
+    expect(screen.getByText("No impact reports yet")).toBeInTheDocument();
+    expect(screen.getByText("Connected architecture graph")).toBeInTheDocument();
+  });
+
+  it("shows recent report risk and unknowns with direct report links", () => {
+    render(
+      <DashboardPage
+        userName="Priyansh Jha"
+        workspace={workspace}
+        repositories={repositories}
+        overview={{
+          ...overview,
+          attention: [],
+          recentReports: [
+            {
+              id: "report-1",
+              title: "Replace persistent session tokens",
+              status: "complete",
+              riskLevel: "high",
+              riskScore: 84,
+              unknownCount: 2,
+              repository: { id: "repository-1", owner: "atlas", name: "web" },
+              createdAt: "2026-08-01T09:30:00.000Z",
+            },
+          ],
+        }}
+        graph={null}
+      />,
+    );
+
+    expect(screen.getByText("No source issues detected")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Replace persistent session tokens/ })).toHaveAttribute("href", "/app/impact/report-1");
+    expect(screen.getByText("atlas/web · 2 unknowns")).toBeInTheDocument();
+    expect(screen.getByText("high")).toBeInTheDocument();
+  });
 });
