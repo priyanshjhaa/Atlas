@@ -263,18 +263,20 @@ export function GraphPage({
 export function SearchPage({
   workspace,
   repositories,
+  initialScope = "all",
 }: {
   workspace: AtlasWorkspace;
   repositories: AtlasRepository[];
+  initialScope?: "all" | "github" | "notion";
 }) {
   const searchableRepositories = repositories.filter(
     (repository) => repository.isActive && repository.lastSyncedAt,
   );
   const [repositoryId, setRepositoryId] = useState(
-    searchableRepositories[0]?.id ?? "",
+    initialScope === "notion" ? "" : searchableRepositories[0]?.id ?? "",
   );
   const [query, setQuery] = useState("");
-  const [scope, setScope] = useState<"all" | "github" | "notion">("all");
+  const [scope, setScope] = useState<"all" | "github" | "notion">(initialScope);
   const [response, setResponse] =
     useState<AtlasWorkspaceIntelligenceSearchResponse | null>(null);
   const [searching, setSearching] = useState(false);
@@ -337,9 +339,12 @@ export function SearchPage({
         </select>
         <select
           value={scope}
-          onChange={(event) =>
-            setScope(event.target.value as "all" | "github" | "notion")
-          }
+          onChange={(event) => {
+            const nextScope = event.target.value as "all" | "github" | "notion";
+            setScope(nextScope);
+            if (nextScope === "notion") setRepositoryId("");
+            else if (!repositoryId) setRepositoryId(searchableRepositories[0]?.id ?? "");
+          }}
           aria-label="Context provider"
         >
           <option value="all">Code + Notion</option>

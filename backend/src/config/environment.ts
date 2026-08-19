@@ -83,6 +83,12 @@ const environmentSchema = z.object({
     .positive()
     .max(3_650)
     .default(180),
+  DASHBOARD_STALE_SOURCE_HOURS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(720)
+    .default(24),
   EMBEDDINGS_PROVIDER: z.enum(["local", "openai"]).default("local"),
   OPENAI_API_KEY: z.string().min(1).optional(),
   GROQ_API_KEY: z.string().min(1).optional(),

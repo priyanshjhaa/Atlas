@@ -28,6 +28,7 @@ describe("validateEnvironment", () => {
     expect(environment.LLM_REASONING_EFFORT).toBe("low");
     expect(environment.LLM_MAX_EXPLANATION_CHARACTERS).toBe(20_000);
     expect(environment.PILOT_FEEDBACK_RETENTION_DAYS).toBe(180);
+    expect(environment.DASHBOARD_STALE_SOURCE_HOURS).toBe(24);
     expect(environment.ATLAS_RELEASE).toBe("local");
     expect(environment.OPERATIONS_TOKEN).toBeUndefined();
     expect(environment.LOG_PRETTY).toBeUndefined();
@@ -49,6 +50,16 @@ describe("validateEnvironment", () => {
     expect(() =>
       validateEnvironment({ TRUST_PROXY_HOPS: "6" }),
     ).toThrow("TRUST_PROXY_HOPS");
+  });
+
+  it("bounds the dashboard stale-source threshold", () => {
+    expect(() =>
+      validateEnvironment({ DASHBOARD_STALE_SOURCE_HOURS: "0" }),
+    ).toThrow("DASHBOARD_STALE_SOURCE_HOURS");
+    expect(
+      validateEnvironment({ DASHBOARD_STALE_SOURCE_HOURS: "72" })
+        .DASHBOARD_STALE_SOURCE_HOURS,
+    ).toBe(72);
   });
 
   it("requires the complete GitHub App configuration as one unit", () => {

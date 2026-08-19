@@ -308,6 +308,40 @@ export interface AtlasWorkspaceData {
   repositories: AtlasRepository[];
 }
 
+export type AtlasSourceReadinessStatus =
+  | "disconnected"
+  | "skipped"
+  | "indexing"
+  | "ready"
+  | "stale"
+  | "failed";
+
+export interface AtlasWorkspaceOverview {
+  generatedAt: string;
+  staleAfterHours: number;
+  readiness: {
+    overall: "needs_setup" | "indexing" | "ready" | "attention";
+    github: { status: AtlasSourceReadinessStatus; repositoriesConnected: number; repositoriesReady: number; lastSyncedAt: string | null };
+    notion: { status: AtlasSourceReadinessStatus; resourcesSelected: number; documentsIndexed: number; lastSyncedAt: string | null };
+  };
+  jobs: { active: number; failed: number };
+  intelligence: { repositoriesIndexed: number; codeFiles: number; codeChunks: number; relationships: number; notionDocuments: number; notionChunks: number };
+  streams: {
+    github: AtlasWorkspaceContextActivity[];
+    notion: AtlasWorkspaceContextActivity[];
+  };
+  recentReports: Array<{ id: string; title: string; status: "complete" | "insufficient_evidence"; riskLevel: "insufficient" | "low" | "medium" | "high"; riskScore: number | null; unknownCount: number; repository: { id: string; owner: string; name: string }; createdAt: string }>;
+  attention: Array<{ id: string; severity: "critical" | "warning" | "info"; title: string; detail: string; action: { label: string; href: string } }>;
+}
+
+export interface AtlasWorkspaceContextActivity {
+  id: string;
+  status: AtlasSyncJobStatus;
+  title: string;
+  summary: string;
+  occurredAt: string;
+}
+
 export type AtlasImpactScope = "repository" | "workspace";
 
 export const ATLAS_IMPACT_EXPLANATION_SCHEMA_VERSION = "1" as const;
