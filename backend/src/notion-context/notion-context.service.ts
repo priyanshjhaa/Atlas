@@ -386,6 +386,7 @@ export class NotionContextService {
         generated.value,
         new Set(evidence.map((item) => item.id)),
         relatedCitationIds,
+        new Set([currentCitationId, previousCitationId]),
       )
     ) {
       result = generated.value;
@@ -1017,6 +1018,7 @@ export class NotionContextService {
     value: NotionGeneratedReview,
     validIds: Set<string>,
     relatedIds: Set<string>,
+    primaryRevisionIds: Set<string>,
   ) {
     const findings = [
       ...value.whatChanged,
@@ -1029,8 +1031,10 @@ export class NotionContextService {
       ...value.unresolvedQuestions,
     ];
     return (
-      value.contradictions.every((item) =>
-        item.citationIds.some((id) => relatedIds.has(id)),
+      value.contradictions.every(
+        (item) =>
+          item.citationIds.some((id) => relatedIds.has(id)) &&
+          item.citationIds.some((id) => primaryRevisionIds.has(id)),
       ) &&
       findings.every(
         (item) =>

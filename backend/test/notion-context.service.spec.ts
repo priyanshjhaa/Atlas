@@ -699,4 +699,22 @@ describe("NotionContextService", () => {
       document: { title: "ADR: Session rotation", sourceAvailable: true },
     });
   });
+
+  it("does not return a saved review outside the requested workspace", async () => {
+    const repository = repositories();
+    repository.getReview.mockResolvedValue(null);
+    const service = new NotionContextService(
+      repository as unknown as NotionContextRepository,
+      retrieval() as unknown as RetrievalService,
+      generation(),
+    );
+
+    await expect(
+      service.getDocumentReview("workspace-other", "review-1"),
+    ).rejects.toThrow("Document review not found");
+    expect(repository.getReview).toHaveBeenCalledWith(
+      "workspace-other",
+      "review-1",
+    );
+  });
 });
