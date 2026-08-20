@@ -95,12 +95,21 @@ export function AppShell({ workspaceData, children }: { workspaceData: AtlasWork
           <button className="workspace-switcher" onClick={() => setWorkspaceOpen((current) => !current)} aria-expanded={workspaceOpen}><span>{initials(activeWorkspace.name)}</span><div><b>{activeWorkspace.name}</b><small>{activeWorkspace.repositoryCount} {activeWorkspace.repositoryCount === 1 ? "repository" : "repositories"}</small></div><ChevronDown size={14} /></button>
           {workspaceOpen && <div className="workspace-menu"><b>Your workspaces</b>{me.workspaces.map((item) => <button className={item.id === activeWorkspace.id ? "active" : ""} disabled={switchingWorkspace} key={item.id} onClick={() => void selectWorkspace(item.id)}><span>{item.name}</span><small>{item.role} · {item.repositoryCount} repos</small></button>)}<Link href="/app/settings" onClick={() => setWorkspaceOpen(false)}>Workspace settings</Link></div>}
         </div>
-        <nav aria-label="Workspace">{navItems.map((item) => { const Icon = item.icon; const active = item.href === "/app" ? pathname === "/app" : pathname.startsWith(item.href.replace("/new", "")); return <Link className={active ? "active" : ""} href={item.href} key={item.href} onClick={() => setMobileOpen(false)}><Icon size={17} /><span>{item.label}</span>{item.label === "Impact analysis" && <i>MAP</i>}</Link>; })}</nav>
-        <nav className="sidebar-utility" aria-label="Workspace utilities">{utilityItems.map((item) => { const Icon = item.icon; return <Link className={pathname.startsWith(item.href) ? "active" : ""} href={item.href} key={item.href} onClick={() => setMobileOpen(false)}><Icon size={17} /><span>{item.label}</span></Link>; })}</nav>
+        <nav className="sidebar-primary" aria-label="Workspace">{navItems.map((item) => { const Icon = item.icon; const active = item.href === "/app" ? pathname === "/app" : pathname.startsWith(item.href.replace("/new", "")); return <Link className={active ? "active" : ""} href={item.href} key={item.href} onClick={() => setMobileOpen(false)} title={collapsed ? item.label : undefined}><Icon size={18} /><span>{item.label}</span></Link>; })}</nav>
+        <nav className="sidebar-utility" aria-label="Workspace utilities">{utilityItems.map((item) => { const Icon = item.icon; return <Link className={pathname.startsWith(item.href) ? "active" : ""} href={item.href} key={item.href} onClick={() => setMobileOpen(false)} title={collapsed ? item.label : undefined}><Icon size={18} /><span>{item.label}</span></Link>; })}</nav>
         <div className="sidebar-user"><i>{initials(me.user.name)}</i><div><b>{me.user.name}</b><span>{me.user.email}</span></div><button onClick={signOut} disabled={signingOut} aria-label="Sign out"><LogOut size={15} /></button></div>
       </aside>
       {mobileOpen && <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
-      <main className="app-main"><div className="app-topbar"><Link href="/app/search" className="global-search"><Search size={15} /><span>Search Atlas…</span><kbd>⌘ K</kbd></Link><Link href="/app/activity" className="topbar-icon" aria-label="Synchronization activity"><Bell size={17} />{indexCoverage < 100 && <i />}</Link></div><div className="page-content" data-surface={surface}>{children}</div></main>
+      <main className="app-main">
+        <div className="app-topbar">
+          <div className="topbar-primary">
+            <span className="topbar-context">Atlas / {activeWorkspace.name}</span>
+            <Link href="/app/search" className="global-search"><Search size={15} /><span>Search code, decisions, and history…</span><kbd>⌘ K</kbd></Link>
+          </div>
+          <div className="topbar-state"><span><i /> Context graph {indexCoverage === 100 ? "ready" : "building"}</span><Link href="/app/activity" className="topbar-icon" aria-label="Synchronization activity"><Bell size={17} />{indexCoverage < 100 && <i />}</Link></div>
+        </div>
+        <div className="page-content" data-surface={surface}>{children}</div>
+      </main>
     </div>
   );
 }
