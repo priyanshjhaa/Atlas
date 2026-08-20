@@ -7,10 +7,12 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  BookOpenText,
   Box,
   Check,
   Code2,
   FileText,
+  ExternalLink,
   GitBranch,
   GitPullRequest,
   Link2,
@@ -32,6 +34,8 @@ import type {
   AtlasImpactExplanationState,
   AtlasImpactFinding,
   AtlasImpactReport,
+  AtlasNotionConnector,
+  AtlasNotionResource,
   AtlasRepository,
   AtlasWorkspace,
 } from "@/lib/api-types";
@@ -432,13 +436,18 @@ function AIExplanation({
 }
 
 export function ImpactNewPage({
+  notionConnectors,
+  notionResources,
   repositories,
   workspace,
 }: {
+  notionConnectors: AtlasNotionConnector[];
+  notionResources: AtlasNotionResource[];
   repositories: AtlasRepository[];
   workspace: AtlasWorkspace;
 }) {
   const router = useRouter();
+  const [stage, setStage] = useState<"change" | "notion">("change");
   const [mode, setMode] = useState<"planned" | "pull-request">("planned");
   const [description, setDescription] = useState("");
   const [pullRequestNumber, setPullRequestNumber] = useState("");
@@ -452,10 +461,22 @@ export function ImpactNewPage({
     () => repositories.find((repository) => repository.id === repositoryId),
     [repositories, repositoryId],
   );
+  const activeNotionConnector = notionConnectors.find(
+    (connector) => connector.status === "active",
+  );
+  const selectedNotionResources = notionResources.filter(
+    (resource) => resource.isActive && resource.isSelected,
+  );
+  const synchronizedNotionResources = selectedNotionResources.filter(
+    (resource) => resource.lastSyncedAt,
+  );
+  const notionReady = Boolean(
+    activeNotionConnector && synchronizedNotionResources.length,
+  );
   const steps = [
     "Resolve indexed entities",
     "Traverse observed imports",
-    "Rank source evidence",
+    notionReady ? "Retrieve Notion decisions" : "Rank source evidence",
     "Record analysis gaps",
     "Persist the report",
   ];
@@ -531,7 +552,28 @@ export function ImpactNewPage({
       )}
       <div className="analysis-layout">
         <section className="analysis-form panel">
-          <div className="segmented" role="tablist">
+          <nav className="impact-input-stages" aria-label="Impact analysis inputs">
+            <button
+              className={stage === "change" ? "active" : ""}
+              onClick={() => setStage("change")}
+              aria-current={stage === "change" ? "step" : undefined}
+            >
+              <span>01</span>
+              <div><b>Define the change</b><small>Plan or pull request</small></div>
+              <Check size={14} />
+            </button>
+            <button
+              className={stage === "notion" ? "active" : ""}
+              onClick={() => setStage("notion")}
+              aria-current={stage === "notion" ? "step" : undefined}
+            >
+              <span>02</span>
+              <div><b>Notion context</b><small>{notionReady ? `${synchronizedNotionResources.length} sources ready` : "Review availability"}</small></div>
+              <BookOpenText size={14} />
+            </button>
+          </nav>
+          {stage === "change" ? <div className="impact-change-inputs">
+          <div className="segmented" role="tablist" aria-label="Change input type">
             <button
               className={mode === "planned" ? "active" : ""}
               onClick={() => setMode("planned")}
@@ -714,10 +756,53 @@ export function ImpactNewPage({
               </Link>
             </div>
           )}
+          </div> : (
+            <section className="notion-impact-context" aria-labelledby="notion-impact-title">
+              <header>
+                <div className="notion-impact-context__mark">N</div>
+                <div>
+                  <span>Documentation retrieval</span>
+                  <h2 id="notion-impact-title">Bring the decisions behind the code into this analysis.</h2>
+                  <p>Atlas uses the change description or pull request as a semantic query, retrieves the most relevant synchronized Notion chunks, and adds up to eight source-linked citations to the report.</p>
+                </div>
+                <i className={notionReady ? "is-ready" : "needs-context"}>{notionReady ? "Ready" : "Setup needed"}</i>
+              </header>
+
+              <div className="notion-impact-context__metrics">
+                <article><strong>{selectedNotionResources.length}</strong><span>Selected sources</span></article>
+                <article><strong>{synchronizedNotionResources.length}</strong><span>Synchronized</span></article>
+                <article><strong>8</strong><span>Maximum citations</span></article>
+              </div>
+
+              {selectedNotionResources.length ? (
+                <div className="notion-impact-context__resources">
+                  <div><span>Available to this analysis</span><small>Workspace-approved only</small></div>
+                  {selectedNotionResources.slice(0, 6).map((resource) => (
+                    <article key={resource.id}>
+                      <BookOpenText size={15} />
+                      <div><b>{resource.title}</b><small>{resource.kind.replace("_", " ")} · {resource.lastSyncedAt ? "indexed" : "waiting for sync"}</small></div>
+                      {resource.url ? <a href={resource.url} target="_blank" rel="noreferrer" aria-label={`Open ${resource.title} in Notion`}><ExternalLink size={14} /></a> : <span />}
+                    </article>
+                  ))}
+                  {selectedNotionResources.length > 6 && <p>+{selectedNotionResources.length - 6} more approved sources will also be searched.</p>}
+                </div>
+              ) : (
+                <div className="notion-impact-context__empty">
+                  <BookOpenText size={22} />
+                  <div><b>No Notion context is available yet.</b><p>Connect Notion and select the ADRs, specifications, decisions, or runbooks Atlas may index.</p></div>
+                  <Link className="button button--ghost" href="/app/sources">Manage Notion</Link>
+                </div>
+              )}
+
+              <div className="notion-impact-context__boundary">
+                <ShieldCheck size={17} />
+                <p><b>Grounding boundary</b><span>Notion provides cited decision context. It cannot create graph relationships or change deterministic findings, risk, confidence, or unknowns.</span></p>
+              </div>
+            </section>
+          )}
           <div className="form-footer">
             <p>
-              <ShieldCheck size={15} /> Analysis is deterministic,
-              evidence-backed, and read-only.
+              <ShieldCheck size={15} /> {notionReady ? "Code evidence and Notion context are ready." : "Analysis remains available with code evidence only."}
             </p>
             <button
               onClick={() => void analyze()}

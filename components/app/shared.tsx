@@ -1,5 +1,18 @@
 export function PageHeader({ eyebrow, title, detail, action }: { eyebrow: string; title: string; detail: string; action?: React.ReactNode }) {
-  return <header className="page-header"><div><span><i />{eyebrow}</span><h1>{title}</h1><p>{detail}</p></div>{action}</header>;
+  return (
+    <header className="page-header">
+      <div>
+        <span><i />{eyebrow}</span>
+        <h1>{title}</h1>
+        <p>{detail}</p>
+      </div>
+      {action}
+      <div className="page-header__trace" aria-hidden="true">
+        <i /><span /><span /><span />
+        <small>context, connected</small>
+      </div>
+    </header>
+  );
 }
 
 export function StatusDot({ state = "ready" }: { state?: "ready" | "running" | "warning" }) {
