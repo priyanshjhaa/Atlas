@@ -67,6 +67,7 @@ function repositories(input?: {
     findReview: vi.fn().mockResolvedValue(null),
     saveReview: vi.fn(),
     getReview: vi.fn().mockResolvedValue(null),
+    listReviews: vi.fn().mockResolvedValue([]),
   };
   return repository;
 }
@@ -449,5 +450,56 @@ describe("NotionContextService", () => {
 
     expect(review.status).toBe("fallback");
     expect(review.whatChanged[0].text).toContain("Policy changed");
+  });
+
+  it("returns tenant-scoped saved review summaries with stable finding counts", async () => {
+    const repository = repositories();
+    repository.listReviews.mockResolvedValue([
+      {
+        id: "review-1",
+        workspaceId: "workspace-1",
+        documentId: "document-1",
+        documentTitle: "ADR: Session rotation",
+        documentUrl: "https://notion.so/session-rotation",
+        currentRevision: "revision-2",
+        previousRevision: "revision-1",
+        currentCapturedAt: new Date("2026-08-20T05:00:00.000Z"),
+        previousCapturedAt: new Date("2026-08-19T05:00:00.000Z"),
+        generationStatus: "generated",
+        createdAt: new Date("2026-08-20T06:00:00.000Z"),
+        result: {
+          whatChanged: [
+            {
+              text: "The session policy changed.",
+              citationIds: ["notion-review-current:version-2"],
+            },
+          ],
+          decisionsAdded: [],
+          decisionsRemoved: [],
+          decisionsModified: [],
+          contradictions: [],
+          potentiallySuperseded: [],
+          missingRationale: [],
+          unresolvedQuestions: [],
+          limitations: [],
+          citations: [],
+        },
+      },
+    ]);
+    const service = new NotionContextService(
+      repository as unknown as NotionContextRepository,
+      retrieval() as unknown as RetrievalService,
+      generation(),
+    );
+
+    const reviews = await service.listDocumentReviews("workspace-1");
+
+    expect(repository.listReviews).toHaveBeenCalledWith("workspace-1");
+    expect(reviews[0]).toMatchObject({
+      id: "review-1",
+      status: "generated",
+      findingCount: 1,
+      document: { title: "ADR: Session rotation", sourceAvailable: true },
+    });
   });
 });

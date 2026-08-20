@@ -350,6 +350,15 @@ export class NotionContextRepository {
     return review ?? null;
   }
 
+  async listReviews(workspaceId: string, limit = 20) {
+    return this.database.client
+      .select()
+      .from(notionDocumentReviews)
+      .where(eq(notionDocumentReviews.workspaceId, workspaceId))
+      .orderBy(desc(notionDocumentReviews.createdAt))
+      .limit(limit);
+  }
+
   async listEligibleChanges(
     workspaceId: string,
     rangeStart: Date,

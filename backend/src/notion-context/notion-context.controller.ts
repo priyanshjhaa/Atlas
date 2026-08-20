@@ -80,6 +80,12 @@ export class NotionContextController {
     );
   }
 
+  @Get("reviews")
+  @WorkspaceRoles("owner", "admin", "member", "viewer")
+  savedReviews(@Param("workspaceId", ParseUUIDPipe) workspaceId: string) {
+    return this.context.listDocumentReviews(workspaceId);
+  }
+
   @Get("reviews/:reviewId")
   @WorkspaceRoles("owner", "admin", "member", "viewer")
   review(

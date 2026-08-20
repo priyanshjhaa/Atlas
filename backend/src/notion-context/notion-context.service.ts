@@ -16,6 +16,7 @@ import type {
   NotionContextCitation,
   NotionContextGenerationClient,
   NotionDocumentReview,
+  NotionDocumentReviewSummary,
   NotionGeneratedReview,
   NotionGenerationEvidence,
   NotionQuestionAnswer,
@@ -393,6 +394,38 @@ export class NotionContextService {
     const review = await this.repository.getReview(workspaceId, reviewId);
     if (!review) throw new NotFoundException("Document review not found.");
     return this.formatReview(review, true);
+  }
+
+  async listDocumentReviews(
+    workspaceId: string,
+  ): Promise<NotionDocumentReviewSummary[]> {
+    const reviews = await this.repository.listReviews(workspaceId);
+    return reviews.map((review) => {
+      const formatted = this.formatReview(review, true);
+      return {
+        id: formatted.id,
+        status: formatted.status,
+        createdAt: formatted.createdAt,
+        document: {
+          documentId: formatted.document.documentId,
+          title: formatted.document.title,
+          url: formatted.document.url,
+          currentRevision: formatted.document.currentRevision,
+          previousRevision: formatted.document.previousRevision,
+          sourceAvailable: formatted.document.sourceAvailable,
+        },
+        findingCount: [
+          formatted.whatChanged,
+          formatted.decisionsAdded,
+          formatted.decisionsRemoved,
+          formatted.decisionsModified,
+          formatted.contradictions,
+          formatted.potentiallySuperseded,
+          formatted.missingRationale,
+          formatted.unresolvedQuestions,
+        ].reduce((total, findings) => total + findings.length, 0),
+      };
+    });
   }
 
   private async buildSnapshot(

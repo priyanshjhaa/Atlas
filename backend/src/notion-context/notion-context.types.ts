@@ -143,6 +143,21 @@ export interface NotionDocumentReview {
   citations: NotionContextCitation[];
 }
 
+export interface NotionDocumentReviewSummary {
+  id: string;
+  status: NotionContextGenerationStatus;
+  createdAt: string;
+  document: {
+    documentId: string | null;
+    title: string;
+    url: string | null;
+    currentRevision: string;
+    previousRevision: string;
+    sourceAvailable: boolean;
+  };
+  findingCount: number;
+}
+
 export type NotionGeneratedReview = Pick<
   NotionDocumentReview,
   | "whatChanged"
