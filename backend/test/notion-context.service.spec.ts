@@ -104,6 +104,8 @@ function retrieval() {
           freshness: "2026-08-20T05:00:00.000Z",
           citation: {
             provider: "notion",
+            documentId: "document-2",
+            resourceId: "resource-2",
             title: "ADR: Session rotation",
             url: "https://notion.so/adr-session-rotation",
             sourceRevision: "revision-2",
@@ -344,7 +346,6 @@ describe("NotionContextService", () => {
         truncated: false,
         capturedAt: new Date("2026-08-19T05:00:00.000Z"),
       },
-      relatedDocuments: [],
     });
     repository.saveReview.mockImplementation(async (
       input: Parameters<NotionContextRepository["saveReview"]>[0],
@@ -355,6 +356,7 @@ describe("NotionContextService", () => {
     }));
     const model = generation();
     const search = retrieval();
+    search.workspaceSearch.mockRejectedValueOnce(new Error("embedding unavailable"));
     const service = new NotionContextService(
       repository as unknown as NotionContextRepository,
       search as unknown as RetrievalService,
@@ -380,8 +382,121 @@ describe("NotionContextService", () => {
       "Decision changed between the selected revisions.",
     );
     expect(review.unresolvedQuestions[0].text).toContain("old sessions");
-    expect(search.workspaceSearch).not.toHaveBeenCalled();
+    expect(search.workspaceSearch).toHaveBeenCalledWith(
+      "workspace-1",
+      expect.stringContaining("ADR: Session rotation"),
+      {
+        providers: ["notion"],
+        excludeNotionDocumentId: "document-1",
+      },
+    );
     expect(repository.saveReview).toHaveBeenCalledOnce();
+  });
+
+  it("grounds contradiction review in semantically relevant cross-document Notion evidence", async () => {
+    const repository = repositories();
+    repository.getReviewInput.mockResolvedValue({
+      documentId: "document-1",
+      resourceId: "resource-1",
+      title: "ADR: Session rotation",
+      url: "https://notion.so/adr-session-rotation",
+      current: {
+        id: "version-2",
+        sourceRevision: "revision-2",
+        contentHash: "hash-2",
+        content: "# Decision\nRefresh tokens must rotate after every use.",
+        truncated: false,
+        capturedAt: new Date("2026-08-20T05:00:00.000Z"),
+      },
+      previous: {
+        id: "version-1",
+        sourceRevision: "revision-1",
+        contentHash: "hash-1",
+        content: "# Decision\nRefresh tokens may remain persistent.",
+        truncated: false,
+        capturedAt: new Date("2026-08-19T05:00:00.000Z"),
+      },
+    });
+    repository.saveReview.mockImplementation(async (
+      input: Parameters<NotionContextRepository["saveReview"]>[0],
+    ) => ({
+      id: "review-semantic",
+      createdAt: new Date("2026-08-20T06:00:00.000Z"),
+      ...input,
+    }));
+    const search = retrieval();
+    const model = generation();
+    model.reviewDocument.mockResolvedValue({
+      status: "completed",
+      value: {
+        whatChanged: [
+          {
+            text: "The refresh-token policy changed.",
+            citationIds: [
+              "notion-review-previous:version-1",
+              "notion-review-current:version-2",
+            ],
+          },
+        ],
+        decisionsAdded: [],
+        decisionsRemoved: [],
+        decisionsModified: [],
+        contradictions: [
+          {
+            text: "The operations runbook still permits persistent refresh tokens.",
+            citationIds: [
+              "notion-review-current:version-2",
+              "notion-review-related:chunk-1",
+            ],
+          },
+        ],
+        potentiallySuperseded: [],
+        missingRationale: [],
+        unresolvedQuestions: [],
+        limitations: [],
+      },
+    });
+    const service = new NotionContextService(
+      repository as unknown as NotionContextRepository,
+      search as unknown as RetrievalService,
+      model,
+    );
+
+    const review = await service.createDocumentReview(
+      "workspace-1",
+      "user-1",
+      { documentId: "document-1", previousVersionId: "version-1" },
+    );
+
+    expect(review.status).toBe("generated");
+    expect(review.contradictions).toHaveLength(1);
+    expect(search.workspaceSearch).toHaveBeenCalledWith(
+      "workspace-1",
+      expect.stringContaining("Refresh tokens must rotate"),
+      {
+        providers: ["notion"],
+        excludeNotionDocumentId: "document-1",
+      },
+    );
+    const generationInput = model.reviewDocument.mock.calls[0]?.[0];
+    expect(generationInput?.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "notion-review-related:chunk-1",
+          sourceRevision: "revision-2",
+        }),
+      ]),
+    );
+    expect(review.citations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "notion-review-related:chunk-1",
+          documentId: "document-2",
+          resourceId: "resource-2",
+          provenance: "indexed_notion_chunk",
+        }),
+      ]),
+    );
   });
 
   it("rejects instruction-like review output and keeps the deterministic fallback", async () => {
@@ -407,7 +522,6 @@ describe("NotionContextService", () => {
         truncated: false,
         capturedAt: new Date("2026-08-19T05:00:00.000Z"),
       },
-      relatedDocuments: [],
     });
     repository.saveReview.mockImplementation(async (
       input: Parameters<NotionContextRepository["saveReview"]>[0],

@@ -159,8 +159,8 @@ export class NotionContextService {
     const citations: NotionContextCitation[] = results.map((item) => ({
       id: `notion-chunk:${item.id}`,
       provider: "notion",
-      documentId: null,
-      resourceId: null,
+      documentId: item.citation.documentId,
+      resourceId: item.citation.resourceId,
       title: item.title,
       url: item.citation.url,
       sourceRevision: item.citation.sourceRevision,
@@ -254,6 +254,21 @@ export class NotionContextService {
     }
     const currentCitationId = `notion-review-current:${source.current.id}`;
     const previousCitationId = `notion-review-previous:${source.previous.id}`;
+    const fallback = this.fallbackDocumentReview(
+      source.previous.content,
+      source.current.content,
+      currentCitationId,
+      previousCitationId,
+      source.current.truncated || source.previous.truncated,
+    );
+    const relatedResults = await this.relatedReviewEvidence(
+      workspaceId,
+      source.documentId,
+      this.reviewRetrievalQuery(source.title, fallback),
+    );
+    const relatedCitationIds = new Set(
+      relatedResults.map((item) => `notion-review-related:${item.id}`),
+    );
     const citations: NotionContextCitation[] = [
       {
         id: currentCitationId,
@@ -281,18 +296,18 @@ export class NotionContextService {
         heading: null,
         provenance: "notion_document_revision",
       },
-      ...source.relatedDocuments.map((document) => ({
-        id: `notion-review-related:${document.documentId}:${document.sourceRevision}`,
+      ...relatedResults.map((item) => ({
+        id: `notion-review-related:${item.id}`,
         provider: "notion" as const,
-        documentId: document.documentId,
-        resourceId: document.resourceId,
-        title: document.title,
-        url: document.url,
-        sourceRevision: document.sourceRevision,
-        capturedAt: document.capturedAt.toISOString(),
-        lastEditedAt: null,
-        heading: null,
-        provenance: "notion_document_revision" as const,
+        documentId: item.citation.documentId,
+        resourceId: item.citation.resourceId,
+        title: item.title,
+        url: item.citation.url,
+        sourceRevision: item.citation.sourceRevision,
+        capturedAt: item.freshness ?? new Date().toISOString(),
+        lastEditedAt: item.citation.lastEditedAt,
+        heading: item.citation.heading,
+        provenance: "indexed_notion_chunk" as const,
       })),
     ];
     const evidence = this.boundEvidence([
@@ -312,13 +327,13 @@ export class NotionContextService {
         url: source.url,
         heading: null,
       },
-      ...source.relatedDocuments.map((document) => ({
-        id: `notion-review-related:${document.documentId}:${document.sourceRevision}`,
-        title: document.title,
-        excerpt: document.content,
-        sourceRevision: document.sourceRevision,
-        url: document.url,
-        heading: null,
+      ...relatedResults.map((item) => ({
+        id: `notion-review-related:${item.id}`,
+        title: item.title,
+        excerpt: item.excerpt,
+        sourceRevision: item.citation.sourceRevision,
+        url: item.citation.url,
+        heading: item.citation.heading,
       })),
     ]);
     const evidenceHash = createHash("sha256")
@@ -326,9 +341,9 @@ export class NotionContextService {
         JSON.stringify({
           current: source.current.contentHash,
           previous: source.previous.contentHash,
-          related: source.relatedDocuments.map((document) => [
-            document.documentId,
-            document.sourceRevision,
+          related: relatedResults.map((item) => [
+            item.id,
+            item.citation.sourceRevision,
           ]),
         }),
       )
@@ -343,13 +358,6 @@ export class NotionContextService {
     const cached = await this.repository.findReview(comparison);
     if (cached) return this.formatReview(cached, true);
 
-    const fallback = this.fallbackDocumentReview(
-      source.previous.content,
-      source.current.content,
-      currentCitationId,
-      previousCitationId,
-      source.current.truncated || source.previous.truncated,
-    );
     let result: NotionGeneratedReview = fallback;
     let status: "generated" | "fallback" = "fallback";
     const generated = await this.generation.reviewDocument({
@@ -364,6 +372,7 @@ export class NotionContextService {
       this.validReview(
         generated.value,
         new Set(evidence.map((item) => item.id)),
+        relatedCitationIds,
       )
     ) {
       result = generated.value;
@@ -780,6 +789,41 @@ export class NotionContextService {
     };
   }
 
+  private reviewRetrievalQuery(
+    documentTitle: string,
+    review: NotionGeneratedReview,
+  ) {
+    const findings = [
+      ...review.whatChanged,
+      ...review.decisionsAdded,
+      ...review.decisionsRemoved,
+      ...review.decisionsModified,
+    ];
+    return [documentTitle, ...findings.map((item) => item.text)]
+      .join("\n")
+      .slice(0, 1_500);
+  }
+
+  private async relatedReviewEvidence(
+    workspaceId: string,
+    documentId: string,
+    query: string,
+  ) {
+    try {
+      const search = await this.retrieval.workspaceSearch(workspaceId, query, {
+        providers: ["notion"],
+        excludeNotionDocumentId: documentId,
+      });
+      if (search.lowConfidence) return [];
+      return search.results
+        .filter((item) => item.provider === "notion")
+        .filter((item) => item.citation.documentId !== documentId)
+        .slice(0, 8);
+    } catch {
+      return [];
+    }
+  }
+
   private decisionStatements(content: string) {
     return content
       .replace(/\r\n?/g, "\n")
@@ -802,7 +846,11 @@ export class NotionContextService {
       : this.excerpt(value, 600);
   }
 
-  private validReview(value: NotionGeneratedReview, validIds: Set<string>) {
+  private validReview(
+    value: NotionGeneratedReview,
+    validIds: Set<string>,
+    relatedIds: Set<string>,
+  ) {
     const findings = [
       ...value.whatChanged,
       ...value.decisionsAdded,
@@ -814,6 +862,9 @@ export class NotionContextService {
       ...value.unresolvedQuestions,
     ];
     return (
+      value.contradictions.every((item) =>
+        item.citationIds.some((id) => relatedIds.has(id)),
+      ) &&
       findings.every(
         (item) =>
           item.citationIds.length > 0 &&

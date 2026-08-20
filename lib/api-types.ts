@@ -146,6 +146,8 @@ export type AtlasWorkspaceIntelligenceSearchResult =
       freshness: string | null;
       citation: {
         provider: "notion";
+        documentId: string;
+        resourceId: string;
         title: string;
         url: string | null;
         sourceRevision: string;

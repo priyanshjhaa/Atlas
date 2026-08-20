@@ -74,6 +74,8 @@ describe("RetrievalService", () => {
       notionVectorCandidates: vi.fn().mockResolvedValue([
         {
           id: "notion-1",
+          documentId: "document-1",
+          resourceId: "resource-1",
           content: "The ADR requires rotating refresh tokens.",
           tokenCount: 10,
           metadata: { heading: "Decision" },
@@ -107,6 +109,8 @@ describe("RetrievalService", () => {
       result.results.find((item) => item.provider === "notion")?.citation,
     ).toMatchObject({
       provider: "notion",
+      documentId: "document-1",
+      resourceId: "resource-1",
       url: "https://notion.so/adr-12",
       provenance: "indexed_notion_chunk",
     });
@@ -117,6 +121,39 @@ describe("RetrievalService", () => {
       repositoryId: "repository-core",
       provenance: "indexed_source_chunk",
     });
+  });
+
+  it("excludes the reviewed Notion document from semantic and lexical retrieval", async () => {
+    const repository = {
+      repositoryExists: vi.fn().mockResolvedValue(true),
+      workspaceVectorCandidates: vi.fn(),
+      workspaceLexicalCandidates: vi.fn(),
+      notionVectorCandidates: vi.fn().mockResolvedValue([]),
+      notionLexicalCandidates: vi.fn().mockResolvedValue([]),
+    };
+    const service = new RetrievalService(
+      repository as unknown as IntelligenceRepository,
+      {
+        embedTexts: vi.fn().mockResolvedValue([[0.1, 0.2]]),
+      } as unknown as EmbeddingsService,
+    );
+
+    await service.workspaceSearch("workspace-1", "session policy", {
+      providers: ["notion"],
+      excludeNotionDocumentId: "document-under-review",
+    });
+
+    expect(repository.notionVectorCandidates).toHaveBeenCalledWith(
+      "workspace-1",
+      [0.1, 0.2],
+      "document-under-review",
+    );
+    expect(repository.notionLexicalCandidates).toHaveBeenCalledWith(
+      "workspace-1",
+      expect.any(Array),
+      "document-under-review",
+    );
+    expect(repository.workspaceVectorCandidates).not.toHaveBeenCalled();
   });
 
   it("honors provider and repository filters", async () => {

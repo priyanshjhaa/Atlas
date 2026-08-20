@@ -9,7 +9,6 @@ import {
   inArray,
   lte,
   max,
-  ne,
   sql,
 } from "drizzle-orm";
 import { DatabaseService } from "../database/database.service";
@@ -59,15 +58,6 @@ export interface NotionReviewInput {
     truncated: boolean;
     capturedAt: Date;
   };
-  relatedDocuments: Array<{
-    documentId: string;
-    resourceId: string;
-    title: string;
-    url: string | null;
-    sourceRevision: string;
-    content: string;
-    capturedAt: Date;
-  }>;
 }
 
 export interface EligibleNotionDocumentChange {
@@ -256,37 +246,7 @@ export class NotionContextRepository {
     const current = versions[0];
     const previous = versions.find((version) => version.id === previousVersionId);
     if (!current || !previous || current.id === previous.id) return null;
-    const relatedDocuments = await this.database.client
-      .select({
-        documentId: notionDocuments.id,
-        resourceId: notionResources.id,
-        title: notionDocuments.title,
-        url: notionResources.url,
-        sourceRevision: notionDocuments.sourceRevision,
-        content: notionDocuments.content,
-        capturedAt: notionDocuments.syncedAt,
-      })
-      .from(notionDocuments)
-      .innerJoin(
-        notionResources,
-        eq(notionResources.id, notionDocuments.resourceId),
-      )
-      .innerJoin(connectors, eq(connectors.id, notionDocuments.connectorId))
-      .where(
-        and(
-          eq(notionDocuments.workspaceId, workspaceId),
-          ne(notionDocuments.id, documentId),
-          eq(notionResources.workspaceId, workspaceId),
-          eq(connectors.workspaceId, workspaceId),
-          eq(connectors.provider, "notion"),
-          eq(connectors.status, "active"),
-          eq(notionResources.isSelected, true),
-          eq(notionResources.isActive, true),
-        ),
-      )
-      .orderBy(desc(notionDocuments.syncedAt))
-      .limit(8);
-    return { ...document, current, previous, relatedDocuments };
+    return { ...document, current, previous };
   }
 
   async findReview(input: {
