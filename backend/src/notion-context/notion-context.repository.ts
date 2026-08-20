@@ -16,11 +16,49 @@ import {
   auditEvents,
   connectors,
   notionContextBriefings,
+  notionDocumentReviews,
   notionDocuments,
   notionDocumentVersions,
   notionResources,
   workspaceNotionCursors,
 } from "../database/schema";
+
+export interface EligibleNotionReviewDocument {
+  documentId: string;
+  resourceId: string;
+  title: string;
+  url: string | null;
+  lastSyncedAt: Date | null;
+  versions: Array<{
+    id: string;
+    sourceRevision: string;
+    capturedAt: Date;
+    truncated: boolean;
+  }>;
+}
+
+export interface NotionReviewInput {
+  documentId: string;
+  resourceId: string;
+  title: string;
+  url: string | null;
+  current: {
+    id: string;
+    sourceRevision: string;
+    contentHash: string;
+    content: string;
+    truncated: boolean;
+    capturedAt: Date;
+  };
+  previous: {
+    id: string;
+    sourceRevision: string;
+    contentHash: string;
+    content: string;
+    truncated: boolean;
+    capturedAt: Date;
+  };
+}
 
 export interface EligibleNotionDocumentChange {
   documentId: string;
@@ -94,6 +132,191 @@ export class NotionContextRepository {
       connected: Number(connector?.value ?? 0) > 0,
       selectedResources: Number(resource?.value ?? 0),
     };
+  }
+
+  async listReviewDocuments(
+    workspaceId: string,
+  ): Promise<EligibleNotionReviewDocument[]> {
+    const rows = await this.database.client
+      .select({
+        documentId: notionDocuments.id,
+        resourceId: notionResources.id,
+        title: notionDocuments.title,
+        url: notionResources.url,
+        lastSyncedAt: notionResources.lastSyncedAt,
+        versionId: notionDocumentVersions.id,
+        sourceRevision: notionDocumentVersions.sourceRevision,
+        capturedAt: notionDocumentVersions.capturedAt,
+        truncated: notionDocumentVersions.truncated,
+      })
+      .from(notionDocuments)
+      .innerJoin(
+        notionResources,
+        eq(notionResources.id, notionDocuments.resourceId),
+      )
+      .innerJoin(connectors, eq(connectors.id, notionDocuments.connectorId))
+      .innerJoin(
+        notionDocumentVersions,
+        eq(notionDocumentVersions.documentId, notionDocuments.id),
+      )
+      .where(
+        and(
+          eq(notionDocuments.workspaceId, workspaceId),
+          eq(notionResources.workspaceId, workspaceId),
+          eq(notionDocumentVersions.workspaceId, workspaceId),
+          eq(connectors.workspaceId, workspaceId),
+          eq(connectors.provider, "notion"),
+          eq(connectors.status, "active"),
+          eq(notionResources.isSelected, true),
+          eq(notionResources.isActive, true),
+        ),
+      )
+      .orderBy(asc(notionDocuments.title), desc(notionDocumentVersions.capturedAt))
+      .limit(5_000);
+    const documents = new Map<string, EligibleNotionReviewDocument>();
+    for (const row of rows) {
+      const document = documents.get(row.documentId) ?? {
+        documentId: row.documentId,
+        resourceId: row.resourceId,
+        title: row.title,
+        url: row.url,
+        lastSyncedAt: row.lastSyncedAt,
+        versions: [],
+      };
+      document.versions.push({
+        id: row.versionId,
+        sourceRevision: row.sourceRevision,
+        capturedAt: row.capturedAt,
+        truncated: row.truncated,
+      });
+      documents.set(row.documentId, document);
+    }
+    return [...documents.values()];
+  }
+
+  async getReviewInput(
+    workspaceId: string,
+    documentId: string,
+    previousVersionId: string,
+  ): Promise<NotionReviewInput | null> {
+    const [document] = await this.database.client
+      .select({
+        documentId: notionDocuments.id,
+        resourceId: notionResources.id,
+        title: notionDocuments.title,
+        url: notionResources.url,
+      })
+      .from(notionDocuments)
+      .innerJoin(
+        notionResources,
+        eq(notionResources.id, notionDocuments.resourceId),
+      )
+      .innerJoin(connectors, eq(connectors.id, notionDocuments.connectorId))
+      .where(
+        and(
+          eq(notionDocuments.id, documentId),
+          eq(notionDocuments.workspaceId, workspaceId),
+          eq(notionResources.workspaceId, workspaceId),
+          eq(connectors.workspaceId, workspaceId),
+          eq(connectors.provider, "notion"),
+          eq(connectors.status, "active"),
+          eq(notionResources.isSelected, true),
+          eq(notionResources.isActive, true),
+        ),
+      )
+      .limit(1);
+    if (!document) return null;
+    const versions = await this.database.client
+      .select({
+        id: notionDocumentVersions.id,
+        sourceRevision: notionDocumentVersions.sourceRevision,
+        contentHash: notionDocumentVersions.contentHash,
+        content: notionDocumentVersions.content,
+        truncated: notionDocumentVersions.truncated,
+        capturedAt: notionDocumentVersions.capturedAt,
+      })
+      .from(notionDocumentVersions)
+      .where(
+        and(
+          eq(notionDocumentVersions.workspaceId, workspaceId),
+          eq(notionDocumentVersions.documentId, documentId),
+        ),
+      )
+      .orderBy(desc(notionDocumentVersions.capturedAt));
+    const current = versions[0];
+    const previous = versions.find((version) => version.id === previousVersionId);
+    if (!current || !previous || current.id === previous.id) return null;
+    return { ...document, current, previous };
+  }
+
+  async findReview(input: {
+    workspaceId: string;
+    documentId: string;
+    currentRevision: string;
+    previousRevision: string;
+    evidenceHash: string;
+  }) {
+    const [review] = await this.database.client
+      .select()
+      .from(notionDocumentReviews)
+      .where(
+        and(
+          eq(notionDocumentReviews.workspaceId, input.workspaceId),
+          eq(notionDocumentReviews.documentId, input.documentId),
+          eq(notionDocumentReviews.currentRevision, input.currentRevision),
+          eq(notionDocumentReviews.previousRevision, input.previousRevision),
+          eq(notionDocumentReviews.evidenceHash, input.evidenceHash),
+        ),
+      )
+      .limit(1);
+    return review ?? null;
+  }
+
+  async saveReview(input: {
+    workspaceId: string;
+    requestedByUserId: string;
+    documentId: string;
+    currentVersionId: string;
+    previousVersionId: string;
+    documentTitle: string;
+    documentUrl: string | null;
+    currentRevision: string;
+    previousRevision: string;
+    currentCapturedAt: Date;
+    previousCapturedAt: Date;
+    evidenceHash: string;
+    generationStatus: "generated" | "fallback";
+    result: Record<string, unknown>;
+  }) {
+    const [created] = await this.database.client
+      .insert(notionDocumentReviews)
+      .values(input)
+      .onConflictDoNothing()
+      .returning();
+    return created ?? this.findReview(input);
+  }
+
+  async getReview(workspaceId: string, reviewId: string) {
+    const [review] = await this.database.client
+      .select()
+      .from(notionDocumentReviews)
+      .where(
+        and(
+          eq(notionDocumentReviews.workspaceId, workspaceId),
+          eq(notionDocumentReviews.id, reviewId),
+        ),
+      )
+      .limit(1);
+    return review ?? null;
+  }
+
+  async listReviews(workspaceId: string, limit = 20) {
+    return this.database.client
+      .select()
+      .from(notionDocumentReviews)
+      .where(eq(notionDocumentReviews.workspaceId, workspaceId))
+      .orderBy(desc(notionDocumentReviews.createdAt))
+      .limit(limit);
   }
 
   async listEligibleChanges(

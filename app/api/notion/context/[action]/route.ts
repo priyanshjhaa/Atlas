@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { fetchAtlasApi } from "@/lib/backend-client";
 import { getAtlasMe } from "@/lib/workspace-api";
 
-const actions = ["briefings", "acknowledge", "questions"] as const;
+const actions = ["briefings", "acknowledge", "questions", "reviews"] as const;
 type Action = (typeof actions)[number];
 
 function isAction(value: string): value is Action {
@@ -56,7 +56,7 @@ export async function POST(
       );
     }
     payload = { acknowledgedThrough: body.acknowledgedThrough };
-  } else {
+  } else if (action === "questions") {
     if (
       typeof body.query !== "string" ||
       body.query.trim().length < 2 ||
@@ -68,6 +68,20 @@ export async function POST(
       );
     }
     payload = { query: body.query.trim() };
+  } else {
+    if (
+      typeof body.documentId !== "string" ||
+      typeof body.previousVersionId !== "string"
+    ) {
+      return NextResponse.json(
+        { message: "A document and retained prior revision are required." },
+        { status: 400 },
+      );
+    }
+    payload = {
+      documentId: body.documentId,
+      previousVersionId: body.previousVersionId,
+    };
   }
 
   const response = await fetchAtlasApi(

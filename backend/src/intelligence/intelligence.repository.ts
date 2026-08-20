@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { DatabaseService } from "../database/database.service";
 import type { GitHubRepositoryHistory } from "../connectors/github-app.service";
 import {
@@ -104,6 +104,8 @@ export interface WorkspaceCodeChunkRow extends RetrievedChunkRow {
 
 export interface WorkspaceNotionChunkRow extends Record<string, unknown> {
   id: string;
+  documentId: string;
+  resourceId: string;
   content: string;
   tokenCount: number;
   metadata: Record<string, unknown>;
@@ -917,11 +919,14 @@ export class IntelligenceRepository {
   async notionVectorCandidates(
     workspaceId: string,
     embedding: number[],
+    excludeDocumentId?: string,
   ): Promise<WorkspaceNotionChunkRow[]> {
     const vectorValue = `[${embedding.join(",")}]`;
     const result = await this.database.client.execute<WorkspaceNotionChunkRow>(sql`
       select
         c.id,
+        c.document_id as "documentId",
+        c.resource_id as "resourceId",
         c.content,
         c.token_count as "tokenCount",
         c.metadata,
@@ -943,6 +948,7 @@ export class IntelligenceRepository {
         and connector.status = 'active'
         and r.is_selected = true
         and r.is_active = true
+        ${excludeDocumentId ? sql`and c.document_id <> ${excludeDocumentId}` : sql``}
       order by c.embedding <=> ${vectorValue}::vector
       limit 32
     `);
@@ -952,6 +958,7 @@ export class IntelligenceRepository {
   async notionLexicalCandidates(
     workspaceId: string,
     terms: string[],
+    excludeDocumentId?: string,
   ): Promise<WorkspaceNotionChunkRow[]> {
     const filters = terms.flatMap((term) => [
       ilike(notionDocuments.title, `%${term}%`),
@@ -961,6 +968,8 @@ export class IntelligenceRepository {
     return this.database.client
       .select({
         id: notionDocumentChunks.id,
+        documentId: notionDocumentChunks.documentId,
+        resourceId: notionDocumentChunks.resourceId,
         content: notionDocumentChunks.content,
         tokenCount: notionDocumentChunks.tokenCount,
         metadata: notionDocumentChunks.metadata,
@@ -991,6 +1000,9 @@ export class IntelligenceRepository {
           eq(connectors.status, "active"),
           eq(notionResources.isSelected, true),
           eq(notionResources.isActive, true),
+          excludeDocumentId
+            ? ne(notionDocumentChunks.documentId, excludeDocumentId)
+            : undefined,
           or(...filters),
         ),
       )

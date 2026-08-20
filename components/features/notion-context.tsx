@@ -10,6 +10,8 @@ import {
   Clock3,
   ExternalLink,
   FileDiff,
+  History,
+  ListChecks,
   MessageCircleQuestion,
   RefreshCw,
   ShieldCheck,
@@ -19,11 +21,15 @@ import type {
   AtlasNotionCatchUpBriefing,
   AtlasNotionCatchUpSnapshot,
   AtlasNotionContextCitation,
+  AtlasNotionDocumentReview,
+  AtlasNotionDocumentReviewSummary,
   AtlasNotionQuestionAnswer,
+  AtlasNotionReviewDocumentsResponse,
+  AtlasNotionReviewFinding,
   AtlasWorkspace,
 } from "@/lib/api-types";
 
-type ContextView = "catch-up" | "ask";
+type ContextView = "catch-up" | "ask" | "review";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en", {
@@ -36,8 +42,21 @@ function citationMap(citations: AtlasNotionContextCitation[]) {
   return new Map(citations.map((citation) => [citation.id, citation]));
 }
 
+function reviewFindingCount(review: AtlasNotionDocumentReview) {
+  return [
+    review.whatChanged,
+    review.decisionsAdded,
+    review.decisionsRemoved,
+    review.decisionsModified,
+    review.contradictions,
+    review.potentiallySuperseded,
+    review.missingRationale,
+    review.unresolvedQuestions,
+  ].reduce((total, findings) => total + findings.length, 0);
+}
+
 async function postContext<T>(
-  action: "briefings" | "acknowledge" | "questions",
+  action: "briefings" | "acknowledge" | "questions" | "reviews",
   body: Record<string, string>,
 ): Promise<T> {
   const response = await fetch(`/api/notion/context/${action}`, {
@@ -52,6 +71,100 @@ async function postContext<T>(
     throw new Error(result?.message ?? "Notion context is temporarily unavailable.");
   }
   return result;
+}
+
+function ReviewFindings({
+  title,
+  description,
+  findings,
+  citations,
+}: {
+  title: string;
+  description: string;
+  findings: AtlasNotionReviewFinding[];
+  citations: Map<string, AtlasNotionContextCitation>;
+}) {
+  return (
+    <section className="notion-review-section">
+      <header>
+        <div>
+          <span>{description}</span>
+          <h3>{title}</h3>
+        </div>
+        <b>{findings.length}</b>
+      </header>
+      {findings.length ? (
+        <div>
+          {findings.map((finding, index) => (
+            <article key={`${title}-${index}-${finding.text}`}>
+              <p>{finding.text}</p>
+              <CitationLinks ids={finding.citationIds} citations={citations} />
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="notion-review-section__empty">
+          No evidence-grounded items were found in this category.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function RevisionComparison({
+  comparison,
+}: {
+  comparison: NonNullable<AtlasNotionDocumentReview["revisionComparison"]>;
+}) {
+  return (
+    <section className="notion-revision-diff" aria-label="Side-by-side revision comparison">
+      <header>
+        <div>
+          <span>Revision evidence</span>
+          <h3>Previous and current, line by line</h3>
+          <p>Changed lines stay aligned while long unchanged passages are folded.</p>
+        </div>
+        <div className="notion-revision-diff__stats" aria-label="Revision change totals">
+          <span className="added">+{comparison.stats.added} added</span>
+          <span className="removed">−{comparison.stats.removed} removed</span>
+          <span>{comparison.stats.unchanged} unchanged</span>
+        </div>
+      </header>
+      {comparison.truncated && (
+        <p className="notion-revision-diff__notice">
+          This large comparison is bounded to the first 600 lines of each retained revision.
+        </p>
+      )}
+      <div className="notion-revision-diff__table" role="table" aria-label="Changed Notion revision lines">
+        <div className="notion-revision-diff__head" role="row">
+          <span role="columnheader">Previous revision</span>
+          <span role="columnheader">Current revision</span>
+        </div>
+        {comparison.rows.map((row, index) =>
+          row.kind === "collapsed" ? (
+            <div className="notion-revision-diff__collapsed" role="row" key={`collapsed-${index}`}>
+              <span>•••</span>
+              <p>{row.hiddenLines} unchanged lines folded</p>
+              <span>•••</span>
+            </div>
+          ) : (
+            <div className={`notion-revision-diff__row ${row.kind}`} role="row" key={`${row.kind}-${index}`}>
+              <div role="cell" className={!row.previousText ? "empty" : ""}>
+                <span className="notion-revision-diff__side">Previous</span>
+                <code>{row.previousLine ?? ""}</code>
+                <pre>{row.previousText ?? ""}</pre>
+              </div>
+              <div role="cell" className={!row.currentText ? "empty" : ""}>
+                <span className="notion-revision-diff__side">Current</span>
+                <code>{row.currentLine ?? ""}</code>
+                <pre>{row.currentText ?? ""}</pre>
+              </div>
+            </div>
+          ),
+        )}
+      </div>
+    </section>
+  );
 }
 
 function CitationLinks({
@@ -82,11 +195,19 @@ function CitationLinks({
 export function NotionContextPage({
   workspace,
   initialSnapshot,
+  initialReviewDocuments = null,
+  initialSavedReviews = [],
+  initialReview = null,
+  initialView = "catch-up",
 }: {
   workspace: AtlasWorkspace;
   initialSnapshot: AtlasNotionCatchUpSnapshot | null;
+  initialReviewDocuments?: AtlasNotionReviewDocumentsResponse | null;
+  initialSavedReviews?: AtlasNotionDocumentReviewSummary[];
+  initialReview?: AtlasNotionDocumentReview | null;
+  initialView?: ContextView;
 }) {
-  const [view, setView] = useState<ContextView>("catch-up");
+  const [view, setView] = useState<ContextView>(initialView);
   const [briefing, setBriefing] = useState<AtlasNotionCatchUpBriefing | null>(null);
   const [answer, setAnswer] = useState<AtlasNotionQuestionAnswer | null>(null);
   const [question, setQuestion] = useState("");
@@ -94,6 +215,13 @@ export function NotionContextPage({
   const [asking, setAsking] = useState(false);
   const [acknowledging, setAcknowledging] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
+  const [selectedDocumentId, setSelectedDocumentId] = useState("");
+  const [selectedPreviousVersionId, setSelectedPreviousVersionId] = useState("");
+  const [reviewing, setReviewing] = useState(false);
+  const [review, setReview] = useState<AtlasNotionDocumentReview | null>(
+    initialReview,
+  );
+  const [savedReviews, setSavedReviews] = useState(initialSavedReviews);
   const [error, setError] = useState<string | null>(null);
   const snapshot = briefing?.snapshot ?? initialSnapshot;
   const snapshotCitations = useMemo(
@@ -103,6 +231,29 @@ export function NotionContextPage({
   const answerCitations = useMemo(
     () => citationMap(answer?.citations ?? []),
     [answer?.citations],
+  );
+  const reviewableDocuments = useMemo(
+    () => initialReviewDocuments?.documents.filter((document) => document.reviewable) ?? [],
+    [initialReviewDocuments],
+  );
+  const selectedDocument = useMemo(
+    () =>
+      reviewableDocuments.find(
+        (document) => document.documentId === selectedDocumentId,
+      ) ?? reviewableDocuments[0] ?? null,
+    [reviewableDocuments, selectedDocumentId],
+  );
+  const previousRevisions = useMemo(
+    () => selectedDocument?.revisions.filter((revision) => !revision.isCurrent) ?? [],
+    [selectedDocument],
+  );
+  const selectedPreviousVersion =
+    previousRevisions.find(
+      (revision) => revision.id === selectedPreviousVersionId,
+    ) ?? previousRevisions[0] ?? null;
+  const reviewCitations = useMemo(
+    () => citationMap(review?.citations ?? []),
+    [review?.citations],
   );
 
   async function generateBriefing() {
@@ -163,6 +314,47 @@ export function NotionContextPage({
     }
   }
 
+  async function runDocumentReview() {
+    if (!selectedDocument || !selectedPreviousVersion) return;
+    setReviewing(true);
+    setError(null);
+    setReview(null);
+    try {
+      const createdReview = await postContext<AtlasNotionDocumentReview>(
+        "reviews",
+        {
+          workspaceId: workspace.id,
+          documentId: selectedDocument.documentId,
+          previousVersionId: selectedPreviousVersion.id,
+        },
+      );
+      setReview(createdReview);
+      setSavedReviews((current) => [
+        {
+          id: createdReview.id,
+          status: createdReview.status,
+          createdAt: createdReview.createdAt,
+          document: {
+            documentId: createdReview.document.documentId,
+            title: createdReview.document.title,
+            url: createdReview.document.url,
+            currentRevision: createdReview.document.currentRevision,
+            previousRevision: createdReview.document.previousRevision,
+            sourceAvailable: createdReview.document.sourceAvailable,
+          },
+          findingCount: reviewFindingCount(createdReview),
+        },
+        ...current.filter((item) => item.id !== createdReview.id),
+      ]);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error ? requestError.message : "Review failed.",
+      );
+    } finally {
+      setReviewing(false);
+    }
+  }
+
   return (
     <div className="notion-context-page">
       <header className="context-hero">
@@ -185,27 +377,33 @@ export function NotionContextPage({
         <button className={view === "ask" ? "active" : ""} onClick={() => setView("ask")} aria-pressed={view === "ask"} aria-label="Ask — answers from Notion only">
           <MessageCircleQuestion size={15} /><span><b>Ask</b><small>Answers from Notion only</small></span>
         </button>
-        <button disabled title="Document review follows after Catch up and Ask are approved">
-          <FileDiff size={15} /><span><b>Review</b><small>Next gated delivery</small></span>
+        <button className={view === "review" ? "active" : ""} onClick={() => setView("review")} aria-pressed={view === "review"} aria-label="Review — compare retained Notion revisions">
+          <FileDiff size={15} /><span><b>Review</b><small>Compare retained revisions</small></span>
         </button>
       </nav>
 
       {error && <div className="context-alert" role="alert"><ShieldCheck size={16} />{error}</div>}
 
-      {!snapshot ? (
+      {view !== "review" && !snapshot ? (
         <section className="context-empty panel">
           <BookOpenText size={28} />
           <h2>Notion context could not be loaded.</h2>
           <p>Confirm that the backend is running, then retry this page.</p>
         </section>
-      ) : snapshot.availability !== "ready" ? (
+      ) : view === "review" && !initialReviewDocuments ? (
+        <section className="context-empty panel">
+          <FileDiff size={28} />
+          <h2>Document revisions could not be loaded.</h2>
+          <p>Confirm that the backend is running, then retry this page.</p>
+        </section>
+      ) : (view === "review" ? initialReviewDocuments?.availability : snapshot?.availability) !== "ready" ? (
         <section className="context-empty panel">
           <div className="context-empty__mark">N</div>
-          <h2>{snapshot.availability === "not_connected" ? "Connect Notion to begin a team memory." : "Choose the Notion sources Atlas may remember."}</h2>
+          <h2>{(view === "review" ? initialReviewDocuments?.availability : snapshot?.availability) === "not_connected" ? "Connect Notion to begin a team memory." : "Choose the Notion sources Atlas may remember."}</h2>
           <p>Sources remains the place for OAuth, page selection, and synchronization. This page only reads workspace-approved, synchronized material.</p>
           <Link className="button button--primary" href="/app/sources">Manage Notion sources <ArrowRight size={14} /></Link>
         </section>
-      ) : view === "catch-up" ? (
+      ) : view === "catch-up" && snapshot ? (
         <div className="catch-up-layout">
           <main>
             <section className="catch-up-summary panel">
@@ -279,7 +477,7 @@ export function NotionContextPage({
             </section>
           </aside>
         </div>
-      ) : (
+      ) : view === "ask" ? (
         <div className="notion-ask-layout">
           <main className="panel notion-ask-workspace">
             <div className="notion-ask-intro"><span>Grounded workspace question</span><h2>Ask the memory your team chose to keep.</h2><p>Atlas retrieves only synchronized Notion chunks and returns original-resource citations. If grounding fails, you receive ranked excerpts instead of an invented answer.</p></div>
@@ -301,6 +499,169 @@ export function NotionContextPage({
             <span>Useful prompts</span>
             {["Which decisions changed this week?", "What guidance exists for incident ownership?", "Which ADR explains our authentication boundary?"].map((prompt) => <button key={prompt} onClick={() => setQuestion(prompt)}>{prompt}<ArrowRight size={12} /></button>)}
             <div><ShieldCheck size={14} /><p>Synchronized text is treated as untrusted evidence. Instruction-like content and uncited model claims are rejected.</p></div>
+          </aside>
+        </div>
+      ) : (
+        <div className="notion-review-layout">
+          <main>
+            <section className="panel notion-review-setup">
+              <div className="notion-review-setup__intro">
+                <span>On-demand document review</span>
+                <h2>See how a decision changed—not merely that it changed.</h2>
+                <p>Select a synchronized page and a retained earlier revision. Atlas compares them only when you ask, then checks the result against other selected Notion documents without touching your engineering graph or impact score.</p>
+              </div>
+
+              {reviewableDocuments.length ? (
+                <div className="notion-review-controls">
+                  <label>
+                    <span>Document</span>
+                    <select
+                      value={selectedDocument?.documentId ?? ""}
+                      onChange={(event) => {
+                        setSelectedDocumentId(event.target.value);
+                        setSelectedPreviousVersionId("");
+                        setReview(null);
+                      }}
+                    >
+                      {reviewableDocuments.map((document) => (
+                        <option key={document.documentId} value={document.documentId}>
+                          {document.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="notion-review-revision-flow" aria-label="Revision comparison">
+                    <label>
+                      <span>Compare from</span>
+                      <select
+                        value={selectedPreviousVersion?.id ?? ""}
+                        onChange={(event) => {
+                          setSelectedPreviousVersionId(event.target.value);
+                          setReview(null);
+                        }}
+                      >
+                        {previousRevisions.map((revision) => (
+                          <option key={revision.id} value={revision.id}>
+                            {formatDate(revision.capturedAt)} · {revision.sourceRevision.slice(0, 14)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <ArrowRight size={18} aria-hidden="true" />
+                    <div>
+                      <span>To current</span>
+                      <strong>{selectedDocument?.currentRevision.slice(0, 18)}</strong>
+                      <small>{selectedDocument?.revisions[0] ? formatDate(selectedDocument.revisions[0].capturedAt) : "Latest sync"}</small>
+                    </div>
+                  </div>
+                  <button
+                    className="button button--primary"
+                    onClick={() => void runDocumentReview()}
+                    disabled={
+                      reviewing ||
+                      !selectedPreviousVersion ||
+                      workspace.role === "viewer"
+                    }
+                  >
+                    {reviewing ? <RefreshCw className="spin" size={14} /> : <FileDiff size={14} />}
+                    {reviewing ? "Reviewing revisions…" : "Review selected revisions"}
+                  </button>
+                  {workspace.role === "viewer" && (
+                    <small className="notion-review-permission">
+                      Viewers may read saved reviews; a member, admin, or owner must request a new one.
+                    </small>
+                  )}
+                </div>
+              ) : (
+                <div className="notion-review-no-history">
+                  <History size={21} />
+                  <div>
+                    <h3>No document has two retained revisions yet.</h3>
+                    <p>After a selected page changes and synchronizes again, its earlier version will become available here.</p>
+                  </div>
+                  <Link href="/app/sources">Check synchronization <ArrowRight size={13} /></Link>
+                </div>
+              )}
+            </section>
+
+            <section className="notion-review-history">
+              <div className="context-section-heading">
+                <div><span>Saved review library</span><h2>Return to an earlier reading</h2></div>
+                <small>{savedReviews.length} retained {savedReviews.length === 1 ? "review" : "reviews"}</small>
+              </div>
+              {savedReviews.length ? (
+                <div className="notion-review-history__grid">
+                  {savedReviews.map((savedReview) => (
+                    <Link
+                      className={review?.id === savedReview.id ? "active" : ""}
+                      href={`/app/context/reviews/${savedReview.id}`}
+                      key={savedReview.id}
+                    >
+                      <div>
+                        <span>{savedReview.status === "generated" ? "Grounded" : "Deterministic"}</span>
+                        <time>{formatDate(savedReview.createdAt)}</time>
+                      </div>
+                      <h3>{savedReview.document.title}</h3>
+                      <p><code>{savedReview.document.previousRevision.slice(0, 12)}</code><ArrowRight size={11} /><code>{savedReview.document.currentRevision.slice(0, 12)}</code></p>
+                      <footer><span>{savedReview.findingCount} findings</span><b>Open saved review <ArrowRight size={12} /></b></footer>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="notion-review-history__empty panel">
+                  <History size={20} />
+                  <div><h3>No saved reviews yet.</h3><p>Your first requested comparison will remain available here after reload.</p></div>
+                </div>
+              )}
+            </section>
+
+            {review && (
+              <section className="notion-review-report" aria-live="polite">
+                <header className="panel">
+                  <div className="notion-review-report__mark"><ListChecks size={22} /></div>
+                  <div>
+                    <span>{review.status === "generated" ? "Grounded document review" : "Deterministic revision review"}{review.cached ? " · reused" : ""}</span>
+                    <h2>{review.document.title}</h2>
+                    <p>{review.document.previousRevision.slice(0, 16)} <ArrowRight size={11} /> {review.document.currentRevision.slice(0, 16)} · reviewed {formatDate(review.createdAt)}</p>
+                  </div>
+                  <div className="notion-review-report__actions">
+                    <Link href={`/app/context/reviews/${review.id}`}>Permanent view <ArrowRight size={13} /></Link>
+                    {review.document.url && (
+                      <a href={review.document.url} target="_blank" rel="noreferrer" aria-label={`Open ${review.document.title} in Notion`}><ExternalLink size={13} /></a>
+                    )}
+                  </div>
+                </header>
+                {review.revisionComparison && (
+                  <RevisionComparison comparison={review.revisionComparison} />
+                )}
+                <div className="notion-review-grid">
+                  <ReviewFindings title="What changed" description="Revision delta" findings={review.whatChanged} citations={reviewCitations} />
+                  <ReviewFindings title="Decisions added" description="New commitments" findings={review.decisionsAdded} citations={reviewCitations} />
+                  <ReviewFindings title="Decisions removed" description="Retired commitments" findings={review.decisionsRemoved} citations={reviewCitations} />
+                  <ReviewFindings title="Decisions modified" description="Changed guidance" findings={review.decisionsModified} citations={reviewCitations} />
+                  <ReviewFindings title="Contradictions" description="Across selected Notion sources" findings={review.contradictions} citations={reviewCitations} />
+                  <ReviewFindings title="Potentially superseded" description="Guidance to verify" findings={review.potentiallySuperseded} citations={reviewCitations} />
+                  <ReviewFindings title="Missing rationale" description="Unexplained choices" findings={review.missingRationale} citations={reviewCitations} />
+                  <ReviewFindings title="Unresolved questions" description="Open ends" findings={review.unresolvedQuestions} citations={reviewCitations} />
+                </div>
+                {review.limitations.length > 0 && (
+                  <div className="context-boundary notion-review-limitations">
+                    <ShieldCheck size={16} />
+                    <div><b>Review boundaries</b>{review.limitations.map((limitation) => <p key={limitation}>{limitation}</p>)}</div>
+                  </div>
+                )}
+              </section>
+            )}
+          </main>
+          <aside className="panel notion-review-guide">
+            <History size={21} />
+            <span>Revision discipline</span>
+            <ol>
+              <li><b>Choose a page</b><small>Only selected, active Notion sources appear.</small></li>
+              <li><b>Pick a baseline</b><small>Compare the latest sync with a retained prior version.</small></li>
+              <li><b>Verify citations</b><small>Every surfaced claim points back to revision evidence.</small></li>
+            </ol>
+            <div><ShieldCheck size={14} /><p>Reviews are Notion-only, read-only, and never create graph relationships or change impact findings.</p></div>
           </aside>
         </div>
       )}

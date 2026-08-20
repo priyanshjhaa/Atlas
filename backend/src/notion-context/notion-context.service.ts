@@ -1,4 +1,9 @@
-import { BadRequestException, Inject, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { createHash } from "node:crypto";
 import { RetrievalService } from "../intelligence/retrieval.service";
 import { NotionContextRepository } from "./notion-context.repository";
@@ -10,8 +15,14 @@ import type {
   NotionChangedSection,
   NotionContextCitation,
   NotionContextGenerationClient,
+  NotionDocumentReview,
+  NotionDocumentReviewSummary,
+  NotionGeneratedReview,
   NotionGenerationEvidence,
   NotionQuestionAnswer,
+  NotionRevisionComparison,
+  NotionReviewDocumentsResponse,
+  NotionReviewFinding,
 } from "./notion-context.types";
 
 const FIRST_VISIT_WINDOW_MS = 7 * 24 * 60 * 60 * 1_000;
@@ -19,6 +30,14 @@ const MAX_CHANGED_DOCUMENTS = 100;
 const MAX_CHANGED_SECTIONS = 8;
 const MAX_EVIDENCE_ITEMS = 12;
 const MAX_EVIDENCE_CHARACTERS = 10_000;
+const MAX_DIFF_LINES = 600;
+
+interface RevisionDiffOperation {
+  kind: "unchanged" | "added" | "removed";
+  previousLine: number | null;
+  currentLine: number | null;
+  text: string;
+}
 
 @Injectable()
 export class NotionContextService {
@@ -149,8 +168,8 @@ export class NotionContextService {
     const citations: NotionContextCitation[] = results.map((item) => ({
       id: `notion-chunk:${item.id}`,
       provider: "notion",
-      documentId: null,
-      resourceId: null,
+      documentId: item.citation.documentId,
+      resourceId: item.citation.resourceId,
       title: item.title,
       url: item.citation.url,
       sourceRevision: item.citation.sourceRevision,
@@ -193,6 +212,243 @@ export class NotionContextService {
       citations,
       suggestedQuestions: generated.value.suggestedQuestions,
     };
+  }
+
+  async listReviewDocuments(
+    workspaceId: string,
+  ): Promise<NotionReviewDocumentsResponse> {
+    const [availability, documents] = await Promise.all([
+      this.repository.getAvailability(workspaceId),
+      this.repository.listReviewDocuments(workspaceId),
+    ]);
+    return {
+      availability: !availability.connected
+        ? "not_connected"
+        : availability.selectedResources === 0
+          ? "no_selected_sources"
+          : "ready",
+      documents: documents.map((document) => ({
+        documentId: document.documentId,
+        resourceId: document.resourceId,
+        title: document.title,
+        url: document.url,
+        lastSyncedAt: document.lastSyncedAt?.toISOString() ?? null,
+        currentRevision: document.versions[0]?.sourceRevision ?? "unknown",
+        reviewable: document.versions.length > 1,
+        revisions: document.versions.map((version, index) => ({
+          id: version.id,
+          sourceRevision: version.sourceRevision,
+          capturedAt: version.capturedAt.toISOString(),
+          truncated: version.truncated,
+          isCurrent: index === 0,
+        })),
+      })),
+    };
+  }
+
+  async createDocumentReview(
+    workspaceId: string,
+    userId: string,
+    input: { documentId: string; previousVersionId: string },
+  ): Promise<NotionDocumentReview> {
+    const source = await this.repository.getReviewInput(
+      workspaceId,
+      input.documentId,
+      input.previousVersionId,
+    );
+    if (!source) {
+      throw new BadRequestException(
+        "The selected synchronized document revision is not available for review.",
+      );
+    }
+    const currentCitationId = `notion-review-current:${source.current.id}`;
+    const previousCitationId = `notion-review-previous:${source.previous.id}`;
+    const fallback = this.fallbackDocumentReview(
+      source.previous.content,
+      source.current.content,
+      currentCitationId,
+      previousCitationId,
+      source.current.truncated || source.previous.truncated,
+    );
+    const relatedResults = await this.relatedReviewEvidence(
+      workspaceId,
+      source.documentId,
+      this.reviewRetrievalQuery(source.title, fallback),
+    );
+    const relatedCitationIds = new Set(
+      relatedResults.map((item) => `notion-review-related:${item.id}`),
+    );
+    const revisionComparison = this.revisionComparison(
+      source.previous.content,
+      source.current.content,
+    );
+    const citations: NotionContextCitation[] = [
+      {
+        id: currentCitationId,
+        provider: "notion",
+        documentId: source.documentId,
+        resourceId: source.resourceId,
+        title: `${source.title} — current revision`,
+        url: source.url,
+        sourceRevision: source.current.sourceRevision,
+        capturedAt: source.current.capturedAt.toISOString(),
+        lastEditedAt: null,
+        heading: null,
+        provenance: "notion_document_revision",
+      },
+      {
+        id: previousCitationId,
+        provider: "notion",
+        documentId: source.documentId,
+        resourceId: source.resourceId,
+        title: `${source.title} — previous revision`,
+        url: source.url,
+        sourceRevision: source.previous.sourceRevision,
+        capturedAt: source.previous.capturedAt.toISOString(),
+        lastEditedAt: null,
+        heading: null,
+        provenance: "notion_document_revision",
+      },
+      ...relatedResults.map((item) => ({
+        id: `notion-review-related:${item.id}`,
+        provider: "notion" as const,
+        documentId: item.citation.documentId,
+        resourceId: item.citation.resourceId,
+        title: item.title,
+        url: item.citation.url,
+        sourceRevision: item.citation.sourceRevision,
+        capturedAt: item.freshness ?? new Date().toISOString(),
+        lastEditedAt: item.citation.lastEditedAt,
+        heading: item.citation.heading,
+        provenance: "indexed_notion_chunk" as const,
+      })),
+    ];
+    const evidence = this.boundEvidence([
+      {
+        id: currentCitationId,
+        title: `${source.title} — current revision`,
+        excerpt: source.current.content,
+        sourceRevision: source.current.sourceRevision,
+        url: source.url,
+        heading: null,
+      },
+      {
+        id: previousCitationId,
+        title: `${source.title} — previous revision`,
+        excerpt: source.previous.content,
+        sourceRevision: source.previous.sourceRevision,
+        url: source.url,
+        heading: null,
+      },
+      ...relatedResults.map((item) => ({
+        id: `notion-review-related:${item.id}`,
+        title: item.title,
+        excerpt: item.excerpt,
+        sourceRevision: item.citation.sourceRevision,
+        url: item.citation.url,
+        heading: item.citation.heading,
+      })),
+    ]);
+    const evidenceHash = createHash("sha256")
+      .update(
+        JSON.stringify({
+          current: source.current.contentHash,
+          previous: source.previous.contentHash,
+          related: relatedResults.map((item) => [
+            item.id,
+            item.citation.sourceRevision,
+          ]),
+        }),
+      )
+      .digest("hex");
+    const comparison = {
+      workspaceId,
+      documentId: source.documentId,
+      currentRevision: source.current.sourceRevision,
+      previousRevision: source.previous.sourceRevision,
+      evidenceHash,
+    };
+    const cached = await this.repository.findReview(comparison);
+    if (cached) return this.formatReview(cached, true);
+
+    let result: NotionGeneratedReview = fallback;
+    let status: "generated" | "fallback" = "fallback";
+    const generated = await this.generation.reviewDocument({
+      documentTitle: source.title,
+      previousRevision: source.previous.sourceRevision,
+      currentRevision: source.current.sourceRevision,
+      deterministicChanges: fallback.whatChanged,
+      evidence,
+    });
+    if (
+      generated.status === "completed" &&
+      this.validReview(
+        generated.value,
+        new Set(evidence.map((item) => item.id)),
+        relatedCitationIds,
+        new Set([currentCitationId, previousCitationId]),
+      )
+    ) {
+      result = generated.value;
+      status = "generated";
+    }
+    const stored = await this.repository.saveReview({
+      ...comparison,
+      requestedByUserId: userId,
+      currentVersionId: source.current.id,
+      previousVersionId: source.previous.id,
+      documentTitle: source.title,
+      documentUrl: source.url,
+      currentCapturedAt: source.current.capturedAt,
+      previousCapturedAt: source.previous.capturedAt,
+      generationStatus: status,
+      result: { ...result, citations, revisionComparison },
+    });
+    if (!stored) {
+      throw new BadRequestException("The document review could not be saved.");
+    }
+    return this.formatReview(stored, false);
+  }
+
+  async getDocumentReview(
+    workspaceId: string,
+    reviewId: string,
+  ): Promise<NotionDocumentReview> {
+    const review = await this.repository.getReview(workspaceId, reviewId);
+    if (!review) throw new NotFoundException("Document review not found.");
+    return this.formatReview(review, true);
+  }
+
+  async listDocumentReviews(
+    workspaceId: string,
+  ): Promise<NotionDocumentReviewSummary[]> {
+    const reviews = await this.repository.listReviews(workspaceId);
+    return reviews.map((review) => {
+      const formatted = this.formatReview(review, true);
+      return {
+        id: formatted.id,
+        status: formatted.status,
+        createdAt: formatted.createdAt,
+        document: {
+          documentId: formatted.document.documentId,
+          title: formatted.document.title,
+          url: formatted.document.url,
+          currentRevision: formatted.document.currentRevision,
+          previousRevision: formatted.document.previousRevision,
+          sourceAvailable: formatted.document.sourceAvailable,
+        },
+        findingCount: [
+          formatted.whatChanged,
+          formatted.decisionsAdded,
+          formatted.decisionsRemoved,
+          formatted.decisionsModified,
+          formatted.contradictions,
+          formatted.potentiallySuperseded,
+          formatted.missingRationale,
+          formatted.unresolvedQuestions,
+        ].reduce((total, findings) => total + findings.length, 0),
+      };
+    });
   }
 
   private async buildSnapshot(
@@ -453,6 +709,391 @@ export class NotionContextService {
       value.citationIds.every((id) => validIds.has(id)) &&
       !this.instructionLike(value.answer)
     );
+  }
+
+  private fallbackDocumentReview(
+    previousContent: string,
+    currentContent: string,
+    currentCitationId: string,
+    previousCitationId: string,
+    truncated: boolean,
+  ): NotionGeneratedReview {
+    const changes = this.changedSections(previousContent, currentContent, false);
+    const finding = (text: string, citationIds: string[]): NotionReviewFinding => ({
+      text,
+      citationIds,
+    });
+    const whatChanged = changes.map((section) =>
+      finding(
+        section.changeType === "added"
+          ? `${section.heading} was added in the current revision.`
+          : section.changeType === "removed"
+            ? `${section.heading} was removed from the current revision.`
+            : `${section.heading} changed between the selected revisions.`,
+        section.changeType === "added"
+          ? [currentCitationId]
+          : section.changeType === "removed"
+            ? [previousCitationId]
+            : [previousCitationId, currentCitationId],
+      ),
+    );
+    const previousDecisions = this.decisionStatements(previousContent);
+    const currentDecisions = this.decisionStatements(currentContent);
+    const previousKeys = new Set(previousDecisions.map((item) => this.normalize(item)));
+    const currentKeys = new Set(currentDecisions.map((item) => this.normalize(item)));
+    const decisionsAdded = currentDecisions
+      .filter((item) => !previousKeys.has(this.normalize(item)))
+      .slice(0, 8)
+      .map((item) => finding(this.safeReviewText(item), [currentCitationId]));
+    const decisionsRemoved = previousDecisions
+      .filter((item) => !currentKeys.has(this.normalize(item)))
+      .slice(0, 8)
+      .map((item) => finding(this.safeReviewText(item), [previousCitationId]));
+    const decisionsModified = changes
+      .filter(
+        (section) =>
+          section.changeType === "changed" &&
+          /(decision|policy|requirement|guidance|standard)/i.test(section.heading),
+      )
+      .map((section) =>
+        finding(
+          `${section.heading} contains modified decision or guidance text.`,
+          [previousCitationId, currentCitationId],
+        ),
+      );
+    const unresolvedQuestions = currentContent
+      .replace(/\r\n?/g, "\n")
+      .split("\n")
+      .map((line) => line.replace(/^[-*\d.)\s]+/, "").trim())
+      .filter((line) => line.endsWith("?") || /\b(TODO|TBD)\b/i.test(line))
+      .slice(0, 8)
+      .map((line) => finding(this.safeReviewText(line), [currentCitationId]));
+    const missingRationale =
+      currentDecisions.length > 0 &&
+      !/\b(because|rationale|reason|why|trade-?off)\b/i.test(currentContent)
+        ? [
+            finding(
+              "The current revision contains decision-like guidance without an explicit rationale section or rationale language.",
+              [currentCitationId],
+            ),
+          ]
+        : [];
+    return {
+      whatChanged,
+      decisionsAdded,
+      decisionsRemoved,
+      decisionsModified,
+      contradictions: [],
+      potentiallySuperseded: changes
+        .filter((section) => section.changeType === "removed")
+        .map((section) =>
+          finding(
+            `${section.heading} may be superseded because it no longer appears in the current revision.`,
+            [previousCitationId, currentCitationId],
+          ),
+        ),
+      missingRationale,
+      unresolvedQuestions,
+      limitations: [
+        "This deterministic review reports verifiable revision differences; contradiction analysis was unavailable.",
+        ...(truncated
+          ? ["At least one synchronized revision was truncated before review."]
+          : []),
+      ],
+    };
+  }
+
+  private reviewRetrievalQuery(
+    documentTitle: string,
+    review: NotionGeneratedReview,
+  ) {
+    const findings = [
+      ...review.whatChanged,
+      ...review.decisionsAdded,
+      ...review.decisionsRemoved,
+      ...review.decisionsModified,
+    ];
+    return [documentTitle, ...findings.map((item) => item.text)]
+      .join("\n")
+      .slice(0, 1_500);
+  }
+
+  private revisionComparison(
+    previousContent: string,
+    currentContent: string,
+  ): NotionRevisionComparison {
+    const previousAll = previousContent.replace(/\r\n?/g, "\n").split("\n");
+    const currentAll = currentContent.replace(/\r\n?/g, "\n").split("\n");
+    const previous = previousAll.slice(0, MAX_DIFF_LINES);
+    const current = currentAll.slice(0, MAX_DIFF_LINES);
+    const matrix = Array.from(
+      { length: previous.length + 1 },
+      () => new Uint16Array(current.length + 1),
+    );
+    for (let left = previous.length - 1; left >= 0; left -= 1) {
+      for (let right = current.length - 1; right >= 0; right -= 1) {
+        matrix[left][right] =
+          previous[left] === current[right]
+            ? matrix[left + 1][right + 1] + 1
+            : Math.max(matrix[left + 1][right], matrix[left][right + 1]);
+      }
+    }
+
+    const operations: RevisionDiffOperation[] = [];
+    let left = 0;
+    let right = 0;
+    while (left < previous.length && right < current.length) {
+      if (previous[left] === current[right]) {
+        operations.push({
+          kind: "unchanged",
+          previousLine: left + 1,
+          currentLine: right + 1,
+          text: previous[left],
+        });
+        left += 1;
+        right += 1;
+      } else if (matrix[left + 1][right] >= matrix[left][right + 1]) {
+        operations.push({
+          kind: "removed",
+          previousLine: left + 1,
+          currentLine: null,
+          text: previous[left],
+        });
+        left += 1;
+      } else {
+        operations.push({
+          kind: "added",
+          previousLine: null,
+          currentLine: right + 1,
+          text: current[right],
+        });
+        right += 1;
+      }
+    }
+    while (left < previous.length) {
+      operations.push({
+        kind: "removed",
+        previousLine: left + 1,
+        currentLine: null,
+        text: previous[left],
+      });
+      left += 1;
+    }
+    while (right < current.length) {
+      operations.push({
+        kind: "added",
+        previousLine: null,
+        currentLine: right + 1,
+        text: current[right],
+      });
+      right += 1;
+    }
+
+    return {
+      stats: {
+        added: operations.filter((item) => item.kind === "added").length,
+        removed: operations.filter((item) => item.kind === "removed").length,
+        unchanged: operations.filter((item) => item.kind === "unchanged").length,
+      },
+      truncated:
+        previousAll.length > MAX_DIFF_LINES || currentAll.length > MAX_DIFF_LINES,
+      rows: this.alignRevisionDiff(operations),
+    };
+  }
+
+  private alignRevisionDiff(operations: RevisionDiffOperation[]) {
+    const rows: NotionRevisionComparison["rows"] = [];
+    let index = 0;
+    while (index < operations.length) {
+      if (operations[index].kind === "unchanged") {
+        const start = index;
+        while (
+          index < operations.length &&
+          operations[index].kind === "unchanged"
+        ) {
+          index += 1;
+        }
+        const unchanged = operations.slice(start, index);
+        const visible =
+          unchanged.length > 8
+            ? [
+                ...unchanged.slice(0, 3),
+                null,
+                ...unchanged.slice(-3),
+              ]
+            : unchanged;
+        for (const operation of visible) {
+          if (!operation) {
+            rows.push({
+              kind: "collapsed",
+              previousLine: null,
+              currentLine: null,
+              previousText: null,
+              currentText: null,
+              hiddenLines: unchanged.length - 6,
+            });
+          } else {
+            rows.push({
+              kind: "unchanged",
+              previousLine: operation.previousLine,
+              currentLine: operation.currentLine,
+              previousText: operation.text,
+              currentText: operation.text,
+              hiddenLines: 0,
+            });
+          }
+        }
+        continue;
+      }
+
+      const start = index;
+      while (
+        index < operations.length &&
+        operations[index].kind !== "unchanged"
+      ) {
+        index += 1;
+      }
+      const changed = operations.slice(start, index);
+      const removed = changed.filter((item) => item.kind === "removed");
+      const added = changed.filter((item) => item.kind === "added");
+      for (let offset = 0; offset < Math.max(removed.length, added.length); offset += 1) {
+        const before = removed[offset];
+        const after = added[offset];
+        rows.push({
+          kind: before && after ? "modified" : before ? "removed" : "added",
+          previousLine: before?.previousLine ?? null,
+          currentLine: after?.currentLine ?? null,
+          previousText: before?.text ?? null,
+          currentText: after?.text ?? null,
+          hiddenLines: 0,
+        });
+      }
+    }
+    return rows;
+  }
+
+  private async relatedReviewEvidence(
+    workspaceId: string,
+    documentId: string,
+    query: string,
+  ) {
+    try {
+      const search = await this.retrieval.workspaceSearch(workspaceId, query, {
+        providers: ["notion"],
+        excludeNotionDocumentId: documentId,
+      });
+      if (search.lowConfidence) return [];
+      return search.results
+        .filter((item) => item.provider === "notion")
+        .filter((item) => item.citation.documentId !== documentId)
+        .slice(0, 8);
+    } catch {
+      return [];
+    }
+  }
+
+  private decisionStatements(content: string) {
+    return content
+      .replace(/\r\n?/g, "\n")
+      .split("\n")
+      .map((line) => line.replace(/^[-*\d.)\s]+/, "").trim())
+      .filter(
+        (line) =>
+          line.length >= 12 &&
+          line.length <= 600 &&
+          /\b(decid(?:e|ed)|must|shall|will|approved|adopt(?:ed)?|require(?:d|s)?)\b/i.test(
+            line,
+          ),
+      )
+      .slice(0, 20);
+  }
+
+  private safeReviewText(value: string) {
+    return this.instructionLike(value)
+      ? "Potential instruction-like text changed; inspect the cited Notion revision directly."
+      : this.excerpt(value, 600);
+  }
+
+  private validReview(
+    value: NotionGeneratedReview,
+    validIds: Set<string>,
+    relatedIds: Set<string>,
+    primaryRevisionIds: Set<string>,
+  ) {
+    const findings = [
+      ...value.whatChanged,
+      ...value.decisionsAdded,
+      ...value.decisionsRemoved,
+      ...value.decisionsModified,
+      ...value.contradictions,
+      ...value.potentiallySuperseded,
+      ...value.missingRationale,
+      ...value.unresolvedQuestions,
+    ];
+    return (
+      value.contradictions.every(
+        (item) =>
+          item.citationIds.some((id) => relatedIds.has(id)) &&
+          item.citationIds.some((id) => primaryRevisionIds.has(id)),
+      ) &&
+      findings.every(
+        (item) =>
+          item.citationIds.length > 0 &&
+          item.citationIds.every((id) => validIds.has(id)) &&
+          !this.instructionLike(item.text),
+      ) && value.limitations.every((item) => !this.instructionLike(item))
+    );
+  }
+
+  private formatReview(
+    row: {
+      id: string;
+      workspaceId: string;
+      documentId: string | null;
+      documentTitle: string;
+      documentUrl: string | null;
+      currentRevision: string;
+      previousRevision: string;
+      currentCapturedAt: Date;
+      previousCapturedAt: Date;
+      generationStatus: string;
+      result: Record<string, unknown>;
+      createdAt: Date;
+    },
+    cached: boolean,
+  ): NotionDocumentReview {
+    const result = row.result as unknown as NotionGeneratedReview & {
+      citations: NotionContextCitation[];
+      revisionComparison?: NotionRevisionComparison;
+    };
+    return {
+      id: row.id,
+      workspaceId: row.workspaceId,
+      status: row.generationStatus as "generated" | "fallback",
+      cached,
+      createdAt: row.createdAt.toISOString(),
+      document: {
+        documentId: row.documentId,
+        title: row.documentTitle,
+        url: row.documentUrl,
+        currentRevision: row.currentRevision,
+        previousRevision: row.previousRevision,
+        currentCapturedAt: row.currentCapturedAt.toISOString(),
+        previousCapturedAt: row.previousCapturedAt.toISOString(),
+        sourceAvailable: row.documentId !== null,
+      },
+      whatChanged: result.whatChanged ?? [],
+      decisionsAdded: result.decisionsAdded ?? [],
+      decisionsRemoved: result.decisionsRemoved ?? [],
+      decisionsModified: result.decisionsModified ?? [],
+      contradictions: result.contradictions ?? [],
+      potentiallySuperseded: result.potentiallySuperseded ?? [],
+      missingRationale: result.missingRationale ?? [],
+      unresolvedQuestions: result.unresolvedQuestions ?? [],
+      limitations: result.limitations ?? [],
+      citations: result.citations ?? [],
+      revisionComparison: result.revisionComparison ?? null,
+    };
   }
 
   private instructionLike(value: string) {

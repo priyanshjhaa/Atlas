@@ -146,6 +146,8 @@ export type AtlasWorkspaceIntelligenceSearchResult =
       freshness: string | null;
       citation: {
         provider: "notion";
+        documentId: string;
+        resourceId: string;
         title: string;
         url: string | null;
         sourceRevision: string;
@@ -272,6 +274,92 @@ export interface AtlasNotionQuestionAnswer {
   citationIds: string[];
   citations: AtlasNotionContextCitation[];
   suggestedQuestions: string[];
+}
+
+export interface AtlasNotionReviewDocumentsResponse {
+  availability: "ready" | "not_connected" | "no_selected_sources";
+  documents: Array<{
+    documentId: string;
+    resourceId: string;
+    title: string;
+    url: string | null;
+    lastSyncedAt: string | null;
+    currentRevision: string;
+    reviewable: boolean;
+    revisions: Array<{
+      id: string;
+      sourceRevision: string;
+      capturedAt: string;
+      truncated: boolean;
+      isCurrent: boolean;
+    }>;
+  }>;
+}
+
+export interface AtlasNotionReviewFinding {
+  text: string;
+  citationIds: string[];
+}
+
+export interface AtlasNotionRevisionComparison {
+  stats: {
+    added: number;
+    removed: number;
+    unchanged: number;
+  };
+  truncated: boolean;
+  rows: Array<{
+    kind: "unchanged" | "added" | "removed" | "modified" | "collapsed";
+    previousLine: number | null;
+    currentLine: number | null;
+    previousText: string | null;
+    currentText: string | null;
+    hiddenLines: number;
+  }>;
+}
+
+export interface AtlasNotionDocumentReview {
+  id: string;
+  workspaceId: string;
+  status: "generated" | "fallback";
+  cached: boolean;
+  createdAt: string;
+  document: {
+    documentId: string | null;
+    title: string;
+    url: string | null;
+    currentRevision: string;
+    previousRevision: string;
+    currentCapturedAt: string;
+    previousCapturedAt: string;
+    sourceAvailable: boolean;
+  };
+  whatChanged: AtlasNotionReviewFinding[];
+  decisionsAdded: AtlasNotionReviewFinding[];
+  decisionsRemoved: AtlasNotionReviewFinding[];
+  decisionsModified: AtlasNotionReviewFinding[];
+  contradictions: AtlasNotionReviewFinding[];
+  potentiallySuperseded: AtlasNotionReviewFinding[];
+  missingRationale: AtlasNotionReviewFinding[];
+  unresolvedQuestions: AtlasNotionReviewFinding[];
+  limitations: string[];
+  citations: AtlasNotionContextCitation[];
+  revisionComparison?: AtlasNotionRevisionComparison | null;
+}
+
+export interface AtlasNotionDocumentReviewSummary {
+  id: string;
+  status: "generated" | "fallback";
+  createdAt: string;
+  document: {
+    documentId: string | null;
+    title: string;
+    url: string | null;
+    currentRevision: string;
+    previousRevision: string;
+    sourceAvailable: boolean;
+  };
+  findingCount: number;
 }
 
 export type AtlasSyncJobStatus =

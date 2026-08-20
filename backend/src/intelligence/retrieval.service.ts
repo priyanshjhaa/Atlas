@@ -8,6 +8,7 @@ export type WorkspaceSearchProvider = "github" | "notion";
 interface WorkspaceSearchOptions {
   repositoryId?: string;
   providers?: WorkspaceSearchProvider[];
+  excludeNotionDocumentId?: string;
 }
 
 interface RankedChunk {
@@ -226,10 +227,18 @@ export class RetrievalService {
             )
           : [],
         providers.has("notion")
-          ? this.repository.notionVectorCandidates(workspaceId, embedding)
+          ? this.repository.notionVectorCandidates(
+              workspaceId,
+              embedding,
+              options.excludeNotionDocumentId,
+            )
           : [],
         providers.has("notion")
-          ? this.repository.notionLexicalCandidates(workspaceId, terms)
+          ? this.repository.notionLexicalCandidates(
+              workspaceId,
+              terms,
+              options.excludeNotionDocumentId,
+            )
           : [],
       ]);
 
@@ -321,6 +330,8 @@ export class RetrievalService {
             freshness: row.lastSyncedAt?.toISOString() ?? null,
             citation: {
               provider: "notion" as const,
+              documentId: row.documentId,
+              resourceId: row.resourceId,
               title: row.title,
               url: row.url,
               sourceRevision: row.sourceRevision,
