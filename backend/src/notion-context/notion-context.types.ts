@@ -86,6 +86,76 @@ export interface NotionGenerationEvidence {
   heading: string | null;
 }
 
+export interface NotionDocumentRevisionSummary {
+  id: string;
+  sourceRevision: string;
+  capturedAt: string;
+  truncated: boolean;
+  isCurrent: boolean;
+}
+
+export interface NotionReviewDocumentSummary {
+  documentId: string;
+  resourceId: string;
+  title: string;
+  url: string | null;
+  lastSyncedAt: string | null;
+  currentRevision: string;
+  reviewable: boolean;
+  revisions: NotionDocumentRevisionSummary[];
+}
+
+export interface NotionReviewDocumentsResponse {
+  availability: "ready" | "not_connected" | "no_selected_sources";
+  documents: NotionReviewDocumentSummary[];
+}
+
+export interface NotionReviewFinding {
+  text: string;
+  citationIds: string[];
+}
+
+export interface NotionDocumentReview {
+  id: string;
+  workspaceId: string;
+  status: NotionContextGenerationStatus;
+  cached: boolean;
+  createdAt: string;
+  document: {
+    documentId: string | null;
+    title: string;
+    url: string | null;
+    currentRevision: string;
+    previousRevision: string;
+    currentCapturedAt: string;
+    previousCapturedAt: string;
+    sourceAvailable: boolean;
+  };
+  whatChanged: NotionReviewFinding[];
+  decisionsAdded: NotionReviewFinding[];
+  decisionsRemoved: NotionReviewFinding[];
+  decisionsModified: NotionReviewFinding[];
+  contradictions: NotionReviewFinding[];
+  potentiallySuperseded: NotionReviewFinding[];
+  missingRationale: NotionReviewFinding[];
+  unresolvedQuestions: NotionReviewFinding[];
+  limitations: string[];
+  citations: NotionContextCitation[];
+}
+
+export type NotionGeneratedReview = Pick<
+  NotionDocumentReview,
+  | "whatChanged"
+  | "decisionsAdded"
+  | "decisionsRemoved"
+  | "decisionsModified"
+  | "contradictions"
+  | "potentiallySuperseded"
+  | "missingRationale"
+  | "unresolvedQuestions"
+  | "limitations"
+>;
+
 export type NotionGenerationResult<T> =
   | { status: "completed"; value: T }
   | { status: "disabled" }
@@ -113,6 +183,13 @@ export interface NotionContextGenerationClient {
       suggestedQuestions: string[];
     }>
   >;
+  reviewDocument(input: {
+    documentTitle: string;
+    previousRevision: string;
+    currentRevision: string;
+    deterministicChanges: NotionReviewFinding[];
+    evidence: NotionGenerationEvidence[];
+  }): Promise<NotionGenerationResult<NotionGeneratedReview>>;
 }
 
 export const NOTION_CONTEXT_GENERATION_CLIENT = Symbol(

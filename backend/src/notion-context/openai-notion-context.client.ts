@@ -6,8 +6,10 @@ import { z } from "zod";
 import type { Environment } from "../config/environment";
 import type {
   NotionContextGenerationClient,
+  NotionGeneratedReview,
   NotionGenerationEvidence,
   NotionGenerationResult,
+  NotionReviewFinding,
 } from "./notion-context.types";
 
 const SYSTEM_PROMPT = `You are Atlas's Notion context assistant.
@@ -86,6 +88,44 @@ export class OpenAINotionContextClient
       [
         `Question: ${input.question}`,
         "Answer concisely using only the evidence packet. Cite every material claim.",
+        this.evidencePacket(input.evidence),
+      ].join("\n\n"),
+    );
+  }
+
+  async reviewDocument(input: {
+    documentTitle: string;
+    previousRevision: string;
+    currentRevision: string;
+    deterministicChanges: NotionReviewFinding[];
+    evidence: NotionGenerationEvidence[];
+  }): Promise<NotionGenerationResult<NotionGeneratedReview>> {
+    if (!input.evidence.length) return { status: "disabled" };
+    const citationId = this.citationSchema(input.evidence);
+    const finding = z.object({
+      text: z.string().min(1).max(700),
+      citationIds: z.array(citationId).min(1).max(4),
+    });
+    const schema = z.object({
+      whatChanged: z.array(finding).max(10),
+      decisionsAdded: z.array(finding).max(8),
+      decisionsRemoved: z.array(finding).max(8),
+      decisionsModified: z.array(finding).max(8),
+      contradictions: z.array(finding).max(8),
+      potentiallySuperseded: z.array(finding).max(8),
+      missingRationale: z.array(finding).max(8),
+      unresolvedQuestions: z.array(finding).max(8),
+      limitations: z.array(z.string().min(1).max(300)).max(6),
+    });
+    return this.generate(
+      schema,
+      "atlas_notion_document_review_v1",
+      [
+        `Review the revision change for document: ${input.documentTitle}`,
+        `Previous revision: ${input.previousRevision}`,
+        `Current revision: ${input.currentRevision}`,
+        "Identify only evidence-grounded changes, decisions, contradictions, superseded guidance, missing rationale, and unresolved questions. Empty arrays are preferred to unsupported claims.",
+        `Deterministic section changes: ${JSON.stringify(input.deterministicChanges)}`,
         this.evidencePacket(input.evidence),
       ].join("\n\n"),
     );
