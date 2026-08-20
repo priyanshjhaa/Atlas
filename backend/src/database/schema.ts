@@ -404,6 +404,63 @@ export const notionContextBriefings = pgTable(
   ],
 );
 
+export const notionDocumentReviews = pgTable(
+  "notion_document_reviews",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    requestedByUserId: text("requested_by_user_id").references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
+    documentId: uuid("document_id").references(() => notionDocuments.id, {
+      onDelete: "set null",
+    }),
+    currentVersionId: uuid("current_version_id").references(
+      () => notionDocumentVersions.id,
+      { onDelete: "set null" },
+    ),
+    previousVersionId: uuid("previous_version_id").references(
+      () => notionDocumentVersions.id,
+      { onDelete: "set null" },
+    ),
+    documentTitle: text("document_title").notNull(),
+    documentUrl: text("document_url"),
+    currentRevision: text("current_revision").notNull(),
+    previousRevision: text("previous_revision").notNull(),
+    currentCapturedAt: timestamp("current_captured_at", {
+      withTimezone: true,
+    }).notNull(),
+    previousCapturedAt: timestamp("previous_captured_at", {
+      withTimezone: true,
+    }).notNull(),
+    evidenceHash: text("evidence_hash").notNull(),
+    generationStatus: text("generation_status").notNull(),
+    result: jsonb("result")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("notion_document_reviews_comparison_unique").on(
+      table.workspaceId,
+      table.documentId,
+      table.currentRevision,
+      table.previousRevision,
+      table.evidenceHash,
+    ),
+    index("notion_document_reviews_workspace_id_idx").on(table.workspaceId),
+    index("notion_document_reviews_document_id_idx").on(table.documentId),
+    index("notion_document_reviews_requested_by_idx").on(
+      table.requestedByUserId,
+    ),
+    index("notion_document_reviews_created_at_idx").on(table.createdAt),
+  ],
+);
+
 export const notionDocumentChunks = pgTable(
   "notion_document_chunks",
   {
