@@ -274,6 +274,59 @@ export interface AtlasNotionQuestionAnswer {
   suggestedQuestions: string[];
 }
 
+export interface AtlasNotionReviewDocumentsResponse {
+  availability: "ready" | "not_connected" | "no_selected_sources";
+  documents: Array<{
+    documentId: string;
+    resourceId: string;
+    title: string;
+    url: string | null;
+    lastSyncedAt: string | null;
+    currentRevision: string;
+    reviewable: boolean;
+    revisions: Array<{
+      id: string;
+      sourceRevision: string;
+      capturedAt: string;
+      truncated: boolean;
+      isCurrent: boolean;
+    }>;
+  }>;
+}
+
+export interface AtlasNotionReviewFinding {
+  text: string;
+  citationIds: string[];
+}
+
+export interface AtlasNotionDocumentReview {
+  id: string;
+  workspaceId: string;
+  status: "generated" | "fallback";
+  cached: boolean;
+  createdAt: string;
+  document: {
+    documentId: string | null;
+    title: string;
+    url: string | null;
+    currentRevision: string;
+    previousRevision: string;
+    currentCapturedAt: string;
+    previousCapturedAt: string;
+    sourceAvailable: boolean;
+  };
+  whatChanged: AtlasNotionReviewFinding[];
+  decisionsAdded: AtlasNotionReviewFinding[];
+  decisionsRemoved: AtlasNotionReviewFinding[];
+  decisionsModified: AtlasNotionReviewFinding[];
+  contradictions: AtlasNotionReviewFinding[];
+  potentiallySuperseded: AtlasNotionReviewFinding[];
+  missingRationale: AtlasNotionReviewFinding[];
+  unresolvedQuestions: AtlasNotionReviewFinding[];
+  limitations: string[];
+  citations: AtlasNotionContextCitation[];
+}
+
 export type AtlasSyncJobStatus =
   | "queued"
   | "running"

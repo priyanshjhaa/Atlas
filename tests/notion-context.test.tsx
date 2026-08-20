@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { NotionContextPage } from "@/components/features/notion-context";
 import type {
   AtlasNotionCatchUpSnapshot,
+  AtlasNotionReviewDocumentsResponse,
   AtlasWorkspace,
 } from "@/lib/api-types";
 
@@ -64,6 +65,37 @@ const snapshot: AtlasNotionCatchUpSnapshot = {
     },
   ],
   truncated: false,
+};
+
+const reviewDocuments: AtlasNotionReviewDocumentsResponse = {
+  availability: "ready",
+  documents: [
+    {
+      documentId: "document-1",
+      resourceId: "resource-1",
+      title: "ADR: Session rotation",
+      url: "https://notion.so/session-rotation",
+      lastSyncedAt: "2026-08-20T05:00:00.000Z",
+      currentRevision: "revision-2",
+      reviewable: true,
+      revisions: [
+        {
+          id: "version-2",
+          sourceRevision: "revision-2",
+          capturedAt: "2026-08-20T05:00:00.000Z",
+          truncated: false,
+          isCurrent: true,
+        },
+        {
+          id: "version-1",
+          sourceRevision: "revision-1",
+          capturedAt: "2026-08-19T05:00:00.000Z",
+          truncated: false,
+          isCurrent: false,
+        },
+      ],
+    },
+  ],
 };
 
 afterEach(() => {
@@ -175,6 +207,117 @@ describe("NotionContextPage", () => {
     );
 
     expect(screen.getByRole("link", { name: /Manage Notion sources/ })).toHaveAttribute(
+      "href",
+      "/app/sources",
+    );
+  });
+
+  it("runs an explicit revision review and renders grounded review sections", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: "review-1",
+        workspaceId: workspace.id,
+        status: "generated",
+        cached: false,
+        createdAt: "2026-08-20T06:00:00.000Z",
+        document: {
+          documentId: "document-1",
+          title: "ADR: Session rotation",
+          url: "https://notion.so/session-rotation",
+          currentRevision: "revision-2",
+          previousRevision: "revision-1",
+          currentCapturedAt: "2026-08-20T05:00:00.000Z",
+          previousCapturedAt: "2026-08-19T05:00:00.000Z",
+          sourceAvailable: true,
+        },
+        whatChanged: [
+          {
+            text: "The session policy now requires rotating refresh tokens.",
+            citationIds: ["notion-review-current:version-2"],
+          },
+        ],
+        decisionsAdded: [],
+        decisionsRemoved: [],
+        decisionsModified: [],
+        contradictions: [],
+        potentiallySuperseded: [],
+        missingRationale: [],
+        unresolvedQuestions: [],
+        limitations: [],
+        citations: [
+          {
+            ...snapshot.citations[0],
+            id: "notion-review-current:version-2",
+            title: "ADR: Session rotation — current revision",
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <NotionContextPage
+        workspace={workspace}
+        initialSnapshot={snapshot}
+        initialReviewDocuments={reviewDocuments}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Review — compare retained Notion revisions",
+      }),
+    );
+    expect(screen.getByText("See how a decision changed—not merely that it changed.")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Review selected revisions" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "The session policy now requires rotating refresh tokens.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Contradictions")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/notion/context/reviews",
+      expect.objectContaining({
+        body: JSON.stringify({
+          workspaceId: workspace.id,
+          documentId: "document-1",
+          previousVersionId: "version-1",
+        }),
+      }),
+    );
+  });
+
+  it("explains when synchronized documents do not yet have retained history", () => {
+    render(
+      <NotionContextPage
+        workspace={workspace}
+        initialSnapshot={snapshot}
+        initialReviewDocuments={{
+          availability: "ready",
+          documents: [
+            {
+              ...reviewDocuments.documents[0],
+              reviewable: false,
+              revisions: [reviewDocuments.documents[0].revisions[0]],
+            },
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Review — compare retained Notion revisions",
+      }),
+    );
+    expect(
+      screen.getByText("No document has two retained revisions yet."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Check synchronization/ })).toHaveAttribute(
       "href",
       "/app/sources",
     );
