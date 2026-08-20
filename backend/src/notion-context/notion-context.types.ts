@@ -1,0 +1,120 @@
+export type NotionContextGenerationStatus = "generated" | "fallback";
+
+export interface NotionContextCitation {
+  id: string;
+  provider: "notion";
+  documentId: string | null;
+  resourceId: string | null;
+  title: string;
+  url: string | null;
+  sourceRevision: string;
+  capturedAt: string;
+  lastEditedAt: string | null;
+  heading: string | null;
+  provenance: "notion_document_revision" | "indexed_notion_chunk";
+}
+
+export interface NotionChangedSection {
+  heading: string;
+  changeType: "added" | "changed" | "removed";
+  excerpt: string;
+}
+
+export interface NotionCatchUpDocument {
+  documentId: string;
+  resourceId: string;
+  changeType: "new" | "changed";
+  title: string;
+  url: string | null;
+  currentRevision: string;
+  previousRevision: string | null;
+  changedAt: string;
+  lastEditedAt: string | null;
+  lastSyncedAt: string | null;
+  truncated: boolean;
+  baselineUnavailable: boolean;
+  changedSections: NotionChangedSection[];
+  citationIds: string[];
+}
+
+export interface NotionCatchUpSnapshot {
+  workspaceId: string;
+  range: {
+    from: string;
+    through: string;
+    firstVisit: boolean;
+  };
+  availability: "ready" | "not_connected" | "no_selected_sources";
+  counts: {
+    documents: number;
+    newDocuments: number;
+    changedDocuments: number;
+  };
+  documents: NotionCatchUpDocument[];
+  citations: NotionContextCitation[];
+  truncated: boolean;
+}
+
+export interface NotionCatchUpBriefing {
+  id: string | null;
+  status: NotionContextGenerationStatus;
+  cached: boolean;
+  headline: string;
+  summary: string;
+  highlights: Array<{ text: string; citationIds: string[] }>;
+  limitations: string[];
+  citationIds: string[];
+  snapshot: NotionCatchUpSnapshot;
+}
+
+export interface NotionQuestionAnswer {
+  status: NotionContextGenerationStatus;
+  query: string;
+  answer: string;
+  lowConfidence: boolean;
+  citationIds: string[];
+  citations: NotionContextCitation[];
+  suggestedQuestions: string[];
+}
+
+export interface NotionGenerationEvidence {
+  id: string;
+  title: string;
+  excerpt: string;
+  sourceRevision: string;
+  url: string | null;
+  heading: string | null;
+}
+
+export type NotionGenerationResult<T> =
+  | { status: "completed"; value: T }
+  | { status: "disabled" }
+  | { status: "failed" };
+
+export interface NotionContextGenerationClient {
+  generateBriefing(input: {
+    evidence: NotionGenerationEvidence[];
+    deterministicSummary: string;
+  }): Promise<
+    NotionGenerationResult<{
+      headline: string;
+      summary: string;
+      highlights: Array<{ text: string; citationIds: string[] }>;
+      limitations: string[];
+    }>
+  >;
+  answerQuestion(input: {
+    question: string;
+    evidence: NotionGenerationEvidence[];
+  }): Promise<
+    NotionGenerationResult<{
+      answer: string;
+      citationIds: string[];
+      suggestedQuestions: string[];
+    }>
+  >;
+}
+
+export const NOTION_CONTEXT_GENERATION_CLIENT = Symbol(
+  "NOTION_CONTEXT_GENERATION_CLIENT",
+);

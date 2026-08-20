@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { Activity, Bell, ChevronDown, Database, GitBranch, LayoutDashboard, LogOut, Menu, Network, PanelLeftClose, Search, Settings, Zap } from "lucide-react";
+import { Activity, Bell, BookOpenText, ChevronDown, Database, GitBranch, LayoutDashboard, LogOut, Menu, Network, PanelLeftClose, Search, Settings, Zap } from "lucide-react";
 import { AtlasMark } from "@/components/brand";
 import { authClient } from "@/lib/auth-client";
 import type { AtlasWorkspaceData } from "@/lib/api-types";
@@ -11,6 +11,7 @@ import type { AtlasWorkspaceData } from "@/lib/api-types";
 const navItems = [
   { href: "/app", label: "Overview", icon: LayoutDashboard },
   { href: "/app/impact/new", label: "Impact analysis", icon: Zap },
+  { href: "/app/context", label: "Notion context", icon: BookOpenText },
   { href: "/app/graph", label: "Engineering graph", icon: Network },
   { href: "/app/architecture", label: "Architecture", icon: GitBranch },
   { href: "/app/search", label: "Search", icon: Search },
@@ -53,6 +54,8 @@ export function AppShell({ workspaceData, children }: { workspaceData: AtlasWork
       ? "overview"
       : pathname.startsWith("/app/impact/")
         ? "impact"
+        : pathname.startsWith("/app/context")
+          ? "context"
         : pathname === "/app/graph"
           ? "graph"
           : pathname === "/app/architecture"

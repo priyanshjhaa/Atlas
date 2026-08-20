@@ -16,6 +16,7 @@ import type {
   AtlasSyncJob,
   AtlasWorkspaceData,
   AtlasWorkspaceOverview,
+  AtlasNotionCatchUpSnapshot,
 } from "./api-types";
 import { fetchAtlasApi } from "./backend-client";
 
@@ -101,6 +102,19 @@ export async function getAtlasNotionResources(
     },
   );
   return readApiResponse<AtlasNotionResource[]>(response);
+}
+
+export async function getAtlasNotionCatchUp(
+  workspaceId: string,
+): Promise<AtlasNotionCatchUpSnapshot> {
+  const response = await fetchAtlasApi(
+    `/v1/workspaces/${workspaceId}/notion-context/catch-up`,
+    {
+      cache: "no-store",
+      headers: { "X-Atlas-Workspace-Id": workspaceId },
+    },
+  );
+  return readApiResponse<AtlasNotionCatchUpSnapshot>(response);
 }
 
 export async function getAtlasSyncJobs(

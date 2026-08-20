@@ -205,6 +205,75 @@ export interface AtlasNotionResource {
   lastSyncedAt: string | null;
 }
 
+export interface AtlasNotionContextCitation {
+  id: string;
+  provider: "notion";
+  documentId: string | null;
+  resourceId: string | null;
+  title: string;
+  url: string | null;
+  sourceRevision: string;
+  capturedAt: string;
+  lastEditedAt: string | null;
+  heading: string | null;
+  provenance: "notion_document_revision" | "indexed_notion_chunk";
+}
+
+export interface AtlasNotionCatchUpSnapshot {
+  workspaceId: string;
+  range: { from: string; through: string; firstVisit: boolean };
+  availability: "ready" | "not_connected" | "no_selected_sources";
+  counts: {
+    documents: number;
+    newDocuments: number;
+    changedDocuments: number;
+  };
+  documents: Array<{
+    documentId: string;
+    resourceId: string;
+    changeType: "new" | "changed";
+    title: string;
+    url: string | null;
+    currentRevision: string;
+    previousRevision: string | null;
+    changedAt: string;
+    lastEditedAt: string | null;
+    lastSyncedAt: string | null;
+    truncated: boolean;
+    baselineUnavailable: boolean;
+    changedSections: Array<{
+      heading: string;
+      changeType: "added" | "changed" | "removed";
+      excerpt: string;
+    }>;
+    citationIds: string[];
+  }>;
+  citations: AtlasNotionContextCitation[];
+  truncated: boolean;
+}
+
+export interface AtlasNotionCatchUpBriefing {
+  id: string | null;
+  status: "generated" | "fallback";
+  cached: boolean;
+  headline: string;
+  summary: string;
+  highlights: Array<{ text: string; citationIds: string[] }>;
+  limitations: string[];
+  citationIds: string[];
+  snapshot: AtlasNotionCatchUpSnapshot;
+}
+
+export interface AtlasNotionQuestionAnswer {
+  status: "generated" | "fallback";
+  query: string;
+  answer: string;
+  lowConfidence: boolean;
+  citationIds: string[];
+  citations: AtlasNotionContextCitation[];
+  suggestedQuestions: string[];
+}
+
 export type AtlasSyncJobStatus =
   | "queued"
   | "running"

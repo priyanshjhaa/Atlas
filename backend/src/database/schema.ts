@@ -345,6 +345,65 @@ export const notionDocumentVersions = pgTable(
   ],
 );
 
+export const workspaceNotionCursors = pgTable(
+  "workspace_notion_cursors",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    acknowledgedThrough: timestamp("acknowledged_through", {
+      withTimezone: true,
+    }).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("workspace_notion_cursors_workspace_user_unique").on(
+      table.workspaceId,
+      table.userId,
+    ),
+    index("workspace_notion_cursors_workspace_id_idx").on(table.workspaceId),
+    index("workspace_notion_cursors_user_id_idx").on(table.userId),
+  ],
+);
+
+export const notionContextBriefings = pgTable(
+  "notion_context_briefings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    rangeStart: timestamp("range_start", { withTimezone: true }).notNull(),
+    rangeEnd: timestamp("range_end", { withTimezone: true }).notNull(),
+    evidenceHash: text("evidence_hash").notNull(),
+    generationStatus: text("generation_status").notNull(),
+    result: jsonb("result")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("notion_context_briefings_range_unique").on(
+      table.workspaceId,
+      table.userId,
+      table.rangeStart,
+      table.rangeEnd,
+      table.evidenceHash,
+    ),
+    index("notion_context_briefings_workspace_id_idx").on(table.workspaceId),
+    index("notion_context_briefings_user_id_idx").on(table.userId),
+    index("notion_context_briefings_range_end_idx").on(table.rangeEnd),
+  ],
+);
+
 export const notionDocumentChunks = pgTable(
   "notion_document_chunks",
   {
