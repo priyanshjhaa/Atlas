@@ -12,6 +12,7 @@ import { SyncModule } from "./sync/sync.module";
 import { IntelligenceModule } from "./intelligence/intelligence.module";
 import { ImpactModule } from "./impact/impact.module";
 import { SecurityModule } from "./security/security.module";
+import { NotionContextModule } from "./notion-context/notion-context.module";
 import {
   requestIdFromHeader,
   safeRequestPath,
@@ -33,6 +34,7 @@ import { OperationsGuard } from "./health/operations.guard";
     ConnectorsModule,
     IntelligenceModule,
     ImpactModule,
+    NotionContextModule,
     SyncModule,
     WorkspacesModule,
     LoggerModule.forRoot({
