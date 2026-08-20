@@ -111,6 +111,62 @@ function ReviewFindings({
   );
 }
 
+function RevisionComparison({
+  comparison,
+}: {
+  comparison: NonNullable<AtlasNotionDocumentReview["revisionComparison"]>;
+}) {
+  return (
+    <section className="notion-revision-diff" aria-label="Side-by-side revision comparison">
+      <header>
+        <div>
+          <span>Revision evidence</span>
+          <h3>Previous and current, line by line</h3>
+          <p>Changed lines stay aligned while long unchanged passages are folded.</p>
+        </div>
+        <div className="notion-revision-diff__stats" aria-label="Revision change totals">
+          <span className="added">+{comparison.stats.added} added</span>
+          <span className="removed">−{comparison.stats.removed} removed</span>
+          <span>{comparison.stats.unchanged} unchanged</span>
+        </div>
+      </header>
+      {comparison.truncated && (
+        <p className="notion-revision-diff__notice">
+          This large comparison is bounded to the first 600 lines of each retained revision.
+        </p>
+      )}
+      <div className="notion-revision-diff__table" role="table" aria-label="Changed Notion revision lines">
+        <div className="notion-revision-diff__head" role="row">
+          <span role="columnheader">Previous revision</span>
+          <span role="columnheader">Current revision</span>
+        </div>
+        {comparison.rows.map((row, index) =>
+          row.kind === "collapsed" ? (
+            <div className="notion-revision-diff__collapsed" role="row" key={`collapsed-${index}`}>
+              <span>•••</span>
+              <p>{row.hiddenLines} unchanged lines folded</p>
+              <span>•••</span>
+            </div>
+          ) : (
+            <div className={`notion-revision-diff__row ${row.kind}`} role="row" key={`${row.kind}-${index}`}>
+              <div role="cell" className={!row.previousText ? "empty" : ""}>
+                <span className="notion-revision-diff__side">Previous</span>
+                <code>{row.previousLine ?? ""}</code>
+                <pre>{row.previousText ?? ""}</pre>
+              </div>
+              <div role="cell" className={!row.currentText ? "empty" : ""}>
+                <span className="notion-revision-diff__side">Current</span>
+                <code>{row.currentLine ?? ""}</code>
+                <pre>{row.currentText ?? ""}</pre>
+              </div>
+            </div>
+          ),
+        )}
+      </div>
+    </section>
+  );
+}
+
 function CitationLinks({
   ids,
   citations,
@@ -575,6 +631,9 @@ export function NotionContextPage({
                     )}
                   </div>
                 </header>
+                {review.revisionComparison && (
+                  <RevisionComparison comparison={review.revisionComparison} />
+                )}
                 <div className="notion-review-grid">
                   <ReviewFindings title="What changed" description="Revision delta" findings={review.whatChanged} citations={reviewCitations} />
                   <ReviewFindings title="Decisions added" description="New commitments" findings={review.decisionsAdded} citations={reviewCitations} />

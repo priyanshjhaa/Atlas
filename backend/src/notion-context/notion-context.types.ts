@@ -115,6 +115,23 @@ export interface NotionReviewFinding {
   citationIds: string[];
 }
 
+export interface NotionRevisionComparison {
+  stats: {
+    added: number;
+    removed: number;
+    unchanged: number;
+  };
+  truncated: boolean;
+  rows: Array<{
+    kind: "unchanged" | "added" | "removed" | "modified" | "collapsed";
+    previousLine: number | null;
+    currentLine: number | null;
+    previousText: string | null;
+    currentText: string | null;
+    hiddenLines: number;
+  }>;
+}
+
 export interface NotionDocumentReview {
   id: string;
   workspaceId: string;
@@ -141,6 +158,7 @@ export interface NotionDocumentReview {
   unresolvedQuestions: NotionReviewFinding[];
   limitations: string[];
   citations: NotionContextCitation[];
+  revisionComparison: NotionRevisionComparison | null;
 }
 
 export interface NotionDocumentReviewSummary {

@@ -382,6 +382,21 @@ describe("NotionContextService", () => {
       "Decision changed between the selected revisions.",
     );
     expect(review.unresolvedQuestions[0].text).toContain("old sessions");
+    expect(review.revisionComparison).toMatchObject({
+      stats: { added: 3, removed: 1, unchanged: 1 },
+      truncated: false,
+    });
+    expect(review.revisionComparison?.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "modified",
+          previousLine: 2,
+          currentLine: 2,
+          previousText: "We decided refresh tokens remain persistent.",
+          currentText: "We decided refresh tokens must rotate.",
+        }),
+      ]),
+    );
     expect(search.workspaceSearch).toHaveBeenCalledWith(
       "workspace-1",
       expect.stringContaining("ADR: Session rotation"),
@@ -495,6 +510,74 @@ describe("NotionContextService", () => {
           resourceId: "resource-2",
           provenance: "indexed_notion_chunk",
         }),
+      ]),
+    );
+  });
+
+  it("bounds large revision comparisons and folds long unchanged passages", async () => {
+    const repository = repositories();
+    const previousLines = Array.from(
+      { length: 610 },
+      (_, index) => `Stable guidance line ${index + 1}`,
+    );
+    const currentLines = [...previousLines];
+    currentLines[1] = "Updated guidance line 2";
+    repository.getReviewInput.mockResolvedValue({
+      documentId: "document-large",
+      resourceId: "resource-large",
+      title: "Large operations manual",
+      url: null,
+      current: {
+        id: "version-current",
+        sourceRevision: "revision-current",
+        contentHash: "hash-current",
+        content: currentLines.join("\n"),
+        truncated: false,
+        capturedAt: new Date("2026-08-20T05:00:00.000Z"),
+      },
+      previous: {
+        id: "version-previous",
+        sourceRevision: "revision-previous",
+        contentHash: "hash-previous",
+        content: previousLines.join("\n"),
+        truncated: false,
+        capturedAt: new Date("2026-08-19T05:00:00.000Z"),
+      },
+    });
+    repository.saveReview.mockImplementation(async (
+      input: Parameters<NotionContextRepository["saveReview"]>[0],
+    ) => ({
+      id: "review-large",
+      createdAt: new Date("2026-08-20T06:00:00.000Z"),
+      ...input,
+    }));
+    const search = retrieval();
+    search.workspaceSearch.mockResolvedValueOnce({
+      query: "large manual",
+      filters: { repositoryId: null, providers: ["notion"] },
+      lowConfidence: true,
+      results: [],
+    });
+    const service = new NotionContextService(
+      repository as unknown as NotionContextRepository,
+      search as unknown as RetrievalService,
+      generation(),
+    );
+
+    const review = await service.createDocumentReview(
+      "workspace-1",
+      "user-1",
+      {
+        documentId: "document-large",
+        previousVersionId: "version-previous",
+      },
+    );
+
+    expect(review.revisionComparison?.truncated).toBe(true);
+    expect(review.revisionComparison?.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "modified" }),
+        expect.objectContaining({ kind: "collapsed", hiddenLines: 592 }),
       ]),
     );
   });

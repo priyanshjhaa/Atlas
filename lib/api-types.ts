@@ -301,6 +301,23 @@ export interface AtlasNotionReviewFinding {
   citationIds: string[];
 }
 
+export interface AtlasNotionRevisionComparison {
+  stats: {
+    added: number;
+    removed: number;
+    unchanged: number;
+  };
+  truncated: boolean;
+  rows: Array<{
+    kind: "unchanged" | "added" | "removed" | "modified" | "collapsed";
+    previousLine: number | null;
+    currentLine: number | null;
+    previousText: string | null;
+    currentText: string | null;
+    hiddenLines: number;
+  }>;
+}
+
 export interface AtlasNotionDocumentReview {
   id: string;
   workspaceId: string;
@@ -327,6 +344,7 @@ export interface AtlasNotionDocumentReview {
   unresolvedQuestions: AtlasNotionReviewFinding[];
   limitations: string[];
   citations: AtlasNotionContextCitation[];
+  revisionComparison?: AtlasNotionRevisionComparison | null;
 }
 
 export interface AtlasNotionDocumentReviewSummary {

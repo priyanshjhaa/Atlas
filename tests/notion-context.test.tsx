@@ -245,6 +245,28 @@ describe("NotionContextPage", () => {
         missingRationale: [],
         unresolvedQuestions: [],
         limitations: [],
+        revisionComparison: {
+          stats: { added: 1, removed: 1, unchanged: 1 },
+          truncated: false,
+          rows: [
+            {
+              kind: "unchanged",
+              previousLine: 1,
+              currentLine: 1,
+              previousText: "# Decision",
+              currentText: "# Decision",
+              hiddenLines: 0,
+            },
+            {
+              kind: "modified",
+              previousLine: 2,
+              currentLine: 2,
+              previousText: "Refresh tokens remain persistent.",
+              currentText: "Refresh tokens rotate after use.",
+              hiddenLines: 0,
+            },
+          ],
+        },
         citations: [
           {
             ...snapshot.citations[0],
@@ -279,6 +301,11 @@ describe("NotionContextPage", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Contradictions")).toBeInTheDocument();
+    expect(
+      screen.getByRole("table", { name: "Changed Notion revision lines" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Refresh tokens remain persistent.")).toBeInTheDocument();
+    expect(screen.getByText("Refresh tokens rotate after use.")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Open saved review/ }),
     ).toHaveAttribute("href", "/app/context/reviews/review-1");

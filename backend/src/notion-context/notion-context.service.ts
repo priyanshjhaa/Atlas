@@ -20,6 +20,7 @@ import type {
   NotionGeneratedReview,
   NotionGenerationEvidence,
   NotionQuestionAnswer,
+  NotionRevisionComparison,
   NotionReviewDocumentsResponse,
   NotionReviewFinding,
 } from "./notion-context.types";
@@ -29,6 +30,14 @@ const MAX_CHANGED_DOCUMENTS = 100;
 const MAX_CHANGED_SECTIONS = 8;
 const MAX_EVIDENCE_ITEMS = 12;
 const MAX_EVIDENCE_CHARACTERS = 10_000;
+const MAX_DIFF_LINES = 600;
+
+interface RevisionDiffOperation {
+  kind: "unchanged" | "added" | "removed";
+  previousLine: number | null;
+  currentLine: number | null;
+  text: string;
+}
 
 @Injectable()
 export class NotionContextService {
@@ -269,6 +278,10 @@ export class NotionContextService {
     const relatedCitationIds = new Set(
       relatedResults.map((item) => `notion-review-related:${item.id}`),
     );
+    const revisionComparison = this.revisionComparison(
+      source.previous.content,
+      source.current.content,
+    );
     const citations: NotionContextCitation[] = [
       {
         id: currentCitationId,
@@ -388,7 +401,7 @@ export class NotionContextService {
       currentCapturedAt: source.current.capturedAt,
       previousCapturedAt: source.previous.capturedAt,
       generationStatus: status,
-      result: { ...result, citations },
+      result: { ...result, citations, revisionComparison },
     });
     if (!stored) {
       throw new BadRequestException("The document review could not be saved.");
@@ -804,6 +817,160 @@ export class NotionContextService {
       .slice(0, 1_500);
   }
 
+  private revisionComparison(
+    previousContent: string,
+    currentContent: string,
+  ): NotionRevisionComparison {
+    const previousAll = previousContent.replace(/\r\n?/g, "\n").split("\n");
+    const currentAll = currentContent.replace(/\r\n?/g, "\n").split("\n");
+    const previous = previousAll.slice(0, MAX_DIFF_LINES);
+    const current = currentAll.slice(0, MAX_DIFF_LINES);
+    const matrix = Array.from(
+      { length: previous.length + 1 },
+      () => new Uint16Array(current.length + 1),
+    );
+    for (let left = previous.length - 1; left >= 0; left -= 1) {
+      for (let right = current.length - 1; right >= 0; right -= 1) {
+        matrix[left][right] =
+          previous[left] === current[right]
+            ? matrix[left + 1][right + 1] + 1
+            : Math.max(matrix[left + 1][right], matrix[left][right + 1]);
+      }
+    }
+
+    const operations: RevisionDiffOperation[] = [];
+    let left = 0;
+    let right = 0;
+    while (left < previous.length && right < current.length) {
+      if (previous[left] === current[right]) {
+        operations.push({
+          kind: "unchanged",
+          previousLine: left + 1,
+          currentLine: right + 1,
+          text: previous[left],
+        });
+        left += 1;
+        right += 1;
+      } else if (matrix[left + 1][right] >= matrix[left][right + 1]) {
+        operations.push({
+          kind: "removed",
+          previousLine: left + 1,
+          currentLine: null,
+          text: previous[left],
+        });
+        left += 1;
+      } else {
+        operations.push({
+          kind: "added",
+          previousLine: null,
+          currentLine: right + 1,
+          text: current[right],
+        });
+        right += 1;
+      }
+    }
+    while (left < previous.length) {
+      operations.push({
+        kind: "removed",
+        previousLine: left + 1,
+        currentLine: null,
+        text: previous[left],
+      });
+      left += 1;
+    }
+    while (right < current.length) {
+      operations.push({
+        kind: "added",
+        previousLine: null,
+        currentLine: right + 1,
+        text: current[right],
+      });
+      right += 1;
+    }
+
+    return {
+      stats: {
+        added: operations.filter((item) => item.kind === "added").length,
+        removed: operations.filter((item) => item.kind === "removed").length,
+        unchanged: operations.filter((item) => item.kind === "unchanged").length,
+      },
+      truncated:
+        previousAll.length > MAX_DIFF_LINES || currentAll.length > MAX_DIFF_LINES,
+      rows: this.alignRevisionDiff(operations),
+    };
+  }
+
+  private alignRevisionDiff(operations: RevisionDiffOperation[]) {
+    const rows: NotionRevisionComparison["rows"] = [];
+    let index = 0;
+    while (index < operations.length) {
+      if (operations[index].kind === "unchanged") {
+        const start = index;
+        while (
+          index < operations.length &&
+          operations[index].kind === "unchanged"
+        ) {
+          index += 1;
+        }
+        const unchanged = operations.slice(start, index);
+        const visible =
+          unchanged.length > 8
+            ? [
+                ...unchanged.slice(0, 3),
+                null,
+                ...unchanged.slice(-3),
+              ]
+            : unchanged;
+        for (const operation of visible) {
+          if (!operation) {
+            rows.push({
+              kind: "collapsed",
+              previousLine: null,
+              currentLine: null,
+              previousText: null,
+              currentText: null,
+              hiddenLines: unchanged.length - 6,
+            });
+          } else {
+            rows.push({
+              kind: "unchanged",
+              previousLine: operation.previousLine,
+              currentLine: operation.currentLine,
+              previousText: operation.text,
+              currentText: operation.text,
+              hiddenLines: 0,
+            });
+          }
+        }
+        continue;
+      }
+
+      const start = index;
+      while (
+        index < operations.length &&
+        operations[index].kind !== "unchanged"
+      ) {
+        index += 1;
+      }
+      const changed = operations.slice(start, index);
+      const removed = changed.filter((item) => item.kind === "removed");
+      const added = changed.filter((item) => item.kind === "added");
+      for (let offset = 0; offset < Math.max(removed.length, added.length); offset += 1) {
+        const before = removed[offset];
+        const after = added[offset];
+        rows.push({
+          kind: before && after ? "modified" : before ? "removed" : "added",
+          previousLine: before?.previousLine ?? null,
+          currentLine: after?.currentLine ?? null,
+          previousText: before?.text ?? null,
+          currentText: after?.text ?? null,
+          hiddenLines: 0,
+        });
+      }
+    }
+    return rows;
+  }
+
   private async relatedReviewEvidence(
     workspaceId: string,
     documentId: string,
@@ -893,6 +1060,7 @@ export class NotionContextService {
   ): NotionDocumentReview {
     const result = row.result as unknown as NotionGeneratedReview & {
       citations: NotionContextCitation[];
+      revisionComparison?: NotionRevisionComparison;
     };
     return {
       id: row.id,
@@ -920,6 +1088,7 @@ export class NotionContextService {
       unresolvedQuestions: result.unresolvedQuestions ?? [],
       limitations: result.limitations ?? [],
       citations: result.citations ?? [],
+      revisionComparison: result.revisionComparison ?? null,
     };
   }
 
