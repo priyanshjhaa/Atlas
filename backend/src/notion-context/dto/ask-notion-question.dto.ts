@@ -6,4 +6,3 @@ export class AskNotionQuestionDto {
   @MaxLength(500)
   query!: string;
 }
-

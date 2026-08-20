@@ -8,7 +8,6 @@ type Action = (typeof actions)[number];
 function isAction(value: string): value is Action {
   return actions.some((action) => action === value);
 }
-
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ action: string }> },
@@ -88,4 +87,3 @@ export async function POST(
   }));
   return NextResponse.json(responseBody, { status: response.status });
 }
-

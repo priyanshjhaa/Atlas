@@ -21,4 +21,3 @@ import { OpenAINotionContextClient } from "./openai-notion-context.client";
   exports: [NotionContextService],
 })
 export class NotionContextModule {}
-

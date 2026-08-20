@@ -59,4 +59,3 @@ export class NotionContextController {
     return this.context.askQuestion(workspaceId, body.query.trim());
   }
 }
-

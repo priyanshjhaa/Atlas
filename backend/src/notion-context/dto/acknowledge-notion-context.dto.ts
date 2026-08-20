@@ -4,4 +4,3 @@ export class AcknowledgeNotionContextDto {
   @IsISO8601({ strict: true })
   acknowledgedThrough!: string;
 }
-
