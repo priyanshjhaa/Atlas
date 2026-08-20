@@ -327,6 +327,21 @@ export interface AtlasNotionDocumentReview {
   citations: AtlasNotionContextCitation[];
 }
 
+export interface AtlasNotionDocumentReviewSummary {
+  id: string;
+  status: "generated" | "fallback";
+  createdAt: string;
+  document: {
+    documentId: string | null;
+    title: string;
+    url: string | null;
+    currentRevision: string;
+    previousRevision: string;
+    sourceAvailable: boolean;
+  };
+  findingCount: number;
+}
+
 export type AtlasSyncJobStatus =
   | "queued"
   | "running"

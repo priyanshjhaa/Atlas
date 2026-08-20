@@ -18,6 +18,8 @@ import type {
   AtlasWorkspaceOverview,
   AtlasNotionCatchUpSnapshot,
   AtlasNotionReviewDocumentsResponse,
+  AtlasNotionDocumentReview,
+  AtlasNotionDocumentReviewSummary,
 } from "./api-types";
 import { fetchAtlasApi } from "./backend-client";
 
@@ -129,6 +131,33 @@ export async function getAtlasNotionReviewDocuments(
     },
   );
   return readApiResponse<AtlasNotionReviewDocumentsResponse>(response);
+}
+
+export async function getAtlasNotionDocumentReviews(
+  workspaceId: string,
+): Promise<AtlasNotionDocumentReviewSummary[]> {
+  const response = await fetchAtlasApi(
+    `/v1/workspaces/${workspaceId}/notion-context/reviews`,
+    {
+      cache: "no-store",
+      headers: { "X-Atlas-Workspace-Id": workspaceId },
+    },
+  );
+  return readApiResponse<AtlasNotionDocumentReviewSummary[]>(response);
+}
+
+export async function getAtlasNotionDocumentReview(
+  workspaceId: string,
+  reviewId: string,
+): Promise<AtlasNotionDocumentReview> {
+  const response = await fetchAtlasApi(
+    `/v1/workspaces/${workspaceId}/notion-context/reviews/${reviewId}`,
+    {
+      cache: "no-store",
+      headers: { "X-Atlas-Workspace-Id": workspaceId },
+    },
+  );
+  return readApiResponse<AtlasNotionDocumentReview>(response);
 }
 
 export async function getAtlasSyncJobs(

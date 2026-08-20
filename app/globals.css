@@ -5480,13 +5480,32 @@ body {
 .notion-review-guide li small { color: #858075; font-size: 8px; line-height: 1.5; }
 .notion-review-guide > div { display: flex; gap: 9px; padding: 13px; border-radius: 11px; color: var(--context-moss); background: rgba(99,125,92,.08); }
 .notion-review-guide > div p { margin: 0; color: #747c70; font-size: 8px; line-height: 1.55; }
+.notion-review-history { margin-top: 4px; }
+.notion-review-history__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.notion-review-history__grid > a { display: grid; min-width: 0; gap: 10px; padding: 19px; border: 1px solid var(--app-border); border-radius: 17px; color: inherit; background: rgba(255,251,240,.66); box-shadow: var(--app-shadow); transition: transform .3s var(--ease-out), border-color .2s ease, box-shadow .3s var(--ease-out); }
+.notion-review-history__grid > a:hover { transform: translateY(-3px); border-color: rgba(99,125,92,.26); box-shadow: var(--app-shadow-raised); }
+.notion-review-history__grid > a.active { border-color: rgba(99,125,92,.28); background: linear-gradient(145deg, rgba(232,239,220,.52), rgba(255,253,247,.62)); }
+.notion-review-history__grid > a > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.notion-review-history__grid > a > div span { color: var(--context-clay); font: 700 7px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.notion-review-history__grid time { color: #968f82; font: 7px var(--mono); }
+.notion-review-history__grid h3 { overflow: hidden; margin: 0; color: #3f4d43; font: 600 20px var(--display); text-overflow: ellipsis; white-space: nowrap; }
+.notion-review-history__grid p { display: flex; align-items: center; gap: 7px; margin: 0; color: #8e877b; }
+.notion-review-history__grid code { overflow: hidden; max-width: 110px; font: 7px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.notion-review-history__grid footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 11px; border-top: 1px solid rgba(72,75,58,.08); }
+.notion-review-history__grid footer span { color: #8f887c; font-size: 8px; }
+.notion-review-history__grid footer b { display: inline-flex; align-items: center; gap: 5px; color: #5d705a; font-size: 8px; }
+.notion-review-history__empty { display: flex; align-items: center; gap: 14px; padding: 22px; color: var(--context-moss); }
+.notion-review-history__empty h3 { margin: 0 0 4px; color: #405046; font: 600 18px var(--display); }
+.notion-review-history__empty p { margin: 0; color: #858075; font-size: 8px; }
 .notion-review-report { display: grid; gap: 14px; margin-top: 22px; animation: impact-stage-enter .35s var(--ease-out) both; }
 .notion-review-report > header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 15px; padding: 22px; }
 .notion-review-report__mark { display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid rgba(99,125,92,.14); border-radius: 14px; color: var(--context-moss); background: rgba(99,125,92,.09); }
 .notion-review-report > header span { color: var(--context-clay); font: 700 7px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
 .notion-review-report > header h2 { margin: 5px 0 4px; color: var(--context-ink); font: 560 26px var(--display); }
 .notion-review-report > header p { display: flex; align-items: center; gap: 6px; margin: 0; color: #918a7d; font: 7px var(--mono); }
-.notion-review-report > header > a { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 12px; border: 1px solid rgba(84,91,69,.13); border-radius: 999px; color: #60705e; background: rgba(255,253,247,.6); font-size: 8px; font-weight: 700; }
+.notion-review-report__actions { display: flex; align-items: center; gap: 7px; }
+.notion-review-report__actions a { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 12px; border: 1px solid rgba(84,91,69,.13); border-radius: 999px; color: #60705e; background: rgba(255,253,247,.6); font-size: 8px; font-weight: 700; white-space: nowrap; }
+.notion-review-report__actions a:last-child:not(:first-child) { width: 38px; justify-content: center; padding: 0; }
 .notion-review-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .notion-review-section { min-width: 0; padding: 21px; border: 1px solid var(--app-border); border-radius: 18px; background: rgba(255,251,240,.68); box-shadow: var(--app-shadow); }
 .notion-review-section > header { display: flex; align-items: start; justify-content: space-between; gap: 14px; margin-bottom: 15px; }
@@ -5524,6 +5543,7 @@ body {
   .notion-ask-workspace form > div { grid-template-columns: auto minmax(0, 1fr); }
   .notion-ask-workspace form .button { grid-column: 1 / -1; width: 100%; }
   .notion-review-grid { grid-template-columns: 1fr; }
+  .notion-review-history__grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 480px) {
@@ -5541,7 +5561,7 @@ body {
   .notion-review-no-history { grid-template-columns: auto minmax(0, 1fr); }
   .notion-review-no-history a { grid-column: 1 / -1; }
   .notion-review-report > header { grid-template-columns: auto minmax(0, 1fr); }
-  .notion-review-report > header > a { grid-column: 2; width: fit-content; }
+  .notion-review-report__actions { grid-column: 2; flex-wrap: wrap; }
 }
 
 @media (max-width: 700px) {

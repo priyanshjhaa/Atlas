@@ -22,6 +22,7 @@ import type {
   AtlasNotionCatchUpSnapshot,
   AtlasNotionContextCitation,
   AtlasNotionDocumentReview,
+  AtlasNotionDocumentReviewSummary,
   AtlasNotionQuestionAnswer,
   AtlasNotionReviewDocumentsResponse,
   AtlasNotionReviewFinding,
@@ -39,6 +40,19 @@ function formatDate(value: string) {
 
 function citationMap(citations: AtlasNotionContextCitation[]) {
   return new Map(citations.map((citation) => [citation.id, citation]));
+}
+
+function reviewFindingCount(review: AtlasNotionDocumentReview) {
+  return [
+    review.whatChanged,
+    review.decisionsAdded,
+    review.decisionsRemoved,
+    review.decisionsModified,
+    review.contradictions,
+    review.potentiallySuperseded,
+    review.missingRationale,
+    review.unresolvedQuestions,
+  ].reduce((total, findings) => total + findings.length, 0);
 }
 
 async function postContext<T>(
@@ -126,12 +140,18 @@ export function NotionContextPage({
   workspace,
   initialSnapshot,
   initialReviewDocuments = null,
+  initialSavedReviews = [],
+  initialReview = null,
+  initialView = "catch-up",
 }: {
   workspace: AtlasWorkspace;
   initialSnapshot: AtlasNotionCatchUpSnapshot | null;
   initialReviewDocuments?: AtlasNotionReviewDocumentsResponse | null;
+  initialSavedReviews?: AtlasNotionDocumentReviewSummary[];
+  initialReview?: AtlasNotionDocumentReview | null;
+  initialView?: ContextView;
 }) {
-  const [view, setView] = useState<ContextView>("catch-up");
+  const [view, setView] = useState<ContextView>(initialView);
   const [briefing, setBriefing] = useState<AtlasNotionCatchUpBriefing | null>(null);
   const [answer, setAnswer] = useState<AtlasNotionQuestionAnswer | null>(null);
   const [question, setQuestion] = useState("");
@@ -142,7 +162,10 @@ export function NotionContextPage({
   const [selectedDocumentId, setSelectedDocumentId] = useState("");
   const [selectedPreviousVersionId, setSelectedPreviousVersionId] = useState("");
   const [reviewing, setReviewing] = useState(false);
-  const [review, setReview] = useState<AtlasNotionDocumentReview | null>(null);
+  const [review, setReview] = useState<AtlasNotionDocumentReview | null>(
+    initialReview,
+  );
+  const [savedReviews, setSavedReviews] = useState(initialSavedReviews);
   const [error, setError] = useState<string | null>(null);
   const snapshot = briefing?.snapshot ?? initialSnapshot;
   const snapshotCitations = useMemo(
@@ -241,13 +264,32 @@ export function NotionContextPage({
     setError(null);
     setReview(null);
     try {
-      setReview(
-        await postContext<AtlasNotionDocumentReview>("reviews", {
+      const createdReview = await postContext<AtlasNotionDocumentReview>(
+        "reviews",
+        {
           workspaceId: workspace.id,
           documentId: selectedDocument.documentId,
           previousVersionId: selectedPreviousVersion.id,
-        }),
+        },
       );
+      setReview(createdReview);
+      setSavedReviews((current) => [
+        {
+          id: createdReview.id,
+          status: createdReview.status,
+          createdAt: createdReview.createdAt,
+          document: {
+            documentId: createdReview.document.documentId,
+            title: createdReview.document.title,
+            url: createdReview.document.url,
+            currentRevision: createdReview.document.currentRevision,
+            previousRevision: createdReview.document.previousRevision,
+            sourceAvailable: createdReview.document.sourceAvailable,
+          },
+          findingCount: reviewFindingCount(createdReview),
+        },
+        ...current.filter((item) => item.id !== createdReview.id),
+      ]);
     } catch (requestError) {
       setError(
         requestError instanceof Error ? requestError.message : "Review failed.",
@@ -486,6 +528,37 @@ export function NotionContextPage({
               )}
             </section>
 
+            <section className="notion-review-history">
+              <div className="context-section-heading">
+                <div><span>Saved review library</span><h2>Return to an earlier reading</h2></div>
+                <small>{savedReviews.length} retained {savedReviews.length === 1 ? "review" : "reviews"}</small>
+              </div>
+              {savedReviews.length ? (
+                <div className="notion-review-history__grid">
+                  {savedReviews.map((savedReview) => (
+                    <Link
+                      className={review?.id === savedReview.id ? "active" : ""}
+                      href={`/app/context/reviews/${savedReview.id}`}
+                      key={savedReview.id}
+                    >
+                      <div>
+                        <span>{savedReview.status === "generated" ? "Grounded" : "Deterministic"}</span>
+                        <time>{formatDate(savedReview.createdAt)}</time>
+                      </div>
+                      <h3>{savedReview.document.title}</h3>
+                      <p><code>{savedReview.document.previousRevision.slice(0, 12)}</code><ArrowRight size={11} /><code>{savedReview.document.currentRevision.slice(0, 12)}</code></p>
+                      <footer><span>{savedReview.findingCount} findings</span><b>Open saved review <ArrowRight size={12} /></b></footer>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="notion-review-history__empty panel">
+                  <History size={20} />
+                  <div><h3>No saved reviews yet.</h3><p>Your first requested comparison will remain available here after reload.</p></div>
+                </div>
+              )}
+            </section>
+
             {review && (
               <section className="notion-review-report" aria-live="polite">
                 <header className="panel">
@@ -495,9 +568,12 @@ export function NotionContextPage({
                     <h2>{review.document.title}</h2>
                     <p>{review.document.previousRevision.slice(0, 16)} <ArrowRight size={11} /> {review.document.currentRevision.slice(0, 16)} · reviewed {formatDate(review.createdAt)}</p>
                   </div>
-                  {review.document.url && (
-                    <a href={review.document.url} target="_blank" rel="noreferrer">Open in Notion <ExternalLink size={13} /></a>
-                  )}
+                  <div className="notion-review-report__actions">
+                    <Link href={`/app/context/reviews/${review.id}`}>Permanent view <ArrowRight size={13} /></Link>
+                    {review.document.url && (
+                      <a href={review.document.url} target="_blank" rel="noreferrer" aria-label={`Open ${review.document.title} in Notion`}><ExternalLink size={13} /></a>
+                    )}
+                  </div>
                 </header>
                 <div className="notion-review-grid">
                   <ReviewFindings title="What changed" description="Revision delta" findings={review.whatChanged} citations={reviewCitations} />

@@ -279,6 +279,9 @@ describe("NotionContextPage", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Contradictions")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Open saved review/ }),
+    ).toHaveAttribute("href", "/app/context/reviews/review-1");
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/notion/context/reviews",
       expect.objectContaining({
@@ -321,5 +324,43 @@ describe("NotionContextPage", () => {
       "href",
       "/app/sources",
     );
+  });
+
+  it("keeps persisted reviews discoverable through stable workspace links", () => {
+    render(
+      <NotionContextPage
+        workspace={workspace}
+        initialSnapshot={snapshot}
+        initialReviewDocuments={reviewDocuments}
+        initialSavedReviews={[
+          {
+            id: "review-saved",
+            status: "generated",
+            createdAt: "2026-08-20T06:00:00.000Z",
+            document: {
+              documentId: "document-1",
+              title: "ADR: Session rotation",
+              url: "https://notion.so/session-rotation",
+              currentRevision: "revision-2",
+              previousRevision: "revision-1",
+              sourceAvailable: true,
+            },
+            findingCount: 4,
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Review — compare retained Notion revisions",
+      }),
+    );
+
+    expect(screen.getByText("Return to an earlier reading")).toBeInTheDocument();
+    expect(screen.getByText("4 findings")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Open saved review/ }),
+    ).toHaveAttribute("href", "/app/context/reviews/review-saved");
   });
 });
