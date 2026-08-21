@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { Environment } from "../config/environment";
+import type { ImpactEvidencePacket } from "./evidence-packet.types";
 import { EvidencePacketBuilder } from "./evidence-packet.builder";
 import { ExplanationGroundingValidator } from "./explanation-grounding.validator";
 import { ExplanationObservabilityService } from "./explanation-observability.service";
@@ -8,6 +9,7 @@ import type { ExplanationGenerationMetadata } from "./explanation-client.types";
 import { IMPACT_EXPLANATION_PROMPT_VERSION } from "./explanation.prompt";
 import {
   IMPACT_EXPLANATION_SCHEMA_VERSION,
+  type ImpactExplanation,
   type ImpactExplanationFailureCode,
   type ImpactExplanationGenerationMetadata,
   type ImpactExplanationState,
@@ -136,10 +138,15 @@ export class ExplanationGenerationService {
       }
 
       let completedGeneration = generated;
-      let validation = this.validator.validate(
+      let checked = this.validateWithSafeRepairs(
         completedGeneration.explanation,
         packetResult.packet,
       );
+      completedGeneration = {
+        ...completedGeneration,
+        explanation: checked.explanation,
+      };
+      let validation = checked.validation;
       if (
         validation.status === "invalid" &&
         this.canRepair(validation.failureCode)
@@ -158,10 +165,15 @@ export class ExplanationGenerationService {
               repaired.metadata,
             ),
           };
-          validation = this.validator.validate(
+          checked = this.validateWithSafeRepairs(
             completedGeneration.explanation,
             packetResult.packet,
           );
+          completedGeneration = {
+            ...completedGeneration,
+            explanation: checked.explanation,
+          };
+          validation = checked.validation;
         }
       }
       if (validation.status === "invalid") {
@@ -201,6 +213,22 @@ export class ExplanationGenerationService {
         "not_run",
       );
     }
+  }
+
+  private validateWithSafeRepairs(
+    explanation: ImpactExplanation,
+    packet: ImpactEvidencePacket,
+  ) {
+    let candidate = explanation;
+    let validation = this.validator.validate(candidate, packet);
+    if (
+      validation.status === "invalid" &&
+      validation.failureCode === "unknown_file_path"
+    ) {
+      candidate = this.validator.repairUnknownFilePaths(candidate, packet);
+      validation = this.validator.validate(candidate, packet);
+    }
+    return { explanation: candidate, validation };
   }
 
   private canRepair(failureCode: ImpactExplanationFailureCode): boolean {

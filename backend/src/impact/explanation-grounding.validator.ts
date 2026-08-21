@@ -179,6 +179,35 @@ export class ExplanationGroundingValidator {
     return { status: "valid", explanation };
   }
 
+  repairUnknownFilePaths(
+    candidate: ImpactExplanation,
+    packet: ImpactEvidencePacket,
+  ): ImpactExplanation {
+    const allowedFiles = this.allowedFiles(packet);
+    const repairText = (text: string) =>
+      this.replaceUnknownFilePaths(text, allowedFiles);
+
+    return {
+      ...candidate,
+      executiveSummary: repairText(candidate.executiveSummary),
+      answer: repairText(candidate.answer),
+      claims: candidate.claims.map((claim) => ({
+        ...claim,
+        text: repairText(claim.text),
+      })),
+      implementationSteps: candidate.implementationSteps.map((step) => ({
+        ...step,
+        title: repairText(step.title),
+        detail: repairText(step.detail),
+      })),
+      verificationSteps: candidate.verificationSteps.map((step) => ({
+        ...step,
+        text: repairText(step.text),
+      })),
+      remainingQuestions: candidate.remainingQuestions.map(repairText),
+    };
+  }
+
   private textUnits(explanation: ImpactExplanation): ExplanationTextUnit[] {
     const claimEvidenceIds = [
       ...new Set(
@@ -281,6 +310,28 @@ export class ExplanationGroundingValidator {
       }
     }
     return [...paths];
+  }
+
+  private replaceUnknownFilePaths(
+    text: string,
+    allowedFiles: Set<string>,
+  ): string {
+    const withoutUnknownPaths = text.replace(
+      new RegExp(SLASH_FILE_PATH_PATTERN.source, "g"),
+      (match, path: string) =>
+        allowedFiles.has(path)
+          ? match
+          : match.replace(path, "an unverified location"),
+    );
+
+    return withoutUnknownPaths.replace(
+      /`([^`\n]+)`/g,
+      (match, value: string) =>
+        STANDALONE_FILE_NAME_PATTERN.test(value) &&
+        !allowedFiles.has(value)
+          ? "an unverified location"
+          : match,
+    );
   }
 
   private extractCodeSymbols(text: string): string[] {

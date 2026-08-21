@@ -305,6 +305,17 @@ describe("ExplanationGroundingValidator", () => {
       status: "invalid",
       failureCode: "unknown_file_path",
     });
+    const safelyRepaired = validator().repairUnknownFilePaths(
+      ungrounded,
+      packet,
+    );
+    expect(safelyRepaired.implementationSteps[0]?.detail).toBe(
+      "Update an unverified location before changing the boundary.",
+    );
+    expect(validator().validate(safelyRepaired, packet)).toEqual({
+      status: "valid",
+      explanation: safelyRepaired,
+    });
     expect(validator().validate(validExplanation, packet)).toEqual({
       status: "valid",
       explanation: validExplanation,
