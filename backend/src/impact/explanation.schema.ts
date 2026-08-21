@@ -79,8 +79,8 @@ export function impactExplanationProviderSchema(
             })
             .strict(),
         )
-        .min(3)
-        .max(6),
+        .min(2)
+        .max(4),
       implementationSteps: z
         .array(
           z
@@ -91,8 +91,8 @@ export function impactExplanationProviderSchema(
             })
             .strict(),
         )
-        .min(3)
-        .max(5),
+        .min(2)
+        .max(4),
       verificationSteps: z
         .array(
           z
@@ -102,8 +102,8 @@ export function impactExplanationProviderSchema(
             })
             .strict(),
         )
-        .min(3)
-        .max(4),
+        .min(2)
+        .max(3),
       remainingQuestions: requireRemainingQuestions
         ? z.array(providerTextSchema).min(1)
         : z.array(providerTextSchema),

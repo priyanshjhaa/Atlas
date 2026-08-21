@@ -163,11 +163,11 @@ export class ExplanationGroundingValidator {
       return { status: "invalid", failureCode: "missing_unknown_impact" };
     }
     if (
-      explanation.claims.length < 3 ||
+      explanation.claims.length < 2 ||
       explanation.claims.length > 6 ||
-      explanation.implementationSteps.length < 3 ||
+      explanation.implementationSteps.length < 2 ||
       explanation.implementationSteps.length > 5 ||
-      explanation.verificationSteps.length < 3 ||
+      explanation.verificationSteps.length < 2 ||
       explanation.verificationSteps.length > 4
     ) {
       return {
@@ -177,6 +177,35 @@ export class ExplanationGroundingValidator {
     }
 
     return { status: "valid", explanation };
+  }
+
+  repairUnknownFilePaths(
+    candidate: ImpactExplanation,
+    packet: ImpactEvidencePacket,
+  ): ImpactExplanation {
+    const allowedFiles = this.allowedFiles(packet);
+    const repairText = (text: string) =>
+      this.replaceUnknownFilePaths(text, allowedFiles);
+
+    return {
+      ...candidate,
+      executiveSummary: repairText(candidate.executiveSummary),
+      answer: repairText(candidate.answer),
+      claims: candidate.claims.map((claim) => ({
+        ...claim,
+        text: repairText(claim.text),
+      })),
+      implementationSteps: candidate.implementationSteps.map((step) => ({
+        ...step,
+        title: repairText(step.title),
+        detail: repairText(step.detail),
+      })),
+      verificationSteps: candidate.verificationSteps.map((step) => ({
+        ...step,
+        text: repairText(step.text),
+      })),
+      remainingQuestions: candidate.remainingQuestions.map(repairText),
+    };
   }
 
   private textUnits(explanation: ImpactExplanation): ExplanationTextUnit[] {
@@ -283,6 +312,28 @@ export class ExplanationGroundingValidator {
     return [...paths];
   }
 
+  private replaceUnknownFilePaths(
+    text: string,
+    allowedFiles: Set<string>,
+  ): string {
+    const withoutUnknownPaths = text.replace(
+      new RegExp(SLASH_FILE_PATH_PATTERN.source, "g"),
+      (match, path: string) =>
+        allowedFiles.has(path)
+          ? match
+          : match.replace(path, "an unverified location"),
+    );
+
+    return withoutUnknownPaths.replace(
+      /`([^`\n]+)`/g,
+      (match, value: string) =>
+        STANDALONE_FILE_NAME_PATTERN.test(value) &&
+        !allowedFiles.has(value)
+          ? "an unverified location"
+          : match,
+    );
+  }
+
   private extractCodeSymbols(text: string): string[] {
     const symbols = new Set<string>();
     for (const match of text.matchAll(/`([^`\n]+)`/g)) {
@@ -336,6 +387,11 @@ export class ExplanationGroundingValidator {
         return true;
       }
       if (mentionedPaths.length === 0) return true;
+      const assertsCall = /\bcalls?\b/i.test(unit.text);
+      // General dependency language around one named surface is explanatory,
+      // not a claim about a new edge. Only validate it as a relationship when
+      // the text connects multiple files or explicitly asserts a call.
+      if (mentionedPaths.length < 2 && !assertsCall) return true;
       const scopedCitations = unit.evidenceIds.length
         ? unit.evidenceIds
             .map((id) => citations.get(id))
@@ -359,7 +415,7 @@ export class ExplanationGroundingValidator {
         return false;
       }
       if (
-        /\bcalls?\b/i.test(unit.text) &&
+        assertsCall &&
         !scopedCitations.some(
           (citation) =>
             citation.provenance === "typescript_public_api_call" ||

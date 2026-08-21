@@ -305,6 +305,17 @@ describe("ExplanationGroundingValidator", () => {
       status: "invalid",
       failureCode: "unknown_file_path",
     });
+    const safelyRepaired = validator().repairUnknownFilePaths(
+      ungrounded,
+      packet,
+    );
+    expect(safelyRepaired.implementationSteps[0]?.detail).toBe(
+      "Update an unverified location before changing the boundary.",
+    );
+    expect(validator().validate(safelyRepaired, packet)).toEqual({
+      status: "valid",
+      explanation: safelyRepaired,
+    });
     expect(validator().validate(validExplanation, packet)).toEqual({
       status: "valid",
       explanation: validExplanation,
@@ -437,6 +448,25 @@ describe("ExplanationGroundingValidator", () => {
     ).toEqual({
       status: "invalid",
       failureCode: "unsupported_relationship",
+    });
+  });
+
+  it("allows general dependency wording around one cited surface", () => {
+    const conciseExplanation = {
+      ...validExplanation,
+      claims: validExplanation.claims.map((claim, index) =>
+        index === 0
+          ? {
+              text: "`src/api.ts` is the dependency surface to coordinate.",
+              evidenceIds: ["relationship:api-session"],
+            }
+          : claim,
+      ),
+    };
+
+    expect(validator().validate(conciseExplanation, packet)).toEqual({
+      status: "valid",
+      explanation: conciseExplanation,
     });
   });
 

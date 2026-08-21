@@ -66,7 +66,7 @@ describe("impact explanation schemas", () => {
     expect(responseFormat.json_schema.strict).toBe(true);
     expect(serialized).not.toContain('"const"');
     expect(serialized).not.toContain('"minLength"');
-    expect(serialized).toContain('"minItems":3');
+    expect(serialized).toContain('"minItems":2');
     expect(serialized).toContain('"minItems":1');
   });
 });

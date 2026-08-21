@@ -233,9 +233,23 @@ export async function getAtlasPilotMetrics(
 export async function getAtlasGraph(
   workspaceId: string,
   repositoryId: string,
+  options: {
+    entityId?: string;
+    depth?: 1 | 2 | 3;
+    direction?: "incoming" | "outgoing" | "both";
+    includeHistorical?: boolean;
+    includeInferred?: boolean;
+  } = {},
 ): Promise<AtlasGraph> {
+  const query = new URLSearchParams({
+    depth: String(options.depth ?? 3),
+    direction: options.direction ?? "both",
+    includeHistorical: String(options.includeHistorical ?? false),
+    includeInferred: String(options.includeInferred ?? true),
+  });
+  if (options.entityId) query.set("entityId", options.entityId);
   const response = await fetchAtlasApi(
-    `/v1/workspaces/${workspaceId}/repositories/${repositoryId}/intelligence/graph?depth=3&direction=both&includeInferred=true`,
+    `/v1/workspaces/${workspaceId}/repositories/${repositoryId}/intelligence/graph?${query.toString()}`,
     {
       cache: "no-store",
       headers: {

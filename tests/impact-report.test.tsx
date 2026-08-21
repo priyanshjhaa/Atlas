@@ -126,6 +126,10 @@ describe("ImpactReportPage", () => {
       screen.getByRole("heading", { name: "Change session validation" }),
     ).toBeInTheDocument();
     expect(
+      screen.queryByRole("heading", { name: "Verified Atlas report" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: /Atlas report/i }));
+    expect(
       screen.getByText(/change is anchored in lib\/auth\.ts/i),
     ).toBeVisible();
     expect(screen.getByLabelText("Change risk")).toBeVisible();
@@ -178,9 +182,8 @@ describe("ImpactReportPage", () => {
     const { unmount } = render(
       <ImpactReportPage report={documentedReport} />,
     );
-    expect(
-      screen.getByRole("heading", { name: "Notion context" }),
-    ).toBeVisible();
+    fireEvent.click(screen.getByRole("tab", { name: /Atlas report/i }));
+    fireEvent.click(screen.getByText("Documentation context"));
     expect(screen.getByText("ADR 12: Session validation")).toBeVisible();
     expect(screen.getByText("87% relevant", { exact: false })).toBeVisible();
     expect(
@@ -199,6 +202,8 @@ describe("ImpactReportPage", () => {
         }}
       />,
     );
+    fireEvent.click(screen.getByRole("tab", { name: /Atlas report/i }));
+    fireEvent.click(screen.getByText("Documentation context"));
     expect(
       screen.getByRole("heading", {
         name: "No documentation context available",
@@ -280,7 +285,10 @@ describe("ImpactReportPage", () => {
       <ImpactReportPage report={explainedReport} />,
     );
 
-    expect(screen.getByText("AI briefing")).toBeVisible();
+    expect(screen.getByRole("tab", { name: /AI briefing/i })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(
       screen.getByRole("heading", { name: "What this change means" }),
     ).toBeVisible();
@@ -295,20 +303,23 @@ describe("ImpactReportPage", () => {
     expect(screen.getByText("Coordinate the consumer")).toBeVisible();
     expect(screen.queryByText("Prepare the rollout")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Verified Atlas report" }),
-    ).toBeVisible();
+      screen.queryByRole("heading", { name: "Verified Atlas report" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Implementation guidance" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Findings" }),
+      screen.getByRole("link", { name: /Findings/i }),
     ).toHaveAttribute(
       "href",
       `/app/impact/${explainedReport.id}/findings`,
     );
+    fireEvent.click(screen.getByRole("tab", { name: /Atlas report/i }));
     expect(
-      screen.getByText(/change is anchored in lib\/auth\.ts/i),
+      screen.getByRole("heading", { name: "Verified Atlas report" }),
     ).toBeVisible();
+    expect(screen.queryByText("What this change means")).not.toBeInTheDocument();
+    expect(screen.getByText(/change is anchored in lib\/auth\.ts/i)).toBeVisible();
 
     rerender(<ImpactReportPage report={explainedReport} view="plan" />);
 
@@ -423,9 +434,7 @@ describe("ImpactReportPage", () => {
         }),
       ).toBeVisible();
     });
-    expect(
-      screen.getByRole("heading", { name: "Verified Atlas report" }),
-    ).toBeVisible();
+    expect(screen.getByRole("tab", { name: /Atlas report/i })).toBeVisible();
     expect(fetch).toHaveBeenCalledWith(
       `/api/impact-reports/${report.id}/explanation/retry`,
       expect.objectContaining({ method: "POST" }),

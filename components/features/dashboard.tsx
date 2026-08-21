@@ -170,7 +170,7 @@ export function DashboardPage({ userName, workspace, repositories, overview, gra
       </section>
 
       <div className="dashboard-grid cockpit-secondary-grid">
-        <section className="panel panel--graph"><div className="panel-heading"><div><span>Secondary system view</span><h2>Connected architecture graph</h2>{activeRepositories[0] && <small className="panel-context">{activeRepositories[0].owner}/{activeRepositories[0].name}</small>}</div><Link href="/app/graph">Explore map <ArrowRight size={14} /></Link></div><AtlasGraph compact graph={graph} repositories={activeRepositories} /></section>
+        <section className="panel panel--graph"><div className="panel-heading"><div><span>Secondary system view</span><h2>Connected architecture graph</h2>{activeRepositories[0] && <small className="panel-context">{activeRepositories[0].owner}/{activeRepositories[0].name}</small>}</div><Link href="/app/graph">Explore map <ArrowRight size={14} /></Link></div><AtlasGraph compact graph={graph} /></section>
         <section className="panel cockpit-investigations"><div className="panel-heading"><div><span>Suggested investigations</span><h2>Follow the context</h2></div><Sparkles size={18} /></div><div className="question-list">{suggestedQuestions.map(({ text, href, icon: Icon }, index) => <Link href={href} key={text}><span>0{index + 1}</span><Icon size={15} /><p>{text}</p><ArrowRight size={15} /></Link>)}</div></section>
       </div>
     </div>

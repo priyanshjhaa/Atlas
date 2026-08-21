@@ -104,6 +104,8 @@ function setup(options: {
   repairResult?: unknown;
   validationResult?: unknown;
   repairValidationResult?: unknown;
+  safeRepairResult?: unknown;
+  safeRepairValidationResult?: unknown;
   initialExplanation?: ImpactExplanationState | null;
 } = {}) {
   const storedReport = report(options.initialExplanation);
@@ -150,15 +152,33 @@ function setup(options: {
   const validate = vi
     .fn()
     .mockReturnValue(options.validationResult ?? defaultValidationResult);
-  if (options.repairValidationResult !== undefined) {
+  if (options.safeRepairValidationResult !== undefined) {
     validate
       .mockReturnValueOnce(
         options.validationResult ?? defaultValidationResult,
       )
-      .mockReturnValueOnce(options.repairValidationResult);
+      .mockReturnValueOnce(options.safeRepairValidationResult);
+  } else if (options.repairValidationResult !== undefined) {
+    validate.mockReturnValueOnce(
+      options.validationResult ?? defaultValidationResult,
+    );
+    if (
+      (options.validationResult as { failureCode?: string } | undefined)
+        ?.failureCode === "unknown_file_path"
+    ) {
+      validate.mockReturnValueOnce(
+        options.validationResult ?? defaultValidationResult,
+      );
+    }
+    validate.mockReturnValueOnce(options.repairValidationResult);
   }
   const validator = {
     validate,
+    repairUnknownFilePaths: vi
+      .fn()
+      .mockImplementation(
+        (candidate: unknown) => options.safeRepairResult ?? candidate,
+      ),
   };
   const repository = {
     updateExplanation: vi
@@ -356,7 +376,11 @@ describe("ExplanationGenerationService", () => {
     expect(validationSetup.client.generate).toHaveBeenCalledTimes(2);
   });
 
-  it("repairs one unknown file-path failure and combines provider usage", async () => {
+  it.each([
+    "unknown_file_path",
+    "unknown_symbol",
+    "unsupported_relationship",
+  ] as const)("repairs one %s failure and combines provider usage", async (failureCode) => {
     const repairedExplanation = {
       ...explanation,
       answer: "The repaired grounded answer.",
@@ -380,7 +404,7 @@ describe("ExplanationGenerationService", () => {
     const repairSetup = setup({
       validationResult: {
         status: "invalid",
-        failureCode: "unknown_file_path",
+        failureCode,
       },
       repairResult,
       repairValidationResult: {
@@ -397,7 +421,7 @@ describe("ExplanationGenerationService", () => {
       {
         repair: {
           candidate: explanation,
-          failureCode: "unknown_file_path",
+          failureCode,
         },
       },
     ]);
@@ -412,6 +436,37 @@ describe("ExplanationGenerationService", () => {
           totalTokens: 305,
         },
       },
+    });
+  });
+
+  it("repairs an unsupported file path locally without a second provider call", async () => {
+    const safelyRepaired = {
+      ...explanation,
+      answer: "Update an unverified location.",
+    };
+    const localRepairSetup = setup({
+      validationResult: {
+        status: "invalid",
+        failureCode: "unknown_file_path",
+      },
+      safeRepairResult: safelyRepaired,
+      safeRepairValidationResult: {
+        status: "valid",
+        explanation: safelyRepaired,
+      },
+    });
+
+    const result = await localRepairSetup.service.generate(
+      localRepairSetup.report,
+    );
+
+    expect(localRepairSetup.client.generate).toHaveBeenCalledOnce();
+    expect(
+      localRepairSetup.validator.repairUnknownFilePaths,
+    ).toHaveBeenCalledWith(explanation, packet);
+    expect(result.explanation).toMatchObject({
+      status: "completed",
+      explanation: safelyRepaired,
     });
   });
 

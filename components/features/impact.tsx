@@ -902,6 +902,9 @@ export function ImpactReportPage({
   const [currentReport, setCurrentReport] = useState(report);
   const [retryingExplanation, setRetryingExplanation] = useState(false);
   const [explanationRetryError, setExplanationRetryError] = useState("");
+  const [reportMode, setReportMode] = useState<"briefing" | "atlas">(
+    "briefing",
+  );
   const [feedbackRating, setFeedbackRating] = useState<
     "useful" | "not_useful" | null
   >(report.viewerFeedback?.rating ?? null);
@@ -925,6 +928,8 @@ export function ImpactReportPage({
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(result.generatedAt));
+  const affectedCount =
+    result.directImpacts.length + result.downstreamImpacts.length;
 
   async function retryExplanation() {
     setRetryingExplanation(true);
@@ -1016,46 +1021,19 @@ export function ImpactReportPage({
           )}
         </div>
       </div>
-      {report.input.pullRequest && (
-        <div className="pr-detail panel">
-          <span>GitHub pull request</span>
-          <h2>
-            {result.repository.owner}/{result.repository.name} #
-            {report.input.pullRequest.number}
-          </h2>
-          <p>
-            {report.input.pullRequest.analysisBudget?.filesRetrieved ??
-              report.input.pullRequest.changedFiles.length}{" "}
-            of{" "}
-            {report.input.pullRequest.analysisBudget?.totalChangedFiles ??
-              report.input.pullRequest.changedFiles.length}{" "}
-            files retrieved ·{" "}
-            {report.input.pullRequest.changedFiles.reduce(
-              (total, file) => total + file.additions,
-              0,
-            )}{" "}
-            additions ·{" "}
-            {report.input.pullRequest.changedFiles.reduce(
-              (total, file) => total + file.deletions,
-              0,
-            )}{" "}
-            deletions · {report.input.pullRequest.author}
-          </p>
-        </div>
-      )}
-      <section className="report-hero">
-        <div>
+      <section className="report-hero report-hero--compact">
+        <div className="report-hero__copy">
           <p className="eyebrow">
             <Sparkles size={14} /> Live impact report
           </p>
           <h1>{result.title}</h1>
-          <p>
-            {result.repository.owner}/{result.repository.name} ·{" "}
-            {result.sourceRevision.slice(0, 12)} ·{" "}
-            {result.scope === "workspace"
-              ? "Entire workspace"
-              : "Current repository"}
-          </p>
+          <div className="report-hero__metadata">
+            <span>{result.repository.owner}/{result.repository.name}</span>
+            {report.input.pullRequest ? (
+              <span>PR #{report.input.pullRequest.number} · {report.input.pullRequest.author}</span>
+            ) : null}
+            <span>Revision {result.sourceRevision.slice(0, 12)}</span>
+          </div>
         </div>
         <div className="risk-score" aria-label="Change risk">
           <span>Change risk</span>
@@ -1066,96 +1044,173 @@ export function ImpactReportPage({
           </strong>
           <p>{result.risk.reasons.join(" · ")}</p>
         </div>
+        <div className="impact-snapshot" aria-label="Impact at a glance">
+          <div>
+            <strong>{affectedCount}</strong>
+            <span>Affected</span>
+            <small>{result.directImpacts.length} direct · {result.downstreamImpacts.length} downstream</small>
+          </div>
+          <div>
+            <strong>{result.unknownImpacts.length}</strong>
+            <span>Unknowns</span>
+            <small>Explicit analysis gaps</small>
+          </div>
+          <div>
+            <strong>{result.evidence.length}</strong>
+            <span>Sources</span>
+            <small>Revision-bound evidence</small>
+          </div>
+          {report.input.pullRequest ? (
+            <div>
+              <strong>
+                {report.input.pullRequest.analysisBudget?.filesRetrieved ??
+                  report.input.pullRequest.changedFiles.length}
+              </strong>
+              <span>Files read</span>
+              <small>
+                +{report.input.pullRequest.changedFiles.reduce(
+                  (total, file) => total + file.additions,
+                  0,
+                )} · −{report.input.pullRequest.changedFiles.reduce(
+                  (total, file) => total + file.deletions,
+                  0,
+                )}
+              </small>
+            </div>
+          ) : null}
+        </div>
       </section>
-      <div className="report-workspace">
-        <ReportNavigation reportId={currentReport.id} activeView={view} />
+      <div className={`report-workspace ${view === "overview" ? "report-workspace--overview" : ""}`}>
+        {view !== "overview" ? (
+          <ReportNavigation reportId={currentReport.id} activeView={view} />
+        ) : null}
         <div className="report-workspace__content">
 
           {view === "overview" && (
         <div className="report-overview">
-          <AIExplanation
-            state={currentReport.explanation}
-            evidence={result.evidence}
-            limitations={result.limitations}
-            mode="overview"
-            retrying={retryingExplanation}
-            retryError={explanationRetryError}
-            onRetry={retryExplanation}
-          />
-          <section
-            className="verified-report verified-report--overview"
-            aria-labelledby="verified-report-title"
-          >
-            <header className="verified-report__intro">
-              <span>Source-backed analysis</span>
-              <h2 id="verified-report-title">Verified Atlas report</h2>
-              <p>
-                Review the deterministic, revision-bound conclusion separately
-                from the optional generated explanation that summarizes it.
-              </p>
-            </header>
-            <section className="executive-summary panel">
-              <div className="summary-icon">
-                <AlertTriangle size={21} />
-              </div>
-              <div>
-                <span>
-                  {result.status === "insufficient_evidence"
-                    ? "Verified evidence status"
-                    : "Verified Atlas analysis"}
-                </span>
-                <h2>{result.answer ?? result.executiveSummary}</h2>
-                <p>{result.executiveSummary}</p>
+          <div className="report-mode-switch" role="tablist" aria-label="Report view">
+            <button
+              id="report-briefing-tab"
+              type="button"
+              role="tab"
+              aria-selected={reportMode === "briefing"}
+              aria-controls="report-briefing-panel"
+              className={reportMode === "briefing" ? "active" : ""}
+              onClick={() => setReportMode("briefing")}
+            >
+              <Sparkles size={17} />
+              <span><b>AI briefing</b><small>Plain-language explanation</small></span>
+            </button>
+            <button
+              id="report-atlas-tab"
+              type="button"
+              role="tab"
+              aria-selected={reportMode === "atlas"}
+              aria-controls="report-atlas-panel"
+              className={reportMode === "atlas" ? "active" : ""}
+              onClick={() => setReportMode("atlas")}
+            >
+              <ShieldCheck size={17} />
+              <span><b>Atlas report</b><small>Verified source analysis</small></span>
+            </button>
+          </div>
+
+          {reportMode === "briefing" ? (
+            <div
+              id="report-briefing-panel"
+              role="tabpanel"
+              aria-labelledby="report-briefing-tab"
+            >
+              <AIExplanation
+                state={currentReport.explanation}
+                evidence={result.evidence}
+                limitations={result.limitations}
+                mode="overview"
+                retrying={retryingExplanation}
+                retryError={explanationRetryError}
+                onRetry={retryExplanation}
+              />
+            </div>
+          ) : (
+            <section
+              id="report-atlas-panel"
+              role="tabpanel"
+              className="verified-report verified-report--overview"
+              aria-labelledby="report-atlas-tab"
+            >
+              <header className="verified-report__intro">
+                <span><ShieldCheck size={13} /> Source-backed analysis</span>
+                <h2 id="verified-report-title">Verified Atlas report</h2>
                 <p>
-                  Derived from indexed source at revision{" "}
-                  <code>{result.sourceRevision.slice(0, 12)}</code>. Atlas keeps
-                  analysis gaps visible instead of filling them with assumptions.
+                  The deterministic conclusion tied to the indexed revision,
+                  with uncertainty kept visible.
                 </p>
-              </div>
-            </section>
-            <section className="report-section panel documentation-context">
-              <div className="panel-heading">
+              </header>
+              <section className="executive-summary panel">
+                <div className="summary-icon">
+                  <AlertTriangle size={21} />
+                </div>
                 <div>
-                  <span>Decisions and documentation</span>
-                  <h2>Notion context</h2>
-                </div>
-                <FileText size={17} />
-              </div>
-              {result.documentationContext?.status === "available" ? (
-                <div className="documentation-context__list">
-                  {result.documentationContext.evidence.map((item) => (
-                    <a
-                      href={item.url ?? "/app/sources"}
-                      target={item.url ? "_blank" : undefined}
-                      rel={item.url ? "noreferrer" : undefined}
-                      key={item.id}
-                    >
-                      <span>
-                        Notion · {Math.round(item.relevance * 100)}% relevant
-                      </span>
-                      <h3>{item.title}</h3>
-                      <p>{item.excerpt}</p>
-                      <small>
-                        {item.freshness
-                          ? `Synchronized ${new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(item.freshness))}`
-                          : `Revision ${item.sourceRevision.slice(0, 12)}`}
-                      </small>
-                    </a>
-                  ))}
-                </div>
-              ) : (
-                <div className="empty-state">
-                  <FileText size={18} />
-                  <h3>No documentation context available</h3>
+                  <span>
+                    {result.status === "insufficient_evidence"
+                      ? "Verified evidence status"
+                      : "Verified Atlas analysis"}
+                  </span>
+                  <h2>{result.answer ?? result.executiveSummary}</h2>
+                  <p>{result.executiveSummary}</p>
                   <p>
-                    Connect and synchronize selected Notion pages to cite ADRs,
-                    specifications, decisions, and runbooks alongside this report.
+                    Derived from indexed source at revision{" "}
+                    <code>{result.sourceRevision.slice(0, 12)}</code>. Atlas keeps
+                    analysis gaps visible instead of filling them with assumptions.
                   </p>
-                  <Link href="/app/sources">Review Notion sources</Link>
                 </div>
-              )}
+              </section>
+              <details className="report-disclosure panel">
+                <summary>
+                  <span><FileText size={16} /><b>Documentation context</b></span>
+                  <small>{result.documentationContext?.evidence.length ?? 0} linked records</small>
+                </summary>
+                <div className="documentation-context">
+                  {result.documentationContext?.status === "available" ? (
+                    <div className="documentation-context__list">
+                      {result.documentationContext.evidence.map((item) => (
+                        <a
+                          href={item.url ?? "/app/sources"}
+                          target={item.url ? "_blank" : undefined}
+                          rel={item.url ? "noreferrer" : undefined}
+                          key={item.id}
+                        >
+                          <span>Notion · {Math.round(item.relevance * 100)}% relevant</span>
+                          <h3>{item.title}</h3>
+                          <p>{item.excerpt}</p>
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="empty-state">
+                      <FileText size={18} />
+                      <h3>No documentation context available</h3>
+                      <p>Connect selected Notion pages to cite decisions and runbooks.</p>
+                      <Link href="/app/sources">Review Notion sources</Link>
+                    </div>
+                  )}
+                </div>
+              </details>
             </section>
-          </section>
+          )}
+
+          <nav className="report-detail-links" aria-label="Explore report details">
+            <span>Explore the evidence</span>
+            <Link href={`/app/impact/${currentReport.id}/findings`}>
+              <Network size={15} /><b>Findings</b><small>Blast radius</small><ArrowRight size={14} />
+            </Link>
+            <Link href={`/app/impact/${currentReport.id}/plan`}>
+              <Check size={15} /><b>Plan</b><small>Next actions</small><ArrowRight size={14} />
+            </Link>
+            <Link href={`/app/impact/${currentReport.id}/evidence`}>
+              <FileText size={15} /><b>Evidence</b><small>Source records</small><ArrowRight size={14} />
+            </Link>
+          </nav>
         </div>
       )}
 
