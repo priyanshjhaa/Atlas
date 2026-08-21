@@ -142,7 +142,7 @@ export class ExplanationGenerationService {
       );
       if (
         validation.status === "invalid" &&
-        validation.failureCode === "unknown_file_path"
+        this.canRepair(validation.failureCode)
       ) {
         const repaired = await this.client.generate(packetResult.packet, {
           repair: {
@@ -201,6 +201,14 @@ export class ExplanationGenerationService {
         "not_run",
       );
     }
+  }
+
+  private canRepair(failureCode: ImpactExplanationFailureCode): boolean {
+    return (
+      failureCode === "unknown_file_path" ||
+      failureCode === "unknown_symbol" ||
+      failureCode === "unsupported_relationship"
+    );
   }
 
   private combinedGenerationMetadata(

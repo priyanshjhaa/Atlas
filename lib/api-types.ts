@@ -35,8 +35,11 @@ export interface AtlasRepository {
 export interface AtlasGraphNode {
   id: string;
   repositoryId: string;
-  repositoryOwner: string;
-  repositoryName: string;
+  /** Canonical repository label returned by the graph API. */
+  repository: string;
+  /** Transitional fields accepted from older API deployments. */
+  repositoryOwner?: string;
+  repositoryName?: string;
   entityType: string;
   stableKey: string;
   name: string;
@@ -78,9 +81,62 @@ export interface AtlasArchitectureSnapshot {
   repositoryId: string;
   sourceRevision: string;
   summary: string;
-  moduleMap: Record<string, unknown>;
+  moduleMap: AtlasArchitectureModuleMap;
   diagram: string;
   generatedAt: string;
+}
+
+export interface AtlasArchitectureModuleNode {
+  id: string;
+  label: string;
+  kind: "folder" | "module" | "service";
+}
+
+export interface AtlasArchitectureModuleEdge {
+  from: string;
+  to: string;
+  type: "imports";
+  confidence: number;
+  provenance: string;
+}
+
+export interface AtlasArchitectureModuleMap {
+  readiness: "complete" | "partial";
+  generatedFrom: string;
+  moduleNodes: AtlasArchitectureModuleNode[];
+  moduleEdges: AtlasArchitectureModuleEdge[];
+  entryPoints: string[];
+  recommendedReads: string[];
+  stats: {
+    filesIndexed: number;
+    symbolsExtracted: number;
+    callsDetected: number;
+    relationshipsObserved: number;
+    crossModuleEdges: number;
+    rootDirectories: string[];
+    typeChecker: {
+      filesAnalyzed: number;
+      importsResolved: number;
+      pathAliasesResolved: number;
+      workspaceImportsResolved: number;
+      publicApiSymbols: number;
+      diagnosticCount: number;
+      configFilePath: string | null;
+      configuredRootFiles: number;
+      projectConfigPaths: string[];
+      projectReferences: number;
+    } | null;
+    workspace: {
+      packageCount: number;
+      packages: Array<{
+        name: string;
+        rootPath: string;
+        entryPoints: string[];
+        dependencyNames: string[];
+      }>;
+      warningCount: number;
+    } | null;
+  };
 }
 
 export interface AtlasIntelligenceSearchResult {

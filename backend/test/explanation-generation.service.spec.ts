@@ -356,7 +356,11 @@ describe("ExplanationGenerationService", () => {
     expect(validationSetup.client.generate).toHaveBeenCalledTimes(2);
   });
 
-  it("repairs one unknown file-path failure and combines provider usage", async () => {
+  it.each([
+    "unknown_file_path",
+    "unknown_symbol",
+    "unsupported_relationship",
+  ] as const)("repairs one %s failure and combines provider usage", async (failureCode) => {
     const repairedExplanation = {
       ...explanation,
       answer: "The repaired grounded answer.",
@@ -380,7 +384,7 @@ describe("ExplanationGenerationService", () => {
     const repairSetup = setup({
       validationResult: {
         status: "invalid",
-        failureCode: "unknown_file_path",
+        failureCode,
       },
       repairResult,
       repairValidationResult: {
@@ -397,7 +401,7 @@ describe("ExplanationGenerationService", () => {
       {
         repair: {
           candidate: explanation,
-          failureCode: "unknown_file_path",
+          failureCode,
         },
       },
     ]);

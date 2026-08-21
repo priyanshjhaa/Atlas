@@ -2,16 +2,29 @@
 
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
+  ArrowDownLeft,
+  ArrowUpRight,
+  BookOpen,
+  Boxes,
+  CheckCircle2,
+  ChevronRight,
+  CircleDot,
+  Code2,
   FileCode2,
   FileText,
   Filter,
+  GitFork,
+  Layers3,
+  Map as MapIcon,
   Network,
   RefreshCw,
+  Route,
   Search,
   ShieldCheck,
+  Workflow,
 } from "lucide-react";
 import { AtlasGraph } from "@/components/atlas-graph";
 import { ConfidenceBadge } from "@/components/brand";
@@ -30,27 +43,128 @@ function readable(value: string) {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+function graphRepositoryLabel(
+  node: AtlasGraphData["nodes"][number],
+  repositories: AtlasRepository[],
+) {
+  if (node.repository) return node.repository;
+  if (node.repositoryOwner && node.repositoryName) {
+    return `${node.repositoryOwner}/${node.repositoryName}`;
+  }
+  const repository = repositories.find((item) => item.id === node.repositoryId);
+  return repository ? `${repository.owner}/${repository.name}` : "Repository unavailable";
+}
+
+function relationshipLabel(kind: string, incoming: boolean) {
+  const labels: Record<string, [string, string]> = {
+    contains: ["Part of", "Contains"],
+    declares: ["Declared by", "Declares"],
+    imports: ["Used by", "Uses"],
+    depends_on: ["Used by", "Depends on"],
+    references_symbol: ["Referenced by", "References"],
+    calls_api: ["Called by", "Calls"],
+    imports_api: ["API used by", "Uses API"],
+  };
+  return (labels[kind] ?? ["Connected from", "Connects to"])[incoming ? 0 : 1];
+}
+
+function DependencyLane({
+  title,
+  description,
+  edges,
+  selectedNode,
+  nodeById,
+  onSelect,
+  incoming,
+}: {
+  title: string;
+  description: string;
+  edges: AtlasGraphData["edges"];
+  selectedNode: AtlasGraphData["nodes"][number];
+  nodeById: Map<string, AtlasGraphData["nodes"][number]>;
+  onSelect: (nodeId: string) => void;
+  incoming: boolean;
+}) {
+  const DirectionIcon = incoming ? ArrowDownLeft : ArrowUpRight;
+  return (
+    <section className={`dependency-lane dependency-lane--${incoming ? "incoming" : "outgoing"}`}>
+      <header>
+        <div><DirectionIcon size={16} /></div>
+        <div><h3>{title}</h3><p>{description}</p></div>
+        <b>{edges.length}</b>
+      </header>
+      <div className="dependency-lane__items">
+        {edges.slice(0, 6).map((edge) => {
+          const counterpartId = incoming ? edge.sourceEntityId : edge.targetEntityId;
+          const counterpart = nodeById.get(counterpartId);
+          return (
+            <button type="button" onClick={() => onSelect(counterpartId)} key={edge.id}>
+              <i>{relationshipLabel(edge.kind, incoming)}</i>
+              <span>
+                <strong>{counterpart?.name ?? "Connected entity"}</strong>
+                <small>{counterpart ? readable(counterpart.entityType) : "Entity"}{edge.classification === "inferred" ? " · Suggested" : ""}</small>
+              </span>
+              <ChevronRight size={14} />
+            </button>
+          );
+        })}
+        {edges.length > 6 && <p className="dependency-lane__more">+{edges.length - 6} more relationships in the full map</p>}
+        {!edges.length && (
+          <p className="dependency-lane__empty">
+            {incoming
+              ? `Nothing relies on ${selectedNode.name} in this view.`
+              : `${selectedNode.name} does not rely on anything in this view.`}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function GraphPage({
   workspace,
   repositories,
   graph,
-  architectureSnapshot = null,
-  architecture = false,
+  selectedRepositoryId,
+  traversal,
 }: {
   workspace: AtlasWorkspace;
   repositories: AtlasRepository[];
   graph: AtlasGraphData | null;
-  architectureSnapshot?: AtlasArchitectureSnapshot | null;
-  architecture?: boolean;
+  selectedRepositoryId: string;
+  traversal: {
+    depth: 1 | 2 | 3;
+    direction: "incoming" | "outgoing" | "both";
+    includeHistorical: boolean;
+    includeInferred: boolean;
+  };
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [entityType, setEntityType] = useState("all");
   const [classification, setClassification] = useState<
     "all" | "observed" | "historical" | "inferred"
   >("all");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"story" | "map">("story");
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
+    graph?.rootEntityId ?? null,
+  );
   const [isRefreshing, startRefresh] = useTransition();
+  const availableRepositories = repositories.filter(
+    (repository) => repository.isActive && repository.lastSyncedAt,
+  );
+
+  function updateLocation(updates: Record<string, string | null>) {
+    const params = new URLSearchParams(searchParams.toString());
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null) params.delete(key);
+      else params.set(key, value);
+    }
+    startRefresh(() => router.replace(`${pathname}?${params.toString()}`));
+  }
 
   const entityTypes = useMemo(
     () => [
@@ -66,7 +180,7 @@ export function GraphPage({
       (node) =>
         (entityType === "all" || node.entityType === entityType) &&
         (!normalized ||
-          `${node.name} ${node.path ?? ""} ${node.repositoryOwner}/${node.repositoryName}`
+          `${node.name} ${node.path ?? ""} ${graphRepositoryLabel(node, repositories)}`
             .toLowerCase()
             .includes(normalized)),
     );
@@ -82,8 +196,9 @@ export function GraphPage({
             edge.classification === classification),
       ),
     };
-  }, [classification, entityType, graph, query]);
+  }, [classification, entityType, graph, query, repositories]);
   const selectedNode =
+    visibleGraph?.nodes.find((node) => node.id === selectedNodeId) ??
     visibleGraph?.nodes.find((node) => node.id === graph?.rootEntityId) ??
     visibleGraph?.nodes[0] ??
     null;
@@ -94,24 +209,24 @@ export function GraphPage({
           edge.targetEntityId === selectedNode.id,
       )
     : [];
-  const lastGenerated = architectureSnapshot?.generatedAt
-    ? new Intl.DateTimeFormat("en", {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }).format(new Date(architectureSnapshot.generatedAt))
-    : null;
+  const nodeById = new Map((visibleGraph?.nodes ?? []).map((node) => [node.id, node]));
+  const incomingRelationships = selectedNode
+    ? selectedRelationships.filter((edge) => edge.targetEntityId === selectedNode.id)
+    : [];
+  const outgoingRelationships = selectedNode
+    ? selectedRelationships.filter((edge) => edge.sourceEntityId === selectedNode.id)
+    : [];
 
   return (
-    <div className={`explore-page ${architecture ? "explore-page--architecture" : "explore-page--graph"}`}>
+    <div className="explore-page explore-page--graph engineering-explorer">
       <header className="explore-intro">
         <div className="explore-intro__copy">
-          <span>{architecture ? "System architecture" : "Engineering knowledge graph"}</span>
-          <h1>{architecture ? `How ${workspace.name} fits together` : `Explore ${workspace.name}`}</h1>
+          <span>Engineering knowledge graph</span>
+          <h1>Trace how {workspace.name} works</h1>
           <p>
-            {architectureSnapshot?.summary ??
-              (graph
-                ? `${graph.nodes.length} current and historical repository, package, file, and symbol entities connected by ${graph.edges.length} observed, historical, or inferred relationships at a specific source revision.`
-                : "Synchronize a GitHub repository to resolve packages, files, symbols, imports, API relationships, and cross-repository paths into a source-backed graph.")}
+            {graph
+              ? `Choose an item to see what relies on it and what it relies on. ${graph.nodes.length} source-backed ${graph.nodes.length === 1 ? "item" : "items"} are connected by ${graph.edges.length} ${graph.edges.length === 1 ? "relationship" : "relationships"}.`
+              : "Synchronize a GitHub repository to resolve packages, files, symbols, imports, API relationships, and cross-repository paths into a source-backed graph."}
           </p>
         </div>
         <div className="explore-intro__telemetry">
@@ -123,16 +238,28 @@ export function GraphPage({
             disabled={isRefreshing}
           >
             <RefreshCw className={isRefreshing ? "spin" : ""} size={14} />
-            {isRefreshing
-              ? "Refreshing…"
-              : lastGenerated
-                ? `Generated ${lastGenerated}`
-                : "Refresh"}
+            {isRefreshing ? "Loading map…" : "Refresh graph"}
           </button>
         </div>
       </header>
 
-      <div className="graph-toolbar">
+      <div className="graph-command-bar">
+        <label className="graph-repository-select">
+          <span>Repository</span>
+          <select
+            value={selectedRepositoryId}
+            onChange={(event) =>
+              updateLocation({ repository: event.target.value, entity: null })
+            }
+            disabled={isRefreshing}
+          >
+            {availableRepositories.map((repository) => (
+              <option value={repository.id} key={repository.id}>
+                {repository.owner}/{repository.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="search-input">
           <Search size={15} />
           <input
@@ -150,6 +277,61 @@ export function GraphPage({
           <Filter size={14} /> Filters
         </button>
       </div>
+
+      <details className="graph-advanced-controls">
+        <summary>
+          <span><b>Advanced graph controls</b><small>Depth, direction, suggested paths, and history</small></span>
+          <ChevronRight size={16} />
+        </summary>
+        <div className="graph-scope-bar" aria-label="Graph traversal controls">
+        <div>
+          <span>Depth</span>
+          {[1, 2, 3].map((depth) => (
+            <button
+              className={traversal.depth === depth ? "active" : ""}
+              onClick={() => updateLocation({ depth: String(depth), entity: null })}
+              disabled={isRefreshing}
+              key={depth}
+            >
+              {depth} hop{depth === 1 ? "" : "s"}
+            </button>
+          ))}
+        </div>
+        <div>
+          <span>Direction</span>
+          {(["incoming", "both", "outgoing"] as const).map((direction) => (
+            <button
+              className={traversal.direction === direction ? "active" : ""}
+              onClick={() => updateLocation({ direction, entity: null })}
+              disabled={isRefreshing}
+              key={direction}
+            >
+              {readable(direction)}
+            </button>
+          ))}
+        </div>
+        <label className="graph-switch">
+          <input
+            type="checkbox"
+            checked={traversal.includeInferred}
+            onChange={(event) =>
+              updateLocation({ inferred: String(event.target.checked), entity: null })
+            }
+          />
+          <span /> Inferred paths
+        </label>
+        <label className="graph-switch">
+          <input
+            type="checkbox"
+            checked={traversal.includeHistorical}
+            onChange={(event) =>
+              updateLocation({ historical: String(event.target.checked), entity: null })
+            }
+          />
+          <span /> History
+        </label>
+        </div>
+      </details>
 
       {filtersOpen && (
         <div className="inline-filter-panel">
@@ -182,16 +364,83 @@ export function GraphPage({
         </div>
       )}
 
-      <div className="graph-layout">
+      <div className={`graph-layout graph-layout--${viewMode}`}>
         <section className="panel graph-canvas">
-          <AtlasGraph
-            graph={visibleGraph}
-            repositories={repositories.filter(
-              (repository) => repository.isActive,
+          <header className="graph-view-toolbar">
+            <div>
+              <span>Viewing from</span>
+              <strong>{selectedNode?.name ?? "Repository root"}</strong>
+              <small>{selectedRelationships.length} connected {selectedRelationships.length === 1 ? "relationship" : "relationships"}</small>
+            </div>
+            <div className="graph-view-switch" aria-label="Graph view">
+              <button type="button" className={viewMode === "story" ? "active" : ""} aria-pressed={viewMode === "story"} onClick={() => setViewMode("story")}>
+                <CircleDot size={14} /> Simple view
+              </button>
+              <button type="button" className={viewMode === "map" ? "active" : ""} aria-pressed={viewMode === "map"} onClick={() => setViewMode("map")}>
+                <MapIcon size={14} /> Full map
+              </button>
+            </div>
+            {viewMode === "map" && (
+              <div className="graph-legend" aria-label="Relationship legend">
+                <span><i className="observed" /> Observed</span>
+                <span><i className="inferred" /> Suggested</span>
+              </div>
             )}
-          />
+          </header>
+          {viewMode === "map" ? (
+            <AtlasGraph
+              graph={visibleGraph}
+              selectedNodeId={selectedNode?.id}
+              onNodeSelect={setSelectedNodeId}
+            />
+          ) : selectedNode ? (
+            <div className="dependency-story">
+              <DependencyLane
+                title="What uses this"
+                description="Items that rely on the focus"
+                edges={incomingRelationships}
+                selectedNode={selectedNode}
+                nodeById={nodeById}
+                onSelect={setSelectedNodeId}
+                incoming
+              />
+              <section className="dependency-focus" aria-label={`Current focus: ${selectedNode.name}`}>
+                <div className="dependency-focus__pulse"><CircleDot size={20} /></div>
+                <span>{readable(selectedNode.entityType)}</span>
+                <h2>{selectedNode.name}</h2>
+                <p>{selectedNode.path ?? graphRepositoryLabel(selectedNode, repositories)}</p>
+                <div className="dependency-focus__summary">
+                  <div><strong>{incomingRelationships.length}</strong><span>use this</span></div>
+                  <i><ArrowRight size={18} /></i>
+                  <div><strong>{outgoingRelationships.length}</strong><span>this uses</span></div>
+                </div>
+                <small>Select any item beside this card to follow its story.</small>
+                <div className="dependency-focus__actions">
+                  {selectedNode.id !== graph?.rootEntityId && (
+                    <button className="button button--secondary" onClick={() => updateLocation({ entity: selectedNode.id })} disabled={isRefreshing}>
+                      Explore from here
+                    </button>
+                  )}
+                  <Link href={`/app/impact/new?repository=${selectedNode.repositoryId}`} className="button button--primary">
+                    Analyze a change <ArrowRight size={14} />
+                  </Link>
+                </div>
+              </section>
+              <DependencyLane
+                title="What this uses"
+                description="Items the focus relies on"
+                edges={outgoingRelationships}
+                selectedNode={selectedNode}
+                nodeById={nodeById}
+                onSelect={setSelectedNodeId}
+                incoming={false}
+              />
+            </div>
+          ) : (
+            <div className="empty-state"><Network size={20} /><h2>No relationships in view</h2></div>
+          )}
         </section>
-        <aside className="panel entity-inspector">
+        {viewMode === "map" && <aside className="panel entity-inspector">
           {selectedNode ? (
             <>
               <div className="entity-icon">
@@ -204,14 +453,13 @@ export function GraphPage({
               <h2>{selectedNode.name}</h2>
               <p>
                 {selectedNode.path ??
-                  `${selectedNode.repositoryOwner}/${selectedNode.repositoryName}`}
+                  graphRepositoryLabel(selectedNode, repositories)}
               </p>
               <div className="entity-meta">
                 <div>
                   <span>Repository</span>
                   <b>
-                    {selectedNode.repositoryOwner}/
-                    {selectedNode.repositoryName}
+                    {graphRepositoryLabel(selectedNode, repositories)}
                   </b>
                 </div>
                 <div>
@@ -222,26 +470,51 @@ export function GraphPage({
                   <span>Relationships</span>
                   <b>{selectedRelationships.length}</b>
                 </div>
+                <div>
+                  <span>Graph role</span>
+                  <b>{selectedNode.id === graph?.rootEntityId ? "Traversal root" : "Connected entity"}</b>
+                </div>
               </div>
-              <details className="relationship-disclosure">
+              <details className="relationship-disclosure" open>
                 <summary>
                   Connected relationships
                   <span>{selectedRelationships.length}</span>
                 </summary>
                 <div className="relationship-list">
                   {selectedRelationships.slice(0, 6).map((edge) => (
-                    <div key={edge.id}>
-                      <span>{readable(edge.kind)}</span>
-                      <b>{readable(edge.classification)}</b>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const counterpart = edge.sourceEntityId === selectedNode.id
+                          ? edge.targetEntityId
+                          : edge.sourceEntityId;
+                        setSelectedNodeId(counterpart);
+                      }}
+                      key={edge.id}
+                    >
+                      <span>
+                        <b>{readable(edge.kind)}</b>
+                        <small>{nodeById.get(edge.sourceEntityId === selectedNode.id ? edge.targetEntityId : edge.sourceEntityId)?.name ?? "Connected entity"}</small>
+                      </span>
+                      <i>{Math.round(edge.confidence * 100)}%</i>
+                    </button>
                   ))}
                   {!selectedRelationships.length && (
                     <p>No relationships match the current filters.</p>
                   )}
                 </div>
               </details>
+              {selectedNode.id !== graph?.rootEntityId && (
+                <button
+                  className="button button--secondary"
+                  onClick={() => updateLocation({ entity: selectedNode.id })}
+                  disabled={isRefreshing}
+                >
+                  <CircleDot size={14} /> Explore from this entity
+                </button>
+              )}
               <Link
-                href="/app/impact/new"
+                href={`/app/impact/new?repository=${selectedNode.repositoryId}`}
                 className="button button--primary"
               >
                 Analyze a change here <ArrowRight size={15} />
@@ -254,8 +527,216 @@ export function GraphPage({
               <p>Change the filters or synchronize an active repository.</p>
             </div>
           )}
-        </aside>
+        </aside>}
       </div>
+      {graph?.truncated && (
+        <p className="graph-limit-note">
+          This view reached the safe graph limit. Focus an entity or reduce traversal depth for a more precise map.
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function ArchitecturePage({
+  workspace,
+  repositories,
+  selectedRepositoryId,
+  architectureSnapshot,
+}: {
+  workspace: AtlasWorkspace;
+  repositories: AtlasRepository[];
+  selectedRepositoryId: string;
+  architectureSnapshot: AtlasArchitectureSnapshot | null;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [isRefreshing, startRefresh] = useTransition();
+  const modules = architectureSnapshot?.moduleMap.moduleNodes ?? [];
+  const edges = architectureSnapshot?.moduleMap.moduleEdges ?? [];
+  const stats = architectureSnapshot?.moduleMap.stats;
+  const [selectedModuleId, setSelectedModuleId] = useState(modules[0]?.id ?? null);
+  const selectedModule = modules.find((module) => module.id === selectedModuleId) ?? modules[0] ?? null;
+  const availableRepositories = repositories.filter(
+    (repository) => repository.isActive && repository.lastSyncedAt,
+  );
+
+  function selectRepository(repositoryId: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("repository", repositoryId);
+    startRefresh(() => router.replace(`${pathname}?${params.toString()}`));
+  }
+
+  const selectedConnections = selectedModule
+    ? edges.filter((edge) => edge.from === selectedModule.id || edge.to === selectedModule.id)
+    : [];
+  const generatedAt = architectureSnapshot
+    ? new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(
+        new Date(architectureSnapshot.generatedAt),
+      )
+    : null;
+
+  return (
+    <div className="explore-page explore-page--architecture architecture-workspace engineering-explorer">
+      <header className="explore-intro architecture-intro">
+        <div className="explore-intro__copy">
+          <span>Observed system architecture</span>
+          <h1>Understand how {workspace.name} is assembled</h1>
+          <p>
+            {architectureSnapshot?.summary ??
+              "Synchronize a repository to build a source-backed module map, identify entry points, and trace observed imports across the system."}
+          </p>
+        </div>
+        <div className="architecture-provenance">
+          <ShieldCheck size={18} />
+          <div>
+            <span>{architectureSnapshot?.moduleMap.generatedFrom.replaceAll("_", " ") ?? "Awaiting static analysis"}</span>
+            <strong>{generatedAt ? `Generated ${generatedAt}` : "No snapshot available"}</strong>
+          </div>
+        </div>
+      </header>
+
+      <div className="architecture-command-bar">
+        <label>
+          <span>Repository architecture</span>
+          <select
+            value={selectedRepositoryId}
+            onChange={(event) => selectRepository(event.target.value)}
+            disabled={isRefreshing}
+          >
+            {availableRepositories.map((repository) => (
+              <option value={repository.id} key={repository.id}>
+                {repository.owner}/{repository.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div>
+          <span className={`architecture-readiness architecture-readiness--${architectureSnapshot?.moduleMap.readiness ?? "partial"}`}>
+            <CheckCircle2 size={13} /> {architectureSnapshot?.moduleMap.readiness ?? "Not indexed"}
+          </span>
+          <Link className="button button--secondary" href={`/app/graph?repository=${selectedRepositoryId}`}>
+            <Network size={14} /> Open dependency graph
+          </Link>
+          <button
+            className="button button--ghost"
+            onClick={() => startRefresh(() => router.refresh())}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={isRefreshing ? "spin" : ""} size={14} />
+            {isRefreshing ? "Refreshing…" : "Refresh snapshot"}
+          </button>
+        </div>
+      </div>
+
+      {architectureSnapshot && stats ? (
+        <>
+          <section className="architecture-metrics" aria-label="Architecture coverage">
+            <article><FileCode2 size={17} /><strong>{stats.filesIndexed}</strong><span>files indexed</span></article>
+            <article><Code2 size={17} /><strong>{stats.symbolsExtracted}</strong><span>symbols extracted</span></article>
+            <article><Route size={17} /><strong>{stats.callsDetected}</strong><span>calls detected</span></article>
+            <article><GitFork size={17} /><strong>{stats.crossModuleEdges}</strong><span>module links</span></article>
+          </section>
+
+          <div className="architecture-map-layout">
+            <section className="panel architecture-map-panel">
+              <div className="architecture-section-heading">
+                <div><span>Module atlas</span><h2>Choose an area to inspect its dependencies</h2></div>
+                <small>{modules.length} observed areas</small>
+              </div>
+              <div className="architecture-map-root">
+                <Network size={18} />
+                <div><span>Repository system</span><strong>{availableRepositories.find((item) => item.id === selectedRepositoryId)?.name}</strong></div>
+              </div>
+              <div className="architecture-module-grid">
+                {modules.map((module) => {
+                  const connectionCount = edges.filter((edge) => edge.from === module.id || edge.to === module.id).length;
+                  const Icon = module.kind === "service" ? Workflow : module.kind === "module" ? Boxes : Layers3;
+                  return (
+                    <button
+                      className={selectedModule?.id === module.id ? "active" : ""}
+                      onClick={() => setSelectedModuleId(module.id)}
+                      aria-label={`${readable(module.kind)} ${module.label}, ${connectionCount} connection${connectionCount === 1 ? "" : "s"}`}
+                      aria-pressed={selectedModule?.id === module.id}
+                      key={module.id}
+                    >
+                      <Icon size={16} />
+                      <span>{module.kind}</span>
+                      <strong>{module.label}</strong>
+                      <small>{connectionCount} connection{connectionCount === 1 ? "" : "s"}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <aside className="panel architecture-inspector">
+              {selectedModule ? (
+                <>
+                  <span>{selectedModule.kind} area</span>
+                  <h2>{selectedModule.label}</h2>
+                  <p>{selectedModule.id}</p>
+                  <div className="architecture-connection-summary">
+                    <div><strong>{selectedConnections.filter((edge) => edge.from === selectedModule.id).length}</strong><span>dependencies</span></div>
+                    <div><strong>{selectedConnections.filter((edge) => edge.to === selectedModule.id).length}</strong><span>consumers</span></div>
+                  </div>
+                  <div className="architecture-connection-list">
+                    {selectedConnections.map((edge) => {
+                      const incoming = edge.to === selectedModule.id;
+                      const counterpartId = incoming ? edge.from : edge.to;
+                      const counterpart = modules.find((module) => module.id === counterpartId);
+                      return (
+                        <button onClick={() => setSelectedModuleId(counterpartId)} key={`${edge.from}:${edge.to}`}>
+                          <i>{incoming ? "Used by" : "Imports"}</i>
+                          <span>{counterpart?.label ?? counterpartId}</span>
+                          <ChevronRight size={13} />
+                        </button>
+                      );
+                    })}
+                    {!selectedConnections.length && <p>No cross-module imports were observed for this area.</p>}
+                  </div>
+                </>
+              ) : (
+                <div className="empty-state"><Boxes size={20} /><h2>No module areas</h2></div>
+              )}
+            </aside>
+          </div>
+
+          <div className="architecture-reading-grid">
+            <section className="panel architecture-reading-panel">
+              <div className="architecture-section-heading"><div><span>Start here</span><h2>System entry points</h2></div><CircleDot size={17} /></div>
+              <div className="architecture-path-list">
+                {architectureSnapshot.moduleMap.entryPoints.map((path, index) => (
+                  <div key={path}><i>{String(index + 1).padStart(2, "0")}</i><code>{path}</code></div>
+                ))}
+                {!architectureSnapshot.moduleMap.entryPoints.length && <p>No conventional entry points were detected.</p>}
+              </div>
+            </section>
+            <section className="panel architecture-reading-panel">
+              <div className="architecture-section-heading"><div><span>Reading path</span><h2>Files that explain the system</h2></div><BookOpen size={17} /></div>
+              <div className="architecture-path-list">
+                {architectureSnapshot.moduleMap.recommendedReads.map((path, index) => (
+                  <div key={path}><i>{String(index + 1).padStart(2, "0")}</i><code>{path}</code></div>
+                ))}
+                {!architectureSnapshot.moduleMap.recommendedReads.length && <p>No recommended files are available yet.</p>}
+              </div>
+            </section>
+          </div>
+
+          <footer className="architecture-evidence-note">
+            <ShieldCheck size={15} />
+            <span>Snapshot pinned to revision <code>{architectureSnapshot.sourceRevision.slice(0, 12)}</code>. Relationships represent observed static imports, not assumed runtime traffic.</span>
+          </footer>
+        </>
+      ) : (
+        <section className="panel architecture-empty-state">
+          <Network size={25} />
+          <h2>No architecture snapshot yet</h2>
+          <p>Connect and synchronize an active repository. Atlas will derive modules, entry points, static imports, symbols, and a guided reading path from that revision.</p>
+          <Link href="/app/sources" className="button button--primary">Open sources <ArrowRight size={14} /></Link>
+        </section>
+      )}
     </div>
   );
 }

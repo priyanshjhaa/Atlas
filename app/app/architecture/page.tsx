@@ -1,30 +1,38 @@
-import { GraphPage } from "@/components/features/explore";
+import { ArchitecturePage } from "@/components/features/explore";
 import {
   getAtlasArchitecture,
-  getAtlasGraph,
   getAtlasWorkspaceData,
 } from "@/lib/workspace-api";
 
-export default async function Page() {
+function first(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { activeWorkspace, repositories } =
     await getAtlasWorkspaceData();
-  const repository = repositories.find(
+  const params = await searchParams;
+  const availableRepositories = repositories.filter(
     (item) => item.isActive && item.lastSyncedAt,
   );
-  const [graph, architectureSnapshot] = repository
-    ? await Promise.all([
-        getAtlasGraph(activeWorkspace.id, repository.id).catch(() => null),
-        getAtlasArchitecture(activeWorkspace.id, repository.id).catch(
-          () => null,
-        ),
-      ])
-    : [null, null];
+  const repository =
+    availableRepositories.find((item) => item.id === first(params.repository)) ??
+    availableRepositories[0];
+  const architectureSnapshot = repository
+    ? await getAtlasArchitecture(activeWorkspace.id, repository.id).catch(
+        () => null,
+      )
+    : null;
   return (
-    <GraphPage
-      architecture
+    <ArchitecturePage
+      key={`${repository?.id ?? "empty"}:${architectureSnapshot?.id ?? "snapshot"}`}
       workspace={activeWorkspace}
       repositories={repositories}
-      graph={graph}
+      selectedRepositoryId={repository?.id ?? ""}
       architectureSnapshot={architectureSnapshot}
     />
   );

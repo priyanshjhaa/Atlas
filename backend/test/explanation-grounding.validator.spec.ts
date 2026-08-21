@@ -440,6 +440,25 @@ describe("ExplanationGroundingValidator", () => {
     });
   });
 
+  it("allows general dependency wording around one cited surface", () => {
+    const conciseExplanation = {
+      ...validExplanation,
+      claims: validExplanation.claims.map((claim, index) =>
+        index === 0
+          ? {
+              text: "`src/api.ts` is the dependency surface to coordinate.",
+              evidenceIds: ["relationship:api-session"],
+            }
+          : claim,
+      ),
+    };
+
+    expect(validator().validate(conciseExplanation, packet)).toEqual({
+      status: "valid",
+      explanation: conciseExplanation,
+    });
+  });
+
   it("accepts calls backed by an indexed public API call edge", () => {
     const packetWithCall: ImpactEvidencePacket = {
       ...packet,

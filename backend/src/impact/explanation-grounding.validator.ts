@@ -163,11 +163,11 @@ export class ExplanationGroundingValidator {
       return { status: "invalid", failureCode: "missing_unknown_impact" };
     }
     if (
-      explanation.claims.length < 3 ||
+      explanation.claims.length < 2 ||
       explanation.claims.length > 6 ||
-      explanation.implementationSteps.length < 3 ||
+      explanation.implementationSteps.length < 2 ||
       explanation.implementationSteps.length > 5 ||
-      explanation.verificationSteps.length < 3 ||
+      explanation.verificationSteps.length < 2 ||
       explanation.verificationSteps.length > 4
     ) {
       return {
@@ -336,6 +336,11 @@ export class ExplanationGroundingValidator {
         return true;
       }
       if (mentionedPaths.length === 0) return true;
+      const assertsCall = /\bcalls?\b/i.test(unit.text);
+      // General dependency language around one named surface is explanatory,
+      // not a claim about a new edge. Only validate it as a relationship when
+      // the text connects multiple files or explicitly asserts a call.
+      if (mentionedPaths.length < 2 && !assertsCall) return true;
       const scopedCitations = unit.evidenceIds.length
         ? unit.evidenceIds
             .map((id) => citations.get(id))
@@ -359,7 +364,7 @@ export class ExplanationGroundingValidator {
         return false;
       }
       if (
-        /\bcalls?\b/i.test(unit.text) &&
+        assertsCall &&
         !scopedCitations.some(
           (citation) =>
             citation.provenance === "typescript_public_api_call" ||

@@ -88,6 +88,21 @@ describe("impact explanation contract", () => {
     ).toBe(false);
   });
 
+  it("accepts a concise two-item provider brief", () => {
+    const providerSchema = impactExplanationProviderSchema([
+      "relationship:456",
+      "chunk:123",
+    ]);
+    const concise = {
+      ...providerExplanation,
+      claims: providerExplanation.claims.slice(0, 2),
+      implementationSteps: providerExplanation.implementationSteps.slice(0, 2),
+      verificationSteps: providerExplanation.verificationSteps.slice(0, 2),
+    };
+
+    expect(providerSchema.safeParse(concise).success).toBe(true);
+  });
+
   it("requires remaining questions in provider output when packet context has gaps", () => {
     const providerSchema = impactExplanationProviderSchema(
       ["relationship:456", "chunk:123"],
