@@ -16,6 +16,16 @@ export interface AtlasWorkspace {
   onboardingCompletedAt: string | null;
 }
 
+export interface AtlasWorkspaceMember {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  image: string | null;
+  role: AtlasWorkspaceRole;
+  createdAt: string;
+}
+
 export interface AtlasMe {
   user: AtlasApiUser;
   session: { id: string };

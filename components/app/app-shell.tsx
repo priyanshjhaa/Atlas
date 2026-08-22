@@ -104,13 +104,43 @@ export function AppShell({ workspaceData, children }: { workspaceData: AtlasWork
       </aside>
       {mobileOpen && <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
       <main className="app-main">
-        <div className="app-topbar">
+        <header className="app-topbar">
           <div className="topbar-primary">
-            <span className="topbar-context">Atlas / {activeWorkspace.name}</span>
-            <Link href="/app/search" className="global-search"><Search size={15} /><span>Search code, decisions, and history…</span><kbd>⌘ K</kbd></Link>
+            <Link href="/app" className="topbar-context" aria-label={`Atlas workspace: ${activeWorkspace.name}`}>
+              <b>Atlas</b>
+              <i aria-hidden="true">/</i>
+              <span>{activeWorkspace.name}</span>
+            </Link>
+            <Link
+              href="/app/search"
+              className="global-search"
+              aria-label="Search code, decisions, and history"
+            >
+              <Search size={15} />
+              <span>Search code, decisions, and history…</span>
+              <kbd>⌘ K</kbd>
+            </Link>
           </div>
-          <div className="topbar-state"><span><i /> Context graph {indexCoverage === 100 ? "ready" : "building"}</span><Link href="/app/activity" className="topbar-icon" aria-label="Synchronization activity"><Bell size={17} />{indexCoverage < 100 && <i />}</Link></div>
-        </div>
+          <div className="topbar-state">
+            <Link
+              href="/app/activity"
+              className="topbar-health"
+              aria-label={`Context graph ${indexCoverage === 100 ? "ready" : "building"}`}
+            >
+              <i />
+              <span>Context graph</span>
+              <b>{indexCoverage === 100 ? "Ready" : `${indexCoverage}%`}</b>
+            </Link>
+            <Link
+              href="/app/activity"
+              className="topbar-icon"
+              aria-label="Synchronization activity"
+            >
+              <Bell size={17} />
+              {indexCoverage < 100 && <i />}
+            </Link>
+          </div>
+        </header>
         <div className="page-content" data-surface={surface}>{children}</div>
       </main>
     </div>
