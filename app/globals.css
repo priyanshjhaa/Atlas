@@ -2609,6 +2609,27 @@ body {
 .sign-in-card::before {
   background: linear-gradient(90deg, #607a58, #bd6a4d, #658d98);
 }
+.sign-in-card__back {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 21px;
+  color: #5f6759;
+  font: 600 9px var(--mono);
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  transition: color .2s ease, transform .2s ease;
+}
+.sign-in-card__back:hover {
+  color: #3f5a43;
+  transform: translateX(-2px);
+}
+.sign-in-card__back:focus-visible {
+  outline: 2px solid rgba(96, 122, 88, .55);
+  outline-offset: 5px;
+  border-radius: 3px;
+}
 
 .sidebar-collapsed .sidebar-system-label,
 .sidebar-collapsed .nav-section-label { display: none; }

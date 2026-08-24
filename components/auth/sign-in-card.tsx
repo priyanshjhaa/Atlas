@@ -1,6 +1,7 @@
 "use client";
 
-import { FileText, GitBranch, LoaderCircle } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, FileText, GitBranch, LoaderCircle } from "lucide-react";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
@@ -26,6 +27,9 @@ export function SignInCard({ error }: { error?: string }) {
 
   return (
     <section className="sign-in-card">
+      <Link className="sign-in-card__back" href="/">
+        <ArrowLeft size={14} /> Back to landing page
+      </Link>
       <div className="sign-in-card__eyebrow"><span /> Sign in to Atlas</div>
       <h1>Open your<br />system map.</h1>
       <p>Use GitHub for your Atlas identity. During setup, choose the repositories and optional Notion workspace that may provide engineering context.</p>
