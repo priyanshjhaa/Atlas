@@ -1,37 +1,46 @@
-export const IMPACT_EXPLANATION_SCHEMA_VERSION = "1" as const;
+export const LEGACY_IMPACT_EXPLANATION_SCHEMA_VERSION = "1" as const;
+export const IMPACT_EXPLANATION_SCHEMA_VERSION = "2" as const;
 
 export type ImpactExplanationSchemaVersion =
-  typeof IMPACT_EXPLANATION_SCHEMA_VERSION;
+  | typeof LEGACY_IMPACT_EXPLANATION_SCHEMA_VERSION
+  | typeof IMPACT_EXPLANATION_SCHEMA_VERSION;
 
-export interface ImpactExplanationClaim {
-  text: string;
-  evidenceIds: string[];
-}
-
-export interface ImpactExplanationImplementationStep {
-  title: string;
-  detail: string;
-  evidenceIds: string[];
-}
-
-export interface ImpactExplanationVerificationStep {
-  text: string;
-  evidenceIds: string[];
-}
-
-/**
- * Generated prose is kept separate from the deterministic ImpactReportResult.
- * Claims describe observed facts; implementation and verification steps are
- * recommendations grounded in the cited evidence.
- */
-export interface ImpactExplanation {
-  schemaVersion: ImpactExplanationSchemaVersion;
+export interface LegacyImpactExplanation {
+  schemaVersion: typeof LEGACY_IMPACT_EXPLANATION_SCHEMA_VERSION;
   executiveSummary: string;
   answer: string;
-  claims: ImpactExplanationClaim[];
-  implementationSteps: ImpactExplanationImplementationStep[];
-  verificationSteps: ImpactExplanationVerificationStep[];
+  claims: Array<{ text: string; evidenceIds: string[] }>;
+  implementationSteps: Array<{
+    title: string;
+    detail: string;
+    evidenceIds: string[];
+  }>;
+  verificationSteps: Array<{ text: string; evidenceIds: string[] }>;
   remainingQuestions: string[];
+}
+
+export type ImpactBriefingAudience =
+  | "product"
+  | "engineering"
+  | "operations";
+
+export interface ImpactBriefingPoint {
+  text: string;
+  evidenceIds: string[];
+}
+
+export interface ImpactBriefingPracticalImpact extends ImpactBriefingPoint {
+  audience: ImpactBriefingAudience;
+}
+
+/** Concise generated prose kept separate from deterministic Atlas findings. */
+export interface ImpactExplanation {
+  schemaVersion: typeof IMPACT_EXPLANATION_SCHEMA_VERSION;
+  bottomLine: ImpactBriefingPoint;
+  practicalImpacts: ImpactBriefingPracticalImpact[];
+  nextActions: ImpactBriefingPoint[];
+  verificationChecks: ImpactBriefingPoint[];
+  openQuestions: string[];
 }
 
 export const IMPACT_EXPLANATION_FAILURE_CODES = [
@@ -48,6 +57,7 @@ export const IMPACT_EXPLANATION_FAILURE_CODES = [
   "provider_error",
   "invalid_explanation_schema",
   "explanation_too_large",
+  "briefing_too_verbose",
   "prompt_injection_content",
   "unknown_evidence_id",
   "unknown_file_path",
@@ -98,7 +108,7 @@ export interface ImpactExplanationGenerationMetadata {
   deterministicFallback: boolean;
 }
 
-export type ImpactExplanationState =
+type ExplanationLifecycleState =
   | {
       status: "pending";
       schemaVersion: ImpactExplanationSchemaVersion;
@@ -106,12 +116,6 @@ export type ImpactExplanationState =
       promptVersion?: string;
       sourceRevision?: string;
       startedAt?: string;
-    }
-  | {
-      status: "completed";
-      schemaVersion: ImpactExplanationSchemaVersion;
-      explanation: ImpactExplanation;
-      metadata?: ImpactExplanationGenerationMetadata;
     }
   | {
       status: "failed";
@@ -122,4 +126,19 @@ export type ImpactExplanationState =
   | {
       status: "disabled";
       schemaVersion: ImpactExplanationSchemaVersion;
+    };
+
+export type ImpactExplanationState =
+  | ExplanationLifecycleState
+  | {
+      status: "completed";
+      schemaVersion: typeof IMPACT_EXPLANATION_SCHEMA_VERSION;
+      explanation: ImpactExplanation;
+      metadata?: ImpactExplanationGenerationMetadata;
+    }
+  | {
+      status: "completed";
+      schemaVersion: typeof LEGACY_IMPACT_EXPLANATION_SCHEMA_VERSION;
+      explanation: LegacyImpactExplanation;
+      metadata?: ImpactExplanationGenerationMetadata;
     };

@@ -2,125 +2,101 @@ import { z } from "zod";
 import {
   IMPACT_EXPLANATION_FAILURE_CODES,
   IMPACT_EXPLANATION_SCHEMA_VERSION,
+  LEGACY_IMPACT_EXPLANATION_SCHEMA_VERSION,
   type ImpactExplanation,
   type ImpactExplanationState,
+  type LegacyImpactExplanation,
 } from "./explanation.types";
 
 const nonEmptyTextSchema = z.string().trim().min(1);
 const evidenceIdsSchema = z.array(nonEmptyTextSchema).min(1);
+const briefingPointSchema = z
+  .object({ text: nonEmptyTextSchema, evidenceIds: evidenceIdsSchema })
+  .strict();
 
-function buildImpactExplanationSchema(
-  evidenceIdSchema: z.ZodType<string>,
-  requireRemainingQuestions = false,
-): z.ZodType<ImpactExplanation> {
-  const citedEvidenceIdsSchema = z.array(evidenceIdSchema).min(1);
-  const claimsSchema = z.array(
-    z
-      .object({
-        text: nonEmptyTextSchema,
-        evidenceIds: citedEvidenceIdsSchema,
-      })
-      .strict(),
-  );
-  const implementationStepsSchema = z.array(
-    z
-      .object({
-        title: nonEmptyTextSchema,
-        detail: nonEmptyTextSchema,
-        evidenceIds: citedEvidenceIdsSchema,
-      })
-      .strict(),
-  );
-  const verificationStepsSchema = z.array(
-    z
-      .object({
-        text: nonEmptyTextSchema,
-        evidenceIds: citedEvidenceIdsSchema,
-      })
-      .strict(),
-  );
-  return z
-    .object({
-      schemaVersion: z.literal(IMPACT_EXPLANATION_SCHEMA_VERSION),
-      executiveSummary: nonEmptyTextSchema,
-      answer: nonEmptyTextSchema,
-      claims: claimsSchema.min(1),
-      implementationSteps: implementationStepsSchema,
-      verificationSteps: verificationStepsSchema,
-      remainingQuestions: requireRemainingQuestions
-        ? z.array(nonEmptyTextSchema).min(1)
-        : z.array(nonEmptyTextSchema),
-    })
-    .strict();
-}
+export const impactExplanationSchema: z.ZodType<ImpactExplanation> = z
+  .object({
+    schemaVersion: z.literal(IMPACT_EXPLANATION_SCHEMA_VERSION),
+    bottomLine: briefingPointSchema,
+    practicalImpacts: z
+      .array(
+        briefingPointSchema.extend({
+          audience: z.enum(["product", "engineering", "operations"]),
+        }),
+      )
+      .min(1)
+      .max(3),
+    nextActions: z.array(briefingPointSchema).min(1).max(3),
+    verificationChecks: z.array(briefingPointSchema).min(1).max(2),
+    openQuestions: z.array(nonEmptyTextSchema).max(2),
+  })
+  .strict();
 
-export const impactExplanationSchema = buildImpactExplanationSchema(
-  evidenceIdsSchema.element,
-);
+const legacyImpactExplanationSchema: z.ZodType<LegacyImpactExplanation> = z
+  .object({
+    schemaVersion: z.literal(LEGACY_IMPACT_EXPLANATION_SCHEMA_VERSION),
+    executiveSummary: nonEmptyTextSchema,
+    answer: nonEmptyTextSchema,
+    claims: z.array(
+      z.object({ text: nonEmptyTextSchema, evidenceIds: evidenceIdsSchema }).strict(),
+    ),
+    implementationSteps: z.array(
+      z
+        .object({
+          title: nonEmptyTextSchema,
+          detail: nonEmptyTextSchema,
+          evidenceIds: evidenceIdsSchema,
+        })
+        .strict(),
+    ),
+    verificationSteps: z.array(
+      z.object({ text: nonEmptyTextSchema, evidenceIds: evidenceIdsSchema }).strict(),
+    ),
+    remainingQuestions: z.array(nonEmptyTextSchema),
+  })
+  .strict();
 
 export function impactExplanationProviderSchema(
   _evidenceIds: string[],
-  requireRemainingQuestions = false,
+  requireOpenQuestion = false,
 ): z.ZodType<ImpactExplanation> {
-  const providerTextSchema = z.string();
-  const providerEvidenceIdsSchema = z.array(providerTextSchema).min(1);
-
+  const providerText = z.string();
+  const providerIds = z.array(providerText).min(1);
+  const providerPoint = z
+    .object({ text: providerText, evidenceIds: providerIds })
+    .strict();
   return z
     .object({
-      schemaVersion: z.enum([IMPACT_EXPLANATION_SCHEMA_VERSION]),
-      executiveSummary: providerTextSchema,
-      answer: providerTextSchema,
-      claims: z
+      schemaVersion: z.literal(IMPACT_EXPLANATION_SCHEMA_VERSION),
+      bottomLine: providerPoint,
+      practicalImpacts: z
         .array(
-          z
-            .object({
-              text: providerTextSchema,
-              evidenceIds: providerEvidenceIdsSchema,
-            })
-            .strict(),
+          providerPoint.extend({
+            audience: z.enum(["product", "engineering", "operations"]),
+          }),
         )
-        .min(2)
-        .max(4),
-      implementationSteps: z
-        .array(
-          z
-            .object({
-              title: providerTextSchema,
-              detail: providerTextSchema,
-              evidenceIds: providerEvidenceIdsSchema,
-            })
-            .strict(),
-        )
-        .min(2)
-        .max(4),
-      verificationSteps: z
-        .array(
-          z
-            .object({
-              text: providerTextSchema,
-              evidenceIds: providerEvidenceIdsSchema,
-            })
-            .strict(),
-        )
-        .min(2)
+        .min(1)
         .max(3),
-      remainingQuestions: requireRemainingQuestions
-        ? z.array(providerTextSchema).min(1)
-        : z.array(providerTextSchema),
+      nextActions: z.array(providerPoint).min(1).max(3),
+      verificationChecks: z.array(providerPoint).min(1).max(2),
+      openQuestions: requireOpenQuestion
+        ? z.array(providerText).min(1).max(2)
+        : z.array(providerText).max(2),
     })
     .strict();
 }
 
-const stateBase = {
-  schemaVersion: z.literal(IMPACT_EXPLANATION_SCHEMA_VERSION),
-};
-
+const schemaVersionSchema = z.enum([
+  LEGACY_IMPACT_EXPLANATION_SCHEMA_VERSION,
+  IMPACT_EXPLANATION_SCHEMA_VERSION,
+]);
+const stateBase = { schemaVersion: schemaVersionSchema };
 const generationMetadataSchema = z
   .object({
     provider: z.enum(["openai", "groq"]).nullable(),
     model: z.string().nullable(),
     promptVersion: z.string().min(1),
-    outputSchemaVersion: z.literal(IMPACT_EXPLANATION_SCHEMA_VERSION),
+    outputSchemaVersion: schemaVersionSchema,
     evidencePacketHash: z.string().nullable(),
     sourceRevision: z.string().min(1),
     generatedAt: z.string().min(1),
@@ -139,9 +115,7 @@ const generationMetadataSchema = z
             provider: z.enum(["openai", "groq"]),
             model: z.string().min(1),
             status: z.enum(["completed", "failed"]),
-            failureCode: z
-              .enum(IMPACT_EXPLANATION_FAILURE_CODES)
-              .nullable(),
+            failureCode: z.enum(IMPACT_EXPLANATION_FAILURE_CODES).nullable(),
             latencyMs: z.number().nonnegative(),
             usage: z
               .object({
@@ -161,7 +135,7 @@ const generationMetadataSchema = z
   .strict();
 
 export const impactExplanationStateSchema: z.ZodType<ImpactExplanationState> =
-  z.discriminatedUnion("status", [
+  z.union([
     z
       .object({
         ...stateBase,
@@ -174,9 +148,17 @@ export const impactExplanationStateSchema: z.ZodType<ImpactExplanationState> =
       .strict(),
     z
       .object({
-        ...stateBase,
         status: z.literal("completed"),
+        schemaVersion: z.literal(IMPACT_EXPLANATION_SCHEMA_VERSION),
         explanation: impactExplanationSchema,
+        metadata: generationMetadataSchema.optional(),
+      })
+      .strict(),
+    z
+      .object({
+        status: z.literal("completed"),
+        schemaVersion: z.literal(LEGACY_IMPACT_EXPLANATION_SCHEMA_VERSION),
+        explanation: legacyImpactExplanationSchema,
         metadata: generationMetadataSchema.optional(),
       })
       .strict(),

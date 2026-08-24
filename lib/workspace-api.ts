@@ -16,6 +16,7 @@ import type {
   AtlasSyncJob,
   AtlasWorkspaceData,
   AtlasWorkspaceOverview,
+  AtlasWorkspaceMember,
   AtlasNotionCatchUpSnapshot,
   AtlasNotionReviewDocumentsResponse,
   AtlasNotionDocumentReview,
@@ -65,6 +66,19 @@ export const getAtlasWorkspaceData = cache(
     };
   },
 );
+
+export async function getAtlasWorkspaceMembers(
+  workspaceId: string,
+): Promise<AtlasWorkspaceMember[]> {
+  const response = await fetchAtlasApi(
+    `/v1/workspaces/${workspaceId}/members`,
+    {
+      cache: "no-store",
+      headers: { "X-Atlas-Workspace-Id": workspaceId },
+    },
+  );
+  return readApiResponse<AtlasWorkspaceMember[]>(response);
+}
 
 export async function getAtlasGitHubConnectors(
   workspaceId: string,

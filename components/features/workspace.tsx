@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, Check, Database, Filter, GitBranch, Plus, RefreshCw, Search, Settings, ShieldCheck, Users, X } from "lucide-react";
+import { Check, Filter, GitBranch, Plus, RefreshCw, Search, X } from "lucide-react";
 import { ConfidenceBadge } from "@/components/brand";
 import { PageHeader, StatusDot } from "@/components/app/shared";
 import type {
@@ -394,27 +394,6 @@ export function ActivityPage({
         <div className="timeline">{visibleJobs.map((job) => <div key={`${job.source}-${job.id}`}><StatusDot state={job.status === "running" || job.status === "queued" ? "running" : "ready"} /><span>{syncTime(job.createdAt)}</span><p><b>{job.source === "github" ? `${job.repositoryOwner}/${job.repositoryName}` : job.configuration.workspaceName ?? "Notion"}</b><small>{job.source === "github" ? "GitHub" : "Notion"} · {syncStageLabel(job.status)} · {syncStageLabel(job.stage)}</small></p><button onClick={() => setSelectedEvent(selectedEvent === job.id ? null : job.id)}>{selectedEvent === job.id ? "Hide" : "Details"}</button>{selectedEvent === job.id && <small className="timeline-detail">{job.errorMessage ?? (job.result?.outcome === "no_change" ? "No source changes detected" : job.source === "github" ? `${job.result?.filesIndexed ?? 0} files · ${job.result?.symbolsExtracted ?? 0} symbols · ${job.result?.relationshipsExtracted ?? 0} relationships${job.result?.revision ? ` · ${job.result.revision.slice(0, 12)}` : ""}` : `${job.result?.documentsUpdated ?? 0} documents · ${job.result?.versionsCreated ?? 0} versions · ${job.result?.documentsSkipped ?? 0} unchanged`)}{job.source === "github" && job.status === "failed" && canSynchronize && <button className="button button--ghost" onClick={() => void jobAction(job.id, "retry")}>Retry</button>}</small>}</div>)}</div>
         {visibleJobs.length === 0 && <div className="empty-state"><RefreshCw size={20} /><h2>No synchronization jobs</h2><p>Queue a sync to start tracking source freshness.</p></div>}
       </section>
-    </>
-  );
-}
-
-export function SettingsPage({
-  workspace,
-}: {
-  workspace: AtlasWorkspace;
-}) {
-  return (
-    <>
-      <PageHeader eyebrow="Workspace administration" title="Settings" detail={`Review the live workspace identity, repository coverage, and your role-based access level for ${workspace.name}. Connector permissions and indexed data remain controlled from Sources.`} />
-      <div className="settings-layout">
-        <aside><button className="active"><Settings size={15} />Workspace</button><button disabled><Users size={15} />Members</button><button disabled><ShieldCheck size={15} />Access & roles</button><button disabled><Bell size={15} />Notifications</button><button disabled><Database size={15} />Data & privacy</button></aside>
-        <main className="panel settings-panel">
-          <span>Live configuration</span><h2>{workspace.name}</h2><p>These values come from the authenticated Atlas workspace and determine the scope used by repositories, connectors, synchronization, search, graphs, and impact reports.</p>
-          <div className="settings-form">
-            <div className="entity-meta"><div><span>Name</span><b>{workspace.name}</b></div><div><span>Slug</span><b>{workspace.slug}</b></div><div><span>Your role</span><b>{workspace.role}</b></div><div><span>Repositories</span><b>{workspace.repositoryCount}</b></div></div>
-          </div>
-        </main>
-      </div>
     </>
   );
 }

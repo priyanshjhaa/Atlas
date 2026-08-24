@@ -16,6 +16,16 @@ export interface AtlasWorkspace {
   onboardingCompletedAt: string | null;
 }
 
+export interface AtlasWorkspaceMember {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  image: string | null;
+  role: AtlasWorkspaceRole;
+  createdAt: string;
+}
+
 export interface AtlasMe {
   user: AtlasApiUser;
   session: { id: string };
@@ -557,35 +567,41 @@ export interface AtlasWorkspaceContextActivity {
 
 export type AtlasImpactScope = "repository" | "workspace";
 
-export const ATLAS_IMPACT_EXPLANATION_SCHEMA_VERSION = "1" as const;
+export const ATLAS_LEGACY_IMPACT_EXPLANATION_SCHEMA_VERSION = "1" as const;
+export const ATLAS_IMPACT_EXPLANATION_SCHEMA_VERSION = "2" as const;
 
-export type AtlasImpactExplanationSchemaVersion =
-  typeof ATLAS_IMPACT_EXPLANATION_SCHEMA_VERSION;
+export type AtlasImpactExplanationSchemaVersion = "1" | "2";
 
-export interface AtlasImpactExplanationClaim {
-  text: string;
-  evidenceIds: string[];
+export interface AtlasLegacyImpactExplanation {
+  schemaVersion: "1";
+  executiveSummary: string;
+  answer: string;
+  claims: Array<{ text: string; evidenceIds: string[] }>;
+  implementationSteps: Array<{
+    title: string;
+    detail: string;
+    evidenceIds: string[];
+  }>;
+  verificationSteps: Array<{ text: string; evidenceIds: string[] }>;
+  remainingQuestions: string[];
 }
 
-export interface AtlasImpactExplanationImplementationStep {
-  title: string;
-  detail: string;
-  evidenceIds: string[];
-}
-
-export interface AtlasImpactExplanationVerificationStep {
+export interface AtlasImpactBriefingPoint {
   text: string;
   evidenceIds: string[];
 }
 
 export interface AtlasImpactExplanation {
-  schemaVersion: AtlasImpactExplanationSchemaVersion;
-  executiveSummary: string;
-  answer: string;
-  claims: AtlasImpactExplanationClaim[];
-  implementationSteps: AtlasImpactExplanationImplementationStep[];
-  verificationSteps: AtlasImpactExplanationVerificationStep[];
-  remainingQuestions: string[];
+  schemaVersion: "2";
+  bottomLine: AtlasImpactBriefingPoint;
+  practicalImpacts: Array<
+    AtlasImpactBriefingPoint & {
+      audience: "product" | "engineering" | "operations";
+    }
+  >;
+  nextActions: AtlasImpactBriefingPoint[];
+  verificationChecks: AtlasImpactBriefingPoint[];
+  openQuestions: string[];
 }
 
 export type AtlasImpactExplanationFailureCode =
@@ -602,10 +618,12 @@ export type AtlasImpactExplanationFailureCode =
   | "provider_error"
   | "invalid_explanation_schema"
   | "explanation_too_large"
+  | "briefing_too_verbose"
   | "prompt_injection_content"
   | "unknown_evidence_id"
   | "unknown_file_path"
   | "unknown_symbol"
+  | "excessive_overview_technical_names"
   | "unsupported_relationship"
   | "altered_risk"
   | "altered_confidence"
@@ -646,8 +664,14 @@ export type AtlasImpactExplanationState =
     }
   | {
       status: "completed";
-      schemaVersion: AtlasImpactExplanationSchemaVersion;
+      schemaVersion: "2";
       explanation: AtlasImpactExplanation;
+      metadata?: AtlasImpactExplanationGenerationMetadata;
+    }
+  | {
+      status: "completed";
+      schemaVersion: "1";
+      explanation: AtlasLegacyImpactExplanation;
       metadata?: AtlasImpactExplanationGenerationMetadata;
     }
   | {

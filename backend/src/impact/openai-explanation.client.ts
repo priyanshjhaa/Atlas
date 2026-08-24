@@ -39,6 +39,8 @@ export const OPENAI_EXPLANATION_CLIENT = Symbol(
   "OPENAI_EXPLANATION_CLIENT",
 );
 
+const PRACTICAL_BRIEFING_MAX_OUTPUT_TOKENS = 2_000;
+
 @Injectable()
 export class OpenAIExplanationClient implements ExplanationClient {
   private readonly logger = new Logger(OpenAIExplanationClient.name);
@@ -146,12 +148,10 @@ export class OpenAIExplanationClient implements ExplanationClient {
             providerPacket.packet.limitations.length > 0 ||
               providerPacket.packet.unknownImpacts.length > 0,
           ),
-          "atlas_impact_explanation_v1",
+          "atlas_impact_briefing_v2",
         ),
       },
-      max_output_tokens: this.config.get("LLM_MAX_OUTPUT_TOKENS", {
-        infer: true,
-      }),
+      max_output_tokens: this.maxOutputTokens(),
       tools: [],
       store: false,
     };
@@ -241,11 +241,9 @@ export class OpenAIExplanationClient implements ExplanationClient {
           providerPacket.packet.limitations.length > 0 ||
             providerPacket.packet.unknownImpacts.length > 0,
         ),
-        "atlas_impact_explanation_v1",
+        "atlas_impact_briefing_v2",
       ),
-      max_completion_tokens: this.config.get("LLM_MAX_OUTPUT_TOKENS", {
-        infer: true,
-      }),
+      max_completion_tokens: this.maxOutputTokens(),
       reasoning_effort: this.config.get("LLM_REASONING_EFFORT", {
         infer: true,
       }),
@@ -439,6 +437,13 @@ export class OpenAIExplanationClient implements ExplanationClient {
     };
   }
 
+  private maxOutputTokens(): number {
+    return Math.min(
+      this.config.get("LLM_MAX_OUTPUT_TOKENS", { infer: true }),
+      PRACTICAL_BRIEFING_MAX_OUTPUT_TOKENS,
+    );
+  }
+
   private emptyUsage(): ExplanationGenerationMetadata["usage"] {
     return {
       inputTokens: 0,
@@ -527,7 +532,7 @@ export class OpenAIExplanationClient implements ExplanationClient {
         ]),
       ]),
     ].slice(0, 3);
-    const remainingQuestionRequired =
+    const openQuestionRequired =
       packet.unknownImpacts.length > 0 || packet.limitations.length > 0;
     const allowedEvidenceIds = [
       ...packet.evidence.map((item) => item.id),
@@ -540,11 +545,11 @@ export class OpenAIExplanationClient implements ExplanationClient {
       `ALLOWED_FILE_ALIASES=${JSON.stringify(allowedFileAliases)}`,
       `ALLOWED_SYMBOLS=${JSON.stringify(allowedSymbols)}`,
       `OVERVIEW_TECHNICAL_NAMES=${JSON.stringify(overviewTechnicalNames)}`,
-      `REMAINING_QUESTION_REQUIRED=${String(remainingQuestionRequired)}`,
+      `REQUIRED_OPEN_QUESTION=${String(openQuestionRequired)}`,
       `REPAIR_MODE=${String(Boolean(repair))}`,
       `REPAIR_FAILURE_CODE=${repair?.failureCode ?? "none"}`,
-      `UNKNOWN_IMPACT_TITLES=${JSON.stringify(packet.unknownImpacts.map((item) => item.title))}`,
-      `LIMITATIONS_REQUIRING_QUESTIONS=${JSON.stringify(packet.limitations)}`,
+      `UNKNOWN_IMPACT_COUNT=${packet.unknownImpacts.length}`,
+      `LIMITATION_COUNT=${packet.limitations.length}`,
       ...(repair
         ? [
             "BEGIN_ATLAS_REPAIR_CANDIDATE",
@@ -700,23 +705,27 @@ export class OpenAIExplanationClient implements ExplanationClient {
       };
       return {
         ...explanation,
-        executiveSummary: repairText(explanation.executiveSummary),
-        answer: repairText(explanation.answer),
-        claims: explanation.claims.map((claim) => ({
-          ...claim,
-          text: repairText(claim.text),
+        bottomLine: {
+          ...explanation.bottomLine,
+          text: repairText(explanation.bottomLine.text),
+          evidenceIds: aliasEvidenceIds(explanation.bottomLine.evidenceIds),
+        },
+        practicalImpacts: explanation.practicalImpacts.map((item) => ({
+          ...item,
+          text: repairText(item.text),
+          evidenceIds: aliasEvidenceIds(item.evidenceIds),
         })),
-        implementationSteps: explanation.implementationSteps.map((step) => ({
-          ...step,
-          title: repairText(step.title),
-          detail: repairText(step.detail),
+        nextActions: explanation.nextActions.map((item) => ({
+          ...item,
+          text: repairText(item.text),
+          evidenceIds: aliasEvidenceIds(item.evidenceIds),
         })),
-        verificationSteps: explanation.verificationSteps.map((step) => ({
-          ...step,
-          text: repairText(step.text),
+        verificationChecks: explanation.verificationChecks.map((item) => ({
+          ...item,
+          text: repairText(item.text),
+          evidenceIds: aliasEvidenceIds(item.evidenceIds),
         })),
-        remainingQuestions:
-          explanation.remainingQuestions.map(repairText),
+        openQuestions: explanation.openQuestions.map(repairText),
       };
     };
 
@@ -784,25 +793,24 @@ export class OpenAIExplanationClient implements ExplanationClient {
       );
     return {
       ...explanation,
-      executiveSummary: restoreText(explanation.executiveSummary),
-      answer: restoreText(explanation.answer),
-      claims: explanation.claims.map((claim) => ({
-        ...claim,
-        text: restoreText(claim.text),
-        evidenceIds: restore(claim.evidenceIds),
+      bottomLine: {
+        text: restoreText(explanation.bottomLine.text),
+        evidenceIds: restore(explanation.bottomLine.evidenceIds),
+      },
+      practicalImpacts: explanation.practicalImpacts.map((item) => ({
+        ...item,
+        text: restoreText(item.text),
+        evidenceIds: restore(item.evidenceIds),
       })),
-      implementationSteps: explanation.implementationSteps.map((step) => ({
-        ...step,
-        title: restoreText(step.title),
-        detail: restoreText(step.detail),
-        evidenceIds: restore(step.evidenceIds),
+      nextActions: explanation.nextActions.map((item) => ({
+        text: restoreText(item.text),
+        evidenceIds: restore(item.evidenceIds),
       })),
-      verificationSteps: explanation.verificationSteps.map((step) => ({
-        ...step,
-        text: restoreText(step.text),
-        evidenceIds: restore(step.evidenceIds),
+      verificationChecks: explanation.verificationChecks.map((item) => ({
+        text: restoreText(item.text),
+        evidenceIds: restore(item.evidenceIds),
       })),
-      remainingQuestions: explanation.remainingQuestions.map(restoreText),
+      openQuestions: explanation.openQuestions.map(restoreText),
     };
   }
 

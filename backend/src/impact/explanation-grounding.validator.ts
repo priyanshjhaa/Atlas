@@ -102,6 +102,9 @@ export class ExplanationGroundingValidator {
     const explanation = parsed.data;
     const units = this.textUnits(explanation);
     const allText = units.map((unit) => unit.text).join("\n");
+    if (this.wordCount(allText) > 220) {
+      return { status: "invalid", failureCode: "briefing_too_verbose" };
+    }
     if (
       PROMPT_INJECTION_OUTPUT_PATTERNS.some((pattern) =>
         pattern.test(allText),
@@ -163,12 +166,19 @@ export class ExplanationGroundingValidator {
       return { status: "invalid", failureCode: "missing_unknown_impact" };
     }
     if (
-      explanation.claims.length < 2 ||
-      explanation.claims.length > 6 ||
-      explanation.implementationSteps.length < 2 ||
-      explanation.implementationSteps.length > 5 ||
-      explanation.verificationSteps.length < 2 ||
-      explanation.verificationSteps.length > 4
+      new Set(explanation.practicalImpacts.map((item) => item.audience)).size !==
+      explanation.practicalImpacts.length
+    ) {
+      return { status: "invalid", failureCode: "invalid_explanation_schema" };
+    }
+    if (
+      explanation.practicalImpacts.length < 1 ||
+      explanation.practicalImpacts.length > 3 ||
+      explanation.nextActions.length < 1 ||
+      explanation.nextActions.length > 3 ||
+      explanation.verificationChecks.length < 1 ||
+      explanation.verificationChecks.length > 2 ||
+      explanation.openQuestions.length > 2
     ) {
       return {
         status: "invalid",
@@ -189,58 +199,61 @@ export class ExplanationGroundingValidator {
 
     return {
       ...candidate,
-      executiveSummary: repairText(candidate.executiveSummary),
-      answer: repairText(candidate.answer),
-      claims: candidate.claims.map((claim) => ({
-        ...claim,
-        text: repairText(claim.text),
+      bottomLine: {
+        ...candidate.bottomLine,
+        text: repairText(candidate.bottomLine.text),
+      },
+      practicalImpacts: candidate.practicalImpacts.map((item) => ({
+        ...item,
+        text: repairText(item.text),
       })),
-      implementationSteps: candidate.implementationSteps.map((step) => ({
-        ...step,
-        title: repairText(step.title),
-        detail: repairText(step.detail),
+      nextActions: candidate.nextActions.map((item) => ({
+        ...item,
+        text: repairText(item.text),
       })),
-      verificationSteps: candidate.verificationSteps.map((step) => ({
-        ...step,
-        text: repairText(step.text),
+      verificationChecks: candidate.verificationChecks.map((item) => ({
+        ...item,
+        text: repairText(item.text),
       })),
-      remainingQuestions: candidate.remainingQuestions.map(repairText),
+      openQuestions: candidate.openQuestions.map(repairText),
+    };
+  }
+
+  repairExcessiveOverviewTechnicalNames(
+    candidate: ImpactExplanation,
+  ): ImpactExplanation {
+    return {
+      ...candidate,
+      bottomLine: {
+        ...candidate.bottomLine,
+        text: "Atlas found source-backed code surfaces relevant to this change. Review the verified impacts, preserve intended behavior, and test affected paths before merge.",
+      },
     };
   }
 
   private textUnits(explanation: ImpactExplanation): ExplanationTextUnit[] {
-    const claimEvidenceIds = [
-      ...new Set(
-        explanation.claims.flatMap((claim) => claim.evidenceIds),
-      ),
-    ];
     return [
       {
-        text: explanation.executiveSummary,
-        evidenceIds: claimEvidenceIds,
+        text: explanation.bottomLine.text,
+        evidenceIds: explanation.bottomLine.evidenceIds,
         kind: "factual",
       },
-      {
-        text: explanation.answer,
-        evidenceIds: claimEvidenceIds,
-        kind: "factual",
-      },
-      ...explanation.claims.map((claim) => ({
-        text: claim.text,
-        evidenceIds: claim.evidenceIds,
+      ...explanation.practicalImpacts.map((item) => ({
+        text: item.text,
+        evidenceIds: item.evidenceIds,
         kind: "factual" as const,
       })),
-      ...explanation.implementationSteps.map((step) => ({
-        text: `${step.title}\n${step.detail}`,
-        evidenceIds: step.evidenceIds,
+      ...explanation.nextActions.map((item) => ({
+        text: item.text,
+        evidenceIds: item.evidenceIds,
         kind: "recommendation" as const,
       })),
-      ...explanation.verificationSteps.map((step) => ({
-        text: step.text,
-        evidenceIds: step.evidenceIds,
+      ...explanation.verificationChecks.map((item) => ({
+        text: item.text,
+        evidenceIds: item.evidenceIds,
         kind: "recommendation" as const,
       })),
-      ...explanation.remainingQuestions.map((text) => ({
+      ...explanation.openQuestions.map((text) => ({
         text,
         evidenceIds: [],
         kind: "question" as const,
@@ -360,7 +373,7 @@ export class ExplanationGroundingValidator {
   private overviewTechnicalNameCount(
     explanation: ImpactExplanation,
   ): number {
-    const overview = `${explanation.answer}\n${explanation.executiveSummary}`;
+    const overview = explanation.bottomLine.text;
     return new Set([
       ...this.extractFilePaths(overview).map((path) => `file:${path}`),
       ...this.extractCodeSymbols(overview).map(
@@ -548,15 +561,9 @@ export class ExplanationGroundingValidator {
     explanation: ImpactExplanation,
     packet: ImpactEvidencePacket,
   ): boolean {
-    if (
+    return !(
       (packet.limitations.length > 0 || packet.unknownImpacts.length > 0) &&
-      explanation.remainingQuestions.length === 0
-    ) {
-      return false;
-    }
-    const questions = this.normalize(explanation.remainingQuestions.join("\n"));
-    return packet.unknownImpacts.every((unknown) =>
-      questions.includes(this.normalize(unknown.title)),
+      explanation.openQuestions.length === 0
     );
   }
 
@@ -576,8 +583,8 @@ export class ExplanationGroundingValidator {
       : Number(value);
   }
 
-  private normalize(value: string): string {
-    return value.toLowerCase().replace(/\s+/g, " ").trim();
+  private wordCount(value: string): number {
+    return value.trim() ? value.trim().split(/\s+/).length : 0;
   }
 
   private serialize(value: unknown): string | null {

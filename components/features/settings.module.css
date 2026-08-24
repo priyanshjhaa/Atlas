@@ -1,0 +1,506 @@
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 20px clamp(24px, 3.5vw, 36px) 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(92, 125, 76, 0.18);
+  border-radius: 12px;
+  color: #4d6548;
+  background: rgba(112, 144, 91, 0.08);
+  font-size: 10px;
+}
+
+.noticeError {
+  border-color: rgba(166, 80, 62, 0.2);
+  color: #92513e;
+  background: rgba(166, 80, 62, 0.07);
+}
+
+.form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.field {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.field > span {
+  color: #59645c;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.field input,
+.field select,
+.roleAssignments select {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  padding: 0 13px;
+  border: 1px solid rgba(82, 91, 70, 0.15);
+  border-radius: 11px;
+  outline: none;
+  color: #344039;
+  background: rgba(255, 253, 247, 0.72);
+  font: inherit;
+  font-size: 11px;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.field input:focus,
+.field select:focus,
+.roleAssignments select:focus {
+  border-color: rgba(78, 110, 72, 0.52);
+  box-shadow: 0 0 0 3px rgba(91, 124, 82, 0.1);
+}
+
+.field input:read-only,
+.field input:disabled {
+  color: #837f74;
+  background: rgba(98, 102, 87, 0.055);
+}
+
+.field > small,
+.formHint {
+  color: #8c877d;
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.formFooter {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 4px;
+}
+
+.formFooter > span {
+  color: #969084;
+  font: 7px var(--mono);
+  text-transform: uppercase;
+}
+
+.inviteForm {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 150px auto;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 22px;
+  padding: 18px;
+  border: 1px solid rgba(82, 91, 70, 0.11);
+  border-radius: 16px;
+  background: rgba(255, 253, 247, 0.56);
+}
+
+.inviteForm > button {
+  min-height: 44px;
+}
+
+.inviteForm > .formHint {
+  grid-column: 1 / -1;
+}
+
+.memberList {
+  overflow: hidden;
+  border: 1px solid rgba(82, 91, 70, 0.11);
+  border-radius: 16px;
+}
+
+.memberRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 68px;
+  padding: 11px 14px;
+  border-top: 1px solid rgba(82, 91, 70, 0.09);
+  background: rgba(255, 253, 247, 0.48);
+}
+
+.memberRow:first-child {
+  border-top: 0;
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  color: #eff2e2;
+  background: linear-gradient(145deg, #526d68, #3a5551);
+  font: 9px var(--mono);
+  letter-spacing: 0.04em;
+}
+
+.memberIdentity {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.memberIdentity b {
+  overflow: hidden;
+  color: #39443c;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memberIdentity small {
+  overflow: hidden;
+  color: #8b867b;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roleBadge {
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: #5f705d;
+  background: rgba(98, 126, 91, 0.09);
+  font: 7px var(--mono);
+  text-transform: uppercase;
+}
+
+.iconButton {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 11px;
+  color: #a2604e;
+  background: transparent;
+  cursor: pointer;
+  transition: background 180ms ease, transform 180ms ease;
+}
+
+.iconButton:hover {
+  transform: translateY(-1px);
+  background: rgba(166, 80, 62, 0.08);
+}
+
+.roleGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.roleCard {
+  position: relative;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid rgba(82, 91, 70, 0.11);
+  border-radius: 15px;
+  background: rgba(255, 253, 247, 0.54);
+}
+
+.roleCard > span {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  display: grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 999px;
+  color: #566c54;
+  background: rgba(98, 126, 91, 0.09);
+  font: 8px var(--mono);
+}
+
+.roleCard h4,
+.roleAssignments h4 {
+  margin: 0 0 8px;
+  color: #354039;
+  font-family: var(--display);
+  font-size: 18px;
+  text-transform: capitalize;
+}
+
+.roleCard b {
+  color: #606a62;
+  font-size: 9px;
+}
+
+.roleCard p,
+.roleAssignments p {
+  margin: 7px 0 0;
+  color: #8b867b;
+  font-size: 8px;
+  line-height: 1.55;
+}
+
+.roleAssignments {
+  display: grid;
+  gap: 18px;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(82, 91, 70, 0.11);
+}
+
+.roleAssignments > div:first-child > span {
+  color: #9b674e;
+  font: 7px var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.roleAssignments > div:last-child {
+  overflow: hidden;
+  border: 1px solid rgba(82, 91, 70, 0.11);
+  border-radius: 15px;
+}
+
+.roleAssignments label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  align-items: center;
+  gap: 16px;
+  min-height: 62px;
+  padding: 10px 14px;
+  border-top: 1px solid rgba(82, 91, 70, 0.09);
+  background: rgba(255, 253, 247, 0.46);
+}
+
+.roleAssignments label:first-child {
+  border-top: 0;
+}
+
+.roleAssignments label > span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.roleAssignments label b,
+.roleAssignments label small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roleAssignments label b {
+  color: #39443c;
+  font-size: 10px;
+}
+
+.roleAssignments label small {
+  color: #8b867b;
+  font-size: 8px;
+}
+
+.roleAssignments label > strong {
+  color: #62715f;
+  font: 8px var(--mono);
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.channelList,
+.dataActions {
+  display: grid;
+  gap: 10px;
+}
+
+.channelList article,
+.dataActions article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 78px;
+  padding: 15px 16px;
+  border: 1px solid rgba(82, 91, 70, 0.11);
+  border-radius: 15px;
+  background: rgba(255, 253, 247, 0.52);
+}
+
+.channelList article > i {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  color: #62785f;
+  background: rgba(98, 126, 91, 0.09);
+}
+
+.channelList article > span,
+.dataActions article > div > span {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.channelList b,
+.dataActions b {
+  color: #39443c;
+  font-size: 10px;
+}
+
+.channelList small,
+.dataActions small {
+  color: #898479;
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.channelList em,
+.dataActions em {
+  color: #5f7a5b;
+  font: 7px var(--mono);
+  font-style: normal;
+  text-transform: uppercase;
+}
+
+.channelList a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #60775c;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.channelList .pending {
+  color: #9b765f;
+}
+
+.privacySummary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 13px;
+  margin-bottom: 20px;
+  padding: 17px 18px;
+  border: 1px solid rgba(98, 126, 91, 0.13);
+  border-radius: 14px;
+  color: #526354;
+  background: rgba(98, 126, 91, 0.065);
+}
+
+.privacySummary b {
+  font-size: 10px;
+}
+
+.privacySummary p {
+  margin: 5px 0 0;
+  color: #79766c;
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+.dataActions article {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.dataActions article > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+  color: #637560;
+}
+
+@media (max-width: 760px) {
+  .form,
+  .roleGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inviteForm {
+    grid-template-columns: minmax(0, 1fr) 140px;
+  }
+
+  .inviteForm > button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .channelList article {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .channelList article > :last-child {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+@media (max-width: 520px) {
+  .notice {
+    margin: 16px 18px 0;
+  }
+
+  .inviteForm {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 14px;
+  }
+
+  .inviteForm > button,
+  .inviteForm > .formHint {
+    grid-column: 1;
+  }
+
+  .memberRow {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .memberRow .roleBadge {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .memberRow .iconButton {
+    grid-column: 3;
+    grid-row: 1 / 3;
+  }
+
+  .roleAssignments label {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 9px;
+  }
+
+  .roleAssignments label > strong {
+    text-align: left;
+  }
+
+  .channelList article,
+  .dataActions article {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .channelList article > i {
+    display: none;
+  }
+
+  .channelList article > :last-child {
+    grid-column: 1;
+  }
+
+  .dataActions article > :last-child {
+    justify-self: stretch;
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iconButton,
+  .field input,
+  .field select,
+  .roleAssignments select {
+    transition: none;
+  }
+}
