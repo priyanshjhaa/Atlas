@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { AtlasMark } from "@/components/brand";
 import { SignInCard } from "@/components/auth/sign-in-card";
 import { getAtlasSession } from "@/lib/auth-session";
@@ -25,7 +27,9 @@ export default async function SignInPage({
       <div className="auth-page__landscape" aria-hidden="true" />
       <header className="auth-brand">
         <AtlasMark />
-        <span>Living engineering intelligence</span>
+        <Link className="auth-brand__back" href="/">
+          <ArrowLeft size={14} /> Back to landing page
+        </Link>
       </header>
       <SignInCard error={error} />
       <p className="auth-footer">Atlas · Code, history, and decisions in one living map</p>
