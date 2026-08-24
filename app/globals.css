@@ -1988,10 +1988,40 @@ body {
 .statement {
   position: relative;
   overflow: hidden;
+  isolation: isolate;
   background:
-    radial-gradient(circle at 87% 22%, rgba(209, 143, 82, .15), transparent 20%),
+    radial-gradient(circle at 14% 18%, rgba(255, 248, 223, .84), transparent 26%),
+    radial-gradient(circle at 87% 22%, rgba(209, 143, 82, .2), transparent 22%),
+    linear-gradient(118deg, rgba(248, 239, 220, .98) 0 40%, rgba(238, 230, 207, .88) 72%, rgba(224, 222, 194, .9)),
     #f8efdc;
 }
+
+.statement::before {
+  content: "";
+  position: absolute;
+  z-index: -2;
+  inset: -9% -7% -9% 38%;
+  pointer-events: none;
+  opacity: .26;
+  background: url("/atlas-valley.png") 68% center / cover no-repeat;
+  filter: blur(12px) saturate(.72);
+  transform: scale(1.06);
+  mask-image: linear-gradient(90deg, transparent, rgba(0,0,0,.78) 30%, black);
+}
+
+.statement::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  opacity: .19;
+  background-image: var(--asanoha-pattern);
+  background-size: 72px 42px;
+  mask-image: linear-gradient(118deg, transparent 7%, black 48%, transparent 94%);
+}
+
+.statement > * { position: relative; z-index: 1; }
 
 .section-number {
   display: inline-flex;
