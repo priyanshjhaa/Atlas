@@ -36,12 +36,11 @@ describe("explanationAuditEvent", () => {
       schemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
       explanation: {
         schemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
-        executiveSummary: "secret generated summary",
-        answer: "secret generated answer",
-        claims: [{ text: "secret claim", evidenceIds: ["chunk:1"] }],
-        implementationSteps: [],
-        verificationSteps: [],
-        remainingQuestions: [],
+        bottomLine: { text: "secret generated bottom line", evidenceIds: ["chunk:1"] },
+        practicalImpacts: [{ audience: "engineering", text: "secret impact", evidenceIds: ["chunk:1"] }],
+        nextActions: [{ text: "secret action", evidenceIds: ["chunk:1"] }],
+        verificationChecks: [{ text: "secret check", evidenceIds: ["chunk:1"] }],
+        openQuestions: [],
       },
       metadata,
     };

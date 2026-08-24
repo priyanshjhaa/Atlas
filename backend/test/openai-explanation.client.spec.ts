@@ -23,28 +23,18 @@ import {
 
 const explanation = {
   schemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
-  executiveSummary: "The session boundary has one observed consumer.",
-  answer: "Update the session boundary and verify its consumer.",
-  claims: [
-    {
-      text: "The API imports the session boundary.",
-      evidenceIds: ["relationship:consumer"],
-    },
-  ],
-  implementationSteps: [
-    {
-      title: "Update the session boundary",
-      detail: "Preserve its observed contract.",
-      evidenceIds: ["chunk:session"],
-    },
-  ],
-  verificationSteps: [
-    {
-      text: "Exercise the API consumer.",
-      evidenceIds: ["relationship:consumer"],
-    },
-  ],
-  remainingQuestions: ["Dynamic consumers remain unknown."],
+  bottomLine: {
+    text: "Update the session boundary and verify its observed consumer.",
+    evidenceIds: ["relationship:consumer"],
+  },
+  practicalImpacts: [{
+    audience: "engineering" as const,
+    text: "The API depends on the session boundary contract.",
+    evidenceIds: ["relationship:consumer"],
+  }],
+  nextActions: [{ text: "Preserve the observed session contract.", evidenceIds: ["chunk:session"] }],
+  verificationChecks: [{ text: "Exercise the API consumer.", evidenceIds: ["relationship:consumer"] }],
+  openQuestions: ["Do dynamic consumers require coordination?"],
 };
 
 const packet: ImpactEvidencePacket = {
@@ -133,6 +123,7 @@ describe("OpenAIExplanationClient", () => {
         LLM_EXPLANATIONS_ENABLED: "true",
         LLM_EXPLANATION_MODEL: "configured-model",
         LLM_EXPLANATION_TIMEOUT_MS: "3210",
+        LLM_MAX_OUTPUT_TOKENS: "3000",
         OPENAI_API_KEY: "test-key",
       }),
       fakeClient(parse),
@@ -162,19 +153,24 @@ describe("OpenAIExplanationClient", () => {
     ];
     expect(request).toMatchObject({
       model: "configured-model",
+      max_output_tokens: 2_000,
       tools: [],
       store: false,
     });
     expect(request).toHaveProperty("text.format.type", "json_schema");
     expect(JSON.stringify(request)).toContain("BEGIN_ATLAS_EVIDENCE_PACKET");
-    expect(JSON.stringify(request)).toContain("concise engineering brief");
+    expect(JSON.stringify(request)).toContain("practical briefing for a mixed technical team");
+    expect(JSON.stringify(request)).toContain(
+      "excessive_overview_technical_names",
+    );
+    expect(JSON.stringify(request)).toContain("atlas_impact_briefing_v2");
     expect(JSON.stringify(request)).toContain("verifiedAssessment");
     expect(JSON.stringify(request)).toContain("OVERVIEW_TECHNICAL_NAMES");
     expect(JSON.stringify(request)).toContain(
-      "REMAINING_QUESTION_REQUIRED=true",
+      "REQUIRED_OPEN_QUESTION=true",
     );
     expect(JSON.stringify(request)).toContain(
-      "LIMITATIONS_REQUIRING_QUESTIONS",
+      "LIMITATION_COUNT=1",
     );
     expect(JSON.stringify(request)).toContain("ALLOWED_EVIDENCE_IDS");
     expect(options).toMatchObject({
@@ -488,19 +484,18 @@ describe("OpenAIExplanationClient", () => {
     };
     const aliasedExplanation = {
       ...explanation,
-      claims: explanation.claims.map((claim) => ({
-        ...claim,
+      bottomLine: {
+        text: "F1 imports F2.",
+        evidenceIds: ["E1"],
+      },
+      practicalImpacts: explanation.practicalImpacts.map((item) => ({
+        ...item,
         text: "F1 imports F2.",
         evidenceIds: ["E1"],
       })),
-      implementationSteps: explanation.implementationSteps.map((step) => ({
-        ...step,
-        evidenceIds: ["E1"],
-      })),
-      verificationSteps: explanation.verificationSteps.map((step) => ({
-        ...step,
-        evidenceIds: ["E1"],
-      })),
+      nextActions: [{ text: "Keep F2 compatible with F1.", evidenceIds: ["E1"] }],
+      verificationChecks: [{ text: "Exercise F1 with F2.", evidenceIds: ["E1"] }],
+      openQuestions: ["Does F1 have another path to F2?"],
     };
     const parse = vi
       .fn()
@@ -520,14 +515,27 @@ describe("OpenAIExplanationClient", () => {
     expect(result).toMatchObject({
       status: "completed",
       explanation: {
-        claims: [
+        bottomLine: {
+          text: "src/api.ts imports src/session.ts.",
+          evidenceIds: [canonicalEvidenceId],
+        },
+        practicalImpacts: [
           {
             text: "src/api.ts imports src/session.ts.",
             evidenceIds: [canonicalEvidenceId],
           },
         ],
-        implementationSteps: [{ evidenceIds: [canonicalEvidenceId] }],
-        verificationSteps: [{ evidenceIds: [canonicalEvidenceId] }],
+        nextActions: [{
+          text: "Keep src/session.ts compatible with src/api.ts.",
+          evidenceIds: [canonicalEvidenceId],
+        }],
+        verificationChecks: [{
+          text: "Exercise src/api.ts with src/session.ts.",
+          evidenceIds: [canonicalEvidenceId],
+        }],
+        openQuestions: [
+          "Does src/api.ts have another path to src/session.ts?",
+        ],
       },
     });
     const [request] = parse.mock.calls[0] as [Record<string, unknown>];
@@ -567,23 +575,35 @@ describe("OpenAIExplanationClient", () => {
     };
     const invalidCandidate = {
       ...explanation,
-      answer: "Update src/session.ts and invented/missing.ts.",
+      bottomLine: {
+        ...explanation.bottomLine,
+        text: "Update src/session.ts and invented/missing.ts.",
+      },
+      practicalImpacts: explanation.practicalImpacts.map((item) => ({
+        ...item,
+        text: "src/session.ts affects invented/impact.ts.",
+      })),
+      nextActions: [{
+        text: "Change src/session.ts before invented/action.ts.",
+        evidenceIds: ["chunk:session"],
+      }],
+      verificationChecks: [{
+        text: "Exercise src/session.ts without invented/check.ts.",
+        evidenceIds: ["chunk:session"],
+      }],
+      openQuestions: ["Does invented/question.ts also participate?"],
     };
     const repairedProviderExplanation = {
       ...explanation,
-      answer: "Update F1.",
-      claims: explanation.claims.map((claim) => ({
-        ...claim,
+      bottomLine: { text: "Update F1.", evidenceIds: ["E1"] },
+      practicalImpacts: explanation.practicalImpacts.map((item) => ({
+        ...item,
+        text: "F1 contains the boundary.",
         evidenceIds: ["E1"],
       })),
-      implementationSteps: explanation.implementationSteps.map((step) => ({
-        ...step,
-        evidenceIds: ["E1"],
-      })),
-      verificationSteps: explanation.verificationSteps.map((step) => ({
-        ...step,
-        evidenceIds: ["E1"],
-      })),
+      nextActions: [{ text: "Change F1.", evidenceIds: ["E1"] }],
+      verificationChecks: [{ text: "Exercise F1.", evidenceIds: ["E1"] }],
+      openQuestions: ["Does F1 have another consumer?"],
     };
     const parse = vi
       .fn()
@@ -608,7 +628,11 @@ describe("OpenAIExplanationClient", () => {
     expect(result).toMatchObject({
       status: "completed",
       explanation: {
-        answer: "Update src/session.ts.",
+        bottomLine: { text: "Update src/session.ts." },
+        practicalImpacts: [{ text: "src/session.ts contains the boundary." }],
+        nextActions: [{ text: "Change src/session.ts." }],
+        verificationChecks: [{ text: "Exercise src/session.ts." }],
+        openQuestions: ["Does src/session.ts have another consumer?"],
       },
     });
     const [request] = parse.mock.calls[0] as [
@@ -619,6 +643,12 @@ describe("OpenAIExplanationClient", () => {
     expect(envelope).toContain("REPAIR_FAILURE_CODE=unknown_file_path");
     expect(envelope).toContain("BEGIN_ATLAS_REPAIR_CANDIDATE");
     expect(envelope).toContain("Update F1 and [UNSUPPORTED_PATH].");
+    expect(envelope).toContain("F1 affects [UNSUPPORTED_PATH].");
+    expect(envelope).toContain("Change F1 before [UNSUPPORTED_PATH].");
+    expect(envelope).toContain("Exercise F1 without [UNSUPPORTED_PATH].");
+    expect(envelope).toContain("Does [UNSUPPORTED_PATH] also participate?");
+    expect(envelope).toContain('"evidenceIds":["E1"]');
+    expect(envelope).not.toContain('"evidenceIds":["chunk:session"]');
     expect(envelope).not.toContain("src/session.ts");
     expect(envelope).not.toContain("invented/missing.ts");
   });

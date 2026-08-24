@@ -7,6 +7,7 @@ export type ExplanationValidationFailureCode = Extract<
   ImpactExplanationFailureCode,
   | "invalid_explanation_schema"
   | "explanation_too_large"
+  | "briefing_too_verbose"
   | "prompt_injection_content"
   | "unknown_evidence_id"
   | "unknown_file_path"

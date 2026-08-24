@@ -29,8 +29,7 @@ import {
 import { PageHeader } from "@/components/app/shared";
 import { ConfidenceBadge } from "@/components/brand";
 import type {
-  AtlasImpactCitation,
-  AtlasImpactExplanationFailureCode,
+  AtlasImpactExplanation,
   AtlasImpactExplanationState,
   AtlasImpactFinding,
   AtlasImpactReport,
@@ -78,359 +77,184 @@ function ImpactFindingCard({ item }: { item: AtlasImpactFinding }) {
   );
 }
 
-const EXPLANATION_FALLBACK =
-  "Enhanced explanation unavailable. Showing the verified Atlas analysis.";
-
 function evidenceDomId(evidenceId: string) {
   return `evidence-${evidenceId.replace(/[^A-Za-z0-9_-]/g, "-")}`;
 }
 
-function CitationLinks({
-  evidenceIds,
-  evidenceById,
-  limit,
-}: {
-  evidenceIds: string[];
-  evidenceById: Map<string, AtlasImpactCitation>;
-  limit?: number;
-}) {
-  const citations = evidenceIds
-    .map((id) => evidenceById.get(id))
-    .filter((citation): citation is AtlasImpactCitation => Boolean(citation));
-  const visibleCitations =
-    limit === undefined ? citations : citations.slice(0, limit);
-  const hiddenCitationCount = citations.length - visibleCitations.length;
+type PracticalBriefing = Omit<AtlasImpactExplanation, "schemaVersion">;
 
-  if (!citations.length) return null;
-
-  return (
-    <span className="explanation-citations" aria-label="Supporting citations">
-      {visibleCitations.map((citation) => (
-        <a
-          href={`#${evidenceDomId(citation.id)}`}
-          key={citation.id}
-          aria-label={`View evidence from ${citation.filePath}${
-            citation.lineStart ? ` line ${citation.lineStart}` : ""
-          }`}
-        >
-          <Link2 size={12} />
-          {citation.filePath}
-          {citation.lineStart ? `:${citation.lineStart}` : ""}
-        </a>
-      ))}
-      {hiddenCitationCount > 0 && (
-        <span className="explanation-citations__more">
-          +{hiddenCitationCount} more in evidence
-        </span>
-      )}
-    </span>
-  );
-}
-
-function ExplanationFallback({
-  explanation,
-  retrying,
-  retryError,
-  onRetry,
-}: {
-  explanation: AtlasImpactExplanationState | null | undefined;
-  retrying: boolean;
-  retryError: string;
-  onRetry: () => void;
-}) {
-  const canRetry = !explanation || explanation.status === "failed";
-  const failureCode =
-    explanation?.status === "failed"
-      ? explanation.failureCode ?? explanation.metadata?.failureCode
-      : null;
-  const failureMessages: Partial<
-    Record<AtlasImpactExplanationFailureCode, string>
-  > = {
-        provider_request_rejected:
-          "The provider could not produce a response that satisfied Atlas’s grounding contract.",
-        invalid_provider_response:
-          "The provider returned a response Atlas could not safely validate.",
-        prompt_injection_content:
-          "Atlas rejected instruction-like content from the generated explanation.",
-        provider_rate_limited:
-          "The provider’s current usage limit has been reached. Try again shortly.",
-        provider_timeout:
-          "The provider did not finish within the configured time limit.",
-        provider_authentication:
-          "Atlas could not authenticate with the configured provider.",
-        provider_permission_denied:
-          "The configured provider account cannot use this model.",
-        provider_unavailable:
-          "The explanation provider is temporarily unavailable.",
-      };
-  const failure = failureCode
-    ? failureMessages[failureCode] ??
-      "Atlas could not safely validate the generated explanation."
+function briefingFallbackMessage(
+  state: AtlasImpactExplanationState | null | undefined,
+): { title: string; detail: string } {
+  if (state?.status === "pending") {
+    return {
+      title: "AI briefing is still generating",
+      detail: "Atlas’s verified handoff is available while the provider finishes.",
+    };
+  }
+  const failureCode = state?.status === "failed"
+    ? state.failureCode ?? state.metadata?.failureCode
     : null;
-
-  return (
-    <section className="explanation-fallback panel" aria-live="polite">
-      <div className="explanation-fallback__icon">
-        <Sparkles size={18} />
-      </div>
-      <div className="explanation-fallback__copy">
-        <span className="explanation-label">
-          AI explanation · deterministic fallback
-        </span>
-        <h2>{EXPLANATION_FALLBACK}</h2>
-        <p>
-          {failure ??
-            "The verified findings, evidence, limitations, and verification plan remain available below."}
-        </p>
-        {retryError && (
-          <p className="explanation-retry-error" role="alert">
-            {retryError}
-          </p>
-        )}
-      </div>
-      {canRetry && (
-        <button
-          className="button button--ghost"
-          type="button"
-          onClick={onRetry}
-          disabled={retrying}
-        >
-          <RefreshCw className={retrying ? "spin" : ""} size={14} />
-          {retrying ? "Retrying…" : "Retry explanation"}
-        </button>
-      )}
-    </section>
-  );
+  if (failureCode === "provider_rate_limited") {
+    return {
+      title: "AI provider limit reached",
+      detail: "The provider could not accept this request yet. Atlas assembled a verified fallback you can use now.",
+    };
+  }
+  if (failureCode?.startsWith("provider_") || failureCode === "configuration_error") {
+    return {
+      title: "AI provider unavailable",
+      detail: "Atlas assembled this fallback directly from the verified report. You can retry without rerunning the analysis.",
+    };
+  }
+  if (failureCode) {
+    return {
+      title: "AI briefing did not pass verification",
+      detail: "Atlas rejected the generated prose and kept this source-backed fallback instead.",
+    };
+  }
+  return {
+    title: "Verified Atlas briefing",
+    detail: "This handoff was assembled directly from the source-backed report.",
+  };
 }
 
-function AIExplanation({
+function practicalBriefing(
+  state: AtlasImpactExplanationState | null | undefined,
+  result: AtlasImpactReport["result"],
+): { briefing: PracticalBriefing; generated: boolean } {
+  if (state?.status === "completed" && state.schemaVersion === "2") {
+    return { briefing: state.explanation, generated: true };
+  }
+  if (state?.status === "completed" && state.schemaVersion === "1") {
+    const legacy = state.explanation;
+    const claimEvidence = [...new Set(legacy.claims.flatMap((item) => item.evidenceIds))];
+    return {
+      generated: true,
+      briefing: {
+        bottomLine: {
+          text: [legacy.answer, legacy.executiveSummary].filter(Boolean).join(" "),
+          evidenceIds: claimEvidence,
+        },
+        practicalImpacts: [{
+          audience: "engineering",
+          text: legacy.claims[0]?.text ?? legacy.executiveSummary,
+          evidenceIds: legacy.claims[0]?.evidenceIds ?? claimEvidence,
+        }],
+        nextActions: legacy.implementationSteps.slice(0, 3).map((item) => ({
+          text: `${item.title}: ${item.detail}`,
+          evidenceIds: item.evidenceIds,
+        })),
+        verificationChecks: legacy.verificationSteps.slice(0, 2),
+        openQuestions: legacy.remainingQuestions.slice(0, 2),
+      },
+    };
+  }
+
+  const fallbackIds = result.evidence.slice(0, 3).map((item) => item.id);
+  return {
+    generated: false,
+    briefing: {
+      bottomLine: { text: result.answer || result.executiveSummary, evidenceIds: fallbackIds },
+      practicalImpacts: [{ audience: "engineering", text: result.executiveSummary, evidenceIds: fallbackIds }],
+      nextActions: (result.recommendations ?? []).slice(0, 3).map((text) => ({ text, evidenceIds: fallbackIds })),
+      verificationChecks: result.verificationPlan.slice(0, 2).map((text) => ({ text, evidenceIds: fallbackIds })),
+      openQuestions: result.unknownImpacts.slice(0, 2).map((item) => item.title),
+    },
+  };
+}
+
+function PracticalAIExplanation({
   state,
-  evidence,
-  limitations,
-  mode = "overview",
+  reportId,
+  result,
   retrying,
   retryError,
   onRetry,
 }: {
   state: AtlasImpactExplanationState | null | undefined;
-  evidence: AtlasImpactCitation[];
-  limitations: string[];
-  mode?: "overview" | "claims" | "plan";
+  reportId: string;
+  result: AtlasImpactReport["result"];
   retrying: boolean;
   retryError: string;
   onRetry: () => void;
 }) {
-  if (state?.status === "pending") {
-    if (mode !== "overview") return null;
-    return (
-      <section className="explanation-fallback panel" aria-live="polite">
-        <div className="explanation-fallback__icon">
-          <Sparkles size={18} />
-        </div>
-        <div className="explanation-fallback__copy">
-          <span className="explanation-label">
-            AI explanation · generating
-          </span>
-          <h2>Enhanced explanation is being generated.</h2>
-          <p>
-            The verified Atlas analysis is ready below while generation
-            completes.
-          </p>
-        </div>
-        <RefreshCw className="spin" size={18} aria-hidden="true" />
-      </section>
-    );
-  }
-
-  if (state?.status !== "completed") {
-    if (mode !== "overview") return null;
-    return (
-      <ExplanationFallback
-        explanation={state}
-        retrying={retrying}
-        retryError={retryError}
-        onRetry={onRetry}
-      />
-    );
-  }
-
-  const { explanation, metadata } = state;
-  const evidenceById = new Map(evidence.map((item) => [item.id, item]));
-  const summaryEvidenceIds = [
-    ...new Set(
-      explanation.claims.flatMap((claim) => claim.evidenceIds),
-    ),
-  ];
-  const summaryParagraphs = explanation.executiveSummary
-    .split(/\n\s*\n/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
-
-  if (mode === "overview") {
-    return (
-      <section
-        className="ai-explanation ai-explanation--overview"
-        aria-labelledby="ai-explanation-title"
-      >
-        <div className="ai-explanation__overview panel">
-          <header className="ai-explanation__header">
-            <div className="ai-explanation__intro">
-              <span className="explanation-label">
-                <Sparkles size={14} /> AI briefing
-              </span>
-              <h2 id="ai-explanation-title">What this change means</h2>
-              <p className="ai-explanation__answer">{explanation.answer}</p>
-              <div className="ai-explanation__summary">
-                {summaryParagraphs.map((paragraph, index) => (
-                  <p key={`${paragraph}:${index}`}>{paragraph}</p>
-                ))}
-              </div>
-              <CitationLinks
-                evidenceIds={summaryEvidenceIds}
-                evidenceById={evidenceById}
-                limit={3}
-              />
-              {explanation.implementationSteps.length > 0 && (
-                <div className="ai-explanation__actions">
-                  <span>Recommended path</span>
-                  <ol>
-                    {explanation.implementationSteps
-                      .slice(0, 3)
-                      .map((step) => (
-                        <li key={step.title}>
-                          <b>{step.title}</b>
-                          <p>{step.detail}</p>
-                        </li>
-                      ))}
-                  </ol>
-                </div>
-              )}
-            </div>
-            {metadata?.model && (
-              <span className="explanation-model">
-                {metadata.provider} · {metadata.model}
-              </span>
-            )}
-          </header>
-          <p className="explanation-boundary">
-            Generated from Atlas&apos;s verified evidence packet. The model did
-            not scan the repository.
-          </p>
-        </div>
-      </section>
-    );
-  }
-
-  if (mode === "claims") {
-    return (
-      <section className="ai-explanation ai-explanation--detail">
-        <section className="ai-explanation__section panel">
-          <div className="explanation-section-heading">
-            <span>AI</span>
-            <div>
-              <h3>Evidence-grounded claims</h3>
-              <p>What Atlas can support directly from the indexed evidence.</p>
-            </div>
-          </div>
-          <div className="explanation-claims">
-            {explanation.claims.map((claim, index) => (
-              <article key={`${claim.text}:${index}`}>
-                <span className="explanation-claim-index">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <div>
-                  <p>{claim.text}</p>
-                  <CitationLinks
-                    evidenceIds={claim.evidenceIds}
-                    evidenceById={evidenceById}
-                  />
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-      </section>
-    );
-  }
+  const { briefing, generated } = practicalBriefing(state, result);
+  const fallbackMessage = briefingFallbackMessage(state);
+  const metadata = state?.status === "completed" ? state.metadata : undefined;
+  const evidenceIds = new Set([
+    ...briefing.bottomLine.evidenceIds,
+    ...briefing.practicalImpacts.flatMap((item) => item.evidenceIds),
+    ...briefing.nextActions.flatMap((item) => item.evidenceIds),
+    ...briefing.verificationChecks.flatMap((item) => item.evidenceIds),
+  ]);
+  const verifiedSourceCount = result.evidence.filter((item) => evidenceIds.has(item.id)).length;
+  const failureCode = state?.status === "failed"
+    ? state.failureCode ?? state.metadata?.failureCode
+    : null;
 
   return (
-    <section className="ai-explanation ai-explanation--detail">
-      <div className="explanation-guidance-grid">
-        <section className="ai-explanation__section panel">
-          <div className="explanation-section-heading">
-            <span>AI</span>
-            <div>
-              <h3>Implementation guidance</h3>
-              <p>A sequenced path that preserves the observed contracts.</p>
-            </div>
+    <section className="practical-briefing panel" aria-labelledby="practical-briefing-title">
+      <header className="practical-briefing__header">
+        <div>
+          <span className="explanation-label"><Sparkles size={14} /> {generated ? "AI briefing" : "Verified fallback"}</span>
+          <h2 id="practical-briefing-title">Bottom line</h2>
+        </div>
+        {metadata?.model && <small>{metadata.provider} · {metadata.model}</small>}
+      </header>
+
+      {!generated && (
+        <div className="practical-briefing__status" role={failureCode ? "alert" : "status"}>
+          <div>
+            <strong>{fallbackMessage.title}</strong>
+            <p>{fallbackMessage.detail}</p>
           </div>
-          <ol className="explanation-steps">
-            {explanation.implementationSteps.map((step, index) => (
-              <li key={`${step.title}:${index}`}>
-                <div>
-                  <b>{step.title}</b>
-                  <p>{step.detail}</p>
-                  <CitationLinks
-                    evidenceIds={step.evidenceIds}
-                    evidenceById={evidenceById}
-                  />
-                </div>
-              </li>
-            ))}
-          </ol>
+          {(state?.status === "failed" || !state) && (
+            <button className="button button--ghost" type="button" onClick={onRetry} disabled={retrying}>
+              <RefreshCw className={retrying ? "spin" : ""} size={14} />
+              {retrying ? "Retrying…" : "Retry briefing"}
+            </button>
+          )}
+        </div>
+      )}
+      {retryError && <p className="explanation-retry-error" role="alert">{retryError}</p>}
+
+      <p className="practical-briefing__bottom-line">{briefing.bottomLine.text}</p>
+
+      <section className="practical-briefing__section" aria-labelledby="practical-impact-title">
+        <div className="practical-briefing__heading"><span>01</span><h3 id="practical-impact-title">Practical impact</h3></div>
+        <div className="practical-impact-grid">
+          {briefing.practicalImpacts.map((item) => (
+            <article key={item.audience}><span>{item.audience}</span><p>{item.text}</p></article>
+          ))}
+        </div>
+      </section>
+
+      <div className="practical-briefing__guidance">
+        <section className="practical-briefing__section" aria-labelledby="next-move-title">
+          <div className="practical-briefing__heading"><span>02</span><h3 id="next-move-title">Recommended next move</h3></div>
+          <ol>{briefing.nextActions.map((item, index) => <li key={`${item.text}:${index}`}>{item.text}</li>)}</ol>
         </section>
-        <section className="ai-explanation__section panel">
-          <div className="explanation-section-heading">
-            <span>AI</span>
-            <div>
-              <h3>Verification guidance</h3>
-              <p>Checks that turn the remaining risk into observable signals.</p>
-            </div>
-          </div>
-          <ol className="explanation-steps">
-            {explanation.verificationSteps.map((step, index) => (
-              <li key={`${step.text}:${index}`}>
-                <div>
-                  <p>{step.text}</p>
-                  <CitationLinks
-                    evidenceIds={step.evidenceIds}
-                    evidenceById={evidenceById}
-                  />
-                </div>
-              </li>
-            ))}
-          </ol>
+        <section className="practical-briefing__section" aria-labelledby="before-merge-title">
+          <div className="practical-briefing__heading"><span>03</span><h3 id="before-merge-title">Before merge</h3></div>
+          <ul>{briefing.verificationChecks.map((item, index) => <li key={`${item.text}:${index}`}>{item.text}</li>)}</ul>
         </section>
       </div>
 
-      <div className="explanation-unknowns">
-        <section className="panel">
-          <span className="explanation-unknowns__label">Open before implementation</span>
-          <h3>Remaining questions</h3>
-          {explanation.remainingQuestions.length ? (
-            <ul>
-              {explanation.remainingQuestions.map((question) => (
-                <li key={question}>{question}</li>
-              ))}
-            </ul>
-          ) : (
-            <p>No additional questions were generated.</p>
-          )}
+      {briefing.openQuestions.length > 0 && (
+        <section className="practical-briefing__questions" aria-labelledby="open-question-title">
+          <div><AlertTriangle size={16} /><span><b id="open-question-title">Top unresolved question</b><small>{result.unknownImpacts.length} Atlas unknown{result.unknownImpacts.length === 1 ? "" : "s"} · complete context in Findings</small></span></div>
+          <ul>{briefing.openQuestions.map((question) => <li key={question}>{question}</li>)}</ul>
         </section>
-        <section className="panel">
-          <span className="explanation-unknowns__label">Atlas analysis boundary</span>
-          <h3>Verified limitations</h3>
-          {limitations.length ? (
-            <ul>
-              {limitations.map((limitation) => (
-                <li key={limitation}>{limitation}</li>
-              ))}
-            </ul>
-          ) : (
-            <p>No deterministic limitations were recorded.</p>
-          )}
-        </section>
-      </div>
+      )}
+
+      <footer className="practical-briefing__footer">
+        <span><ShieldCheck size={14} /> Based on {verifiedSourceCount} verified source{verifiedSourceCount === 1 ? "" : "s"}</span>
+        <nav aria-label="Briefing source details">
+          <Link href={`/app/impact/${reportId}/findings`}>Open Atlas Findings <ArrowRight size={13} /></Link>
+          <Link href={`/app/impact/${reportId}/evidence`}>View evidence <ArrowRight size={13} /></Link>
+        </nav>
+      </footer>
     </section>
   );
 }
@@ -1121,11 +945,10 @@ export function ImpactReportPage({
               role="tabpanel"
               aria-labelledby="report-briefing-tab"
             >
-              <AIExplanation
+              <PracticalAIExplanation
                 state={currentReport.explanation}
-                evidence={result.evidence}
-                limitations={result.limitations}
-                mode="overview"
+                reportId={currentReport.id}
+                result={result}
                 retrying={retryingExplanation}
                 retryError={explanationRetryError}
                 onRetry={retryExplanation}
@@ -1225,15 +1048,6 @@ export function ImpactReportPage({
               behind the reported blast radius.
             </p>
           </header>
-          <AIExplanation
-            state={currentReport.explanation}
-            evidence={result.evidence}
-            limitations={result.limitations}
-            mode="claims"
-            retrying={retryingExplanation}
-            retryError={explanationRetryError}
-            onRetry={retryExplanation}
-          />
           <main className="report-detail-main">
             <section className="report-section">
               <div className="report-section__heading">
@@ -1312,19 +1126,10 @@ export function ImpactReportPage({
             <span>Execution workspace</span>
             <h2 id="plan-title">Implementation and verification plan</h2>
             <p>
-              Work through the generated guidance alongside Atlas&apos;s
-              deterministic recommendations and checks.
+              Work through Atlas&apos;s deterministic recommendations and checks,
+              with the source-backed analysis kept separate from AI prose.
             </p>
           </header>
-          <AIExplanation
-            state={currentReport.explanation}
-            evidence={result.evidence}
-            limitations={result.limitations}
-            mode="plan"
-            retrying={retryingExplanation}
-            retryError={explanationRetryError}
-            onRetry={retryExplanation}
-          />
           <div className="verified-plan-grid">
             <section className="report-section panel">
               <div className="report-section__heading">

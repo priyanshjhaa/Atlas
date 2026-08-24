@@ -18,6 +18,12 @@ import { ImpactRepository } from "./impact.repository";
 import type { StoredImpactReport } from "./impact.types";
 import { OpenAIExplanationClient } from "./openai-explanation.client";
 
+const PRACTICAL_BRIEFING_PACKET_LIMITS = {
+  maxEvidenceItems: 8,
+  maxEvidenceCharacters: 6_000,
+  maxPacketCharacters: 7_000,
+} as const;
+
 @Injectable()
 export class ExplanationGenerationService {
   constructor(
@@ -46,16 +52,17 @@ export class ExplanationGenerationService {
     let packetResult;
     try {
       packetResult = this.packets.build(report.input, report.result, {
-        maxEvidenceItems: this.config.get("LLM_MAX_EVIDENCE_ITEMS", {
-          infer: true,
-        }),
-        maxEvidenceCharacters: this.config.get(
-          "LLM_MAX_EVIDENCE_CHARACTERS",
-          { infer: true },
+        maxEvidenceItems: Math.min(
+          this.config.get("LLM_MAX_EVIDENCE_ITEMS", { infer: true }),
+          PRACTICAL_BRIEFING_PACKET_LIMITS.maxEvidenceItems,
         ),
-        maxPacketCharacters: this.config.get(
-          "LLM_MAX_PACKET_CHARACTERS",
-          { infer: true },
+        maxEvidenceCharacters: Math.min(
+          this.config.get("LLM_MAX_EVIDENCE_CHARACTERS", { infer: true }),
+          PRACTICAL_BRIEFING_PACKET_LIMITS.maxEvidenceCharacters,
+        ),
+        maxPacketCharacters: Math.min(
+          this.config.get("LLM_MAX_PACKET_CHARACTERS", { infer: true }),
+          PRACTICAL_BRIEFING_PACKET_LIMITS.maxPacketCharacters,
         ),
       });
     } catch {
@@ -228,6 +235,14 @@ export class ExplanationGenerationService {
       candidate = this.validator.repairUnknownFilePaths(candidate, packet);
       validation = this.validator.validate(candidate, packet);
     }
+    if (
+      validation.status === "invalid" &&
+      validation.failureCode === "excessive_overview_technical_names"
+    ) {
+      candidate =
+        this.validator.repairExcessiveOverviewTechnicalNames(candidate);
+      validation = this.validator.validate(candidate, packet);
+    }
     return { explanation: candidate, validation };
   }
 
@@ -235,7 +250,9 @@ export class ExplanationGenerationService {
     return (
       failureCode === "unknown_file_path" ||
       failureCode === "unknown_symbol" ||
-      failureCode === "unsupported_relationship"
+      failureCode === "unsupported_relationship" ||
+      failureCode === "excessive_overview_technical_names" ||
+      failureCode === "briefing_too_verbose"
     );
   }
 

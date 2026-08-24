@@ -43,20 +43,11 @@ const packet: ImpactEvidencePacket = {
 
 const explanation = {
   schemaVersion: IMPACT_EXPLANATION_SCHEMA_VERSION,
-  executiveSummary: "A grounded summary.",
-  answer: "A grounded answer.",
-  claims: [{ text: "A grounded claim.", evidenceIds: ["chunk:1"] }],
-  implementationSteps: [
-    {
-      title: "Update the boundary",
-      detail: "Preserve its contract.",
-      evidenceIds: ["chunk:1"],
-    },
-  ],
-  verificationSteps: [
-    { text: "Verify the consumer.", evidenceIds: ["relationship:1"] },
-  ],
-  remainingQuestions: [],
+  bottomLine: { text: "A grounded bottom line.", evidenceIds: ["chunk:1"] },
+  practicalImpacts: [{ audience: "engineering" as const, text: "A grounded impact.", evidenceIds: ["chunk:1"] }],
+  nextActions: [{ text: "Preserve the boundary contract.", evidenceIds: ["chunk:1"] }],
+  verificationChecks: [{ text: "Verify the consumer.", evidenceIds: ["relationship:1"] }],
+  openQuestions: [],
 };
 
 function report(explanationState?: ImpactExplanationState | null) {
@@ -179,6 +170,11 @@ function setup(options: {
       .mockImplementation(
         (candidate: unknown) => options.safeRepairResult ?? candidate,
       ),
+    repairExcessiveOverviewTechnicalNames: vi
+      .fn()
+      .mockImplementation(
+        (candidate: unknown) => options.safeRepairResult ?? candidate,
+      ),
   };
   const repository = {
     updateExplanation: vi
@@ -221,6 +217,7 @@ describe("ExplanationGenerationService", () => {
     const {
       service,
       report: stored,
+      packets,
       client,
       validator,
       repository,
@@ -229,6 +226,15 @@ describe("ExplanationGenerationService", () => {
 
     const result = await service.generate(stored);
 
+    expect(packets.build).toHaveBeenCalledWith(
+      stored.input,
+      stored.result,
+      {
+        maxEvidenceItems: 8,
+        maxEvidenceCharacters: 6_000,
+        maxPacketCharacters: 7_000,
+      },
+    );
     expect(client.generate).toHaveBeenCalledOnce();
     expect(validator.validate).toHaveBeenCalledWith(explanation, packet);
     expect(repository.updateExplanation).toHaveBeenCalledTimes(2);
@@ -380,10 +386,14 @@ describe("ExplanationGenerationService", () => {
     "unknown_file_path",
     "unknown_symbol",
     "unsupported_relationship",
+    "briefing_too_verbose",
   ] as const)("repairs one %s failure and combines provider usage", async (failureCode) => {
     const repairedExplanation = {
       ...explanation,
-      answer: "The repaired grounded answer.",
+      bottomLine: {
+        ...explanation.bottomLine,
+        text: "The repaired grounded bottom line.",
+      },
     };
     const repairResult = {
       status: "completed",
@@ -464,6 +474,40 @@ describe("ExplanationGenerationService", () => {
     expect(
       localRepairSetup.validator.repairUnknownFilePaths,
     ).toHaveBeenCalledWith(explanation, packet);
+    expect(result.explanation).toMatchObject({
+      status: "completed",
+      explanation: safelyRepaired,
+    });
+  });
+
+  it("replaces an over-technical bottom line locally without a second provider call", async () => {
+    const safelyRepaired = {
+      ...explanation,
+      bottomLine: {
+        ...explanation.bottomLine,
+        text: "Atlas found source-backed code surfaces relevant to this change.",
+      },
+    };
+    const localRepairSetup = setup({
+      validationResult: {
+        status: "invalid",
+        failureCode: "excessive_overview_technical_names",
+      },
+      safeRepairResult: safelyRepaired,
+      safeRepairValidationResult: {
+        status: "valid",
+        explanation: safelyRepaired,
+      },
+    });
+
+    const result = await localRepairSetup.service.generate(
+      localRepairSetup.report,
+    );
+
+    expect(localRepairSetup.client.generate).toHaveBeenCalledOnce();
+    expect(
+      localRepairSetup.validator.repairExcessiveOverviewTechnicalNames,
+    ).toHaveBeenCalledWith(explanation);
     expect(result.explanation).toMatchObject({
       status: "completed",
       explanation: safelyRepaired,

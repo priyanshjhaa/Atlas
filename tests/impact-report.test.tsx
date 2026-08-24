@@ -117,11 +117,11 @@ describe("ImpactReportPage", () => {
   it("supports legacy reports with the deterministic fallback", () => {
     const { rerender } = render(<ImpactReportPage report={report} />);
 
+    expect(screen.getByRole("heading", { name: "Bottom line" })).toBeVisible();
     expect(
-      screen.getByRole("heading", {
-        name: "Enhanced explanation unavailable. Showing the verified Atlas analysis.",
-      }),
+      screen.getByText(/assembled directly from the source-backed report/i),
     ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Retry briefing" })).toBeVisible();
     expect(
       screen.getByRole("heading", { name: "Change session validation" }),
     ).toBeInTheDocument();
@@ -211,7 +211,7 @@ describe("ImpactReportPage", () => {
     ).toBeVisible();
   });
 
-  it("separates a generated explanation from verified findings and links its citations", () => {
+  it("adapts stored v1 explanations into the briefing without leaking AI prose into detail pages", () => {
     const explainedReport: AtlasImpactReport = {
       ...report,
       explanation: {
@@ -281,7 +281,7 @@ describe("ImpactReportPage", () => {
       },
     };
 
-    const { container, rerender } = render(
+    const { rerender } = render(
       <ImpactReportPage report={explainedReport} />,
     );
 
@@ -289,19 +289,15 @@ describe("ImpactReportPage", () => {
       "aria-selected",
       "true",
     );
-    expect(
-      screen.getByRole("heading", { name: "What this change means" }),
-    ).toBeVisible();
-    expect(
-      screen.getByText(/model did not scan the repository/i),
-    ).toBeVisible();
-    expect(
-      container.querySelectorAll(".ai-explanation__summary p"),
-    ).toHaveLength(2);
-    expect(screen.getByText("Preserve the exported contract")).toBeVisible();
-    expect(screen.getByText("Update the validation behavior")).toBeVisible();
-    expect(screen.getByText("Coordinate the consumer")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Bottom line" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Practical impact" })).toBeVisible();
+    expect(screen.getByText("engineering", { selector: "article span" })).toBeVisible();
+    expect(screen.getByText(/Preserve the exported contract:/)).toBeVisible();
+    expect(screen.getByText(/Update the validation behavior:/)).toBeVisible();
+    expect(screen.getByText(/Coordinate the consumer:/)).toBeVisible();
     expect(screen.queryByText("Prepare the rollout")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Before merge" })).toBeVisible();
+    expect(screen.getByText("Top unresolved question")).toBeVisible();
     expect(
       screen.queryByRole("heading", { name: "Verified Atlas report" }),
     ).not.toBeInTheDocument();
@@ -309,7 +305,7 @@ describe("ImpactReportPage", () => {
       screen.queryByRole("heading", { name: "Implementation guidance" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /Findings/i }),
+      screen.getByRole("link", { name: "Open Atlas Findings" }),
     ).toHaveAttribute(
       "href",
       `/app/impact/${explainedReport.id}/findings`,
@@ -323,37 +319,82 @@ describe("ImpactReportPage", () => {
 
     rerender(<ImpactReportPage report={explainedReport} view="plan" />);
 
-    expect(
-      screen.getByText(/sequenced path that preserves the observed contracts/i),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("heading", { name: "Implementation guidance" }),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("heading", { name: "Verification guidance" }),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("heading", { name: "Remaining questions" }),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("heading", { name: "Verified limitations" }),
-    ).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Recommended next steps" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Verification plan" })).toBeVisible();
+    expect(screen.queryByText(/Preserve the exported contract/)).not.toBeInTheDocument();
 
     rerender(<ImpactReportPage report={explainedReport} view="findings" />);
 
-    expect(
-      screen.getByRole("heading", { name: "Evidence-grounded claims" }),
-    ).toBeVisible();
-    expect(
-      screen.getAllByRole("link", {
-        name: "View evidence from app/layout.tsx line 4",
-      })[0],
-    ).toHaveAttribute("href", "#evidence-relationship-1");
+    expect(screen.queryByText(/application layout imports the session validator/i)).not.toBeInTheDocument();
+    expect(screen.getByText("validateSession · lib/auth.ts")).toBeVisible();
     rerender(<ImpactReportPage report={explainedReport} view="evidence" />);
 
     expect(
       screen.getByRole("heading", { name: "Supporting sources" }),
     ).toBeVisible();
+  });
+
+  it("renders only the audiences supported by a v2 practical briefing", () => {
+    const v2Report: AtlasImpactReport = {
+      ...report,
+      explanation: {
+        status: "completed",
+        schemaVersion: "2",
+        explanation: {
+          schemaVersion: "2",
+          bottomLine: {
+            text: "Session validation can change safely if the observed application contract remains stable.",
+            evidenceIds: ["relationship-1"],
+          },
+          practicalImpacts: [
+            {
+              audience: "product",
+              text: "User-facing session behavior may change on the authenticated layout path.",
+              evidenceIds: ["relationship-1"],
+            },
+            {
+              audience: "engineering",
+              text: "The layout imports the validator, so its exported contract must remain compatible.",
+              evidenceIds: ["relationship-1"],
+            },
+          ],
+          nextActions: [{
+            text: "Implement the validator change behind the existing import contract.",
+            evidenceIds: ["relationship-1"],
+          }],
+          verificationChecks: [{
+            text: "Run the authenticated layout integration path before merge.",
+            evidenceIds: ["relationship-1"],
+          }],
+          openQuestions: [],
+        },
+        metadata: {
+          provider: "groq",
+          model: "test-model",
+          promptVersion: "16",
+          outputSchemaVersion: "2",
+          evidencePacketHash: "packet-hash",
+          sourceRevision: "abcdef1234567890",
+          generatedAt: "2026-07-29T12:00:01.000Z",
+          latencyMs: 250,
+          usage: { inputTokens: 100, outputTokens: 80, totalTokens: 180 },
+          validationStatus: "valid",
+          failureCode: null,
+          deterministicFallback: false,
+        },
+      },
+    };
+
+    render(<ImpactReportPage report={v2Report} />);
+
+    expect(screen.getByText("product", { selector: "article span" })).toBeVisible();
+    expect(screen.getByText("engineering", { selector: "article span" })).toBeVisible();
+    expect(screen.queryByText("operations", { selector: "article span" })).not.toBeInTheDocument();
+    expect(screen.getByText("Based on 1 verified source")).toBeVisible();
+    expect(screen.getByRole("link", { name: "View evidence" })).toHaveAttribute(
+      "href",
+      `/app/impact/${v2Report.id}/evidence`,
+    );
   });
 
   it("visually distinguishes historical relationships from observed findings", () => {
@@ -405,7 +446,7 @@ describe("ImpactReportPage", () => {
       explanation: {
         status: "failed",
         schemaVersion: "1",
-        failureCode: "provider_unavailable",
+        failureCode: "provider_rate_limited",
       },
     };
     vi.stubGlobal(
@@ -423,15 +464,14 @@ describe("ImpactReportPage", () => {
     );
 
     render(<ImpactReportPage report={failedReport} />);
+    expect(screen.getByText("AI provider limit reached")).toBeVisible();
     fireEvent.click(
-      screen.getByRole("button", { name: "Retry explanation" }),
+      screen.getByRole("button", { name: "Retry briefing" }),
     );
 
     await waitFor(() => {
       expect(
-        screen.getByRole("heading", {
-          name: "Enhanced explanation is being generated.",
-        }),
+        screen.getByText(/AI briefing is still generating/i),
       ).toBeVisible();
     });
     expect(screen.getByRole("tab", { name: /Atlas report/i })).toBeVisible();
