@@ -18,6 +18,22 @@ export type ImpactEvidenceProvenance =
   | ImpactObservedProvenance
   | "historical_relationship";
 
+export interface ImpactGitHubActor {
+  providerUserId: string | null;
+  login: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  profileUrl: string | null;
+  kind: "person" | "bot" | "unknown";
+}
+
+export interface ImpactGitHubReviewer {
+  actor: ImpactGitHubActor | null;
+  state: string;
+  submittedAt: string | null;
+  url: string;
+}
+
 export type CreateImpactReportInput =
   | {
       mode: "planned";
@@ -45,6 +61,10 @@ export interface ImpactReportInput {
     body?: string;
     url: string;
     author: string;
+    authorDetails?: ImpactGitHubActor | null;
+    reviewers?: ImpactGitHubReviewer[];
+    mergedBy?: ImpactGitHubActor | null;
+    reviewsTruncated?: boolean;
     baseRevision: string;
     headRevision: string;
     analysisBudget: {

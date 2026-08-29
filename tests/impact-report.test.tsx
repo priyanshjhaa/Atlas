@@ -155,6 +155,66 @@ describe("ImpactReportPage", () => {
     ).toBeVisible();
   });
 
+  it("shows pull-request authors, latest reviewer states, and merger", () => {
+    const pullRequestReport: AtlasImpactReport = {
+      ...report,
+      input: {
+        ...report.input,
+        mode: "pull-request",
+        pullRequest: {
+          number: 42,
+          title: "Change session validation",
+          url: "https://github.com/atlas/web/pull/42",
+          author: "engineer",
+          authorDetails: {
+            providerUserId: "U_engineer",
+            login: "engineer",
+            displayName: "Atlas Engineer",
+            avatarUrl: null,
+            profileUrl: "https://github.com/engineer",
+            kind: "person",
+          },
+          reviewers: [
+            {
+              actor: {
+                providerUserId: "U_reviewer",
+                login: "reviewer",
+                displayName: null,
+                avatarUrl: null,
+                profileUrl: "https://github.com/reviewer",
+                kind: "person",
+              },
+              state: "APPROVED",
+              submittedAt: "2026-08-02T00:00:00.000Z",
+              url: "https://github.com/atlas/web/pull/42#pullrequestreview-2",
+            },
+          ],
+          mergedBy: {
+            providerUserId: "U_maintainer",
+            login: "maintainer",
+            displayName: "Maintainer",
+            avatarUrl: null,
+            profileUrl: "https://github.com/maintainer",
+            kind: "person",
+          },
+          reviewsTruncated: false,
+          baseRevision: "base",
+          headRevision: "head",
+          changedFiles: [],
+        },
+      },
+    };
+
+    render(<ImpactReportPage report={pullRequestReport} />);
+
+    expect(screen.getByText(/opened by Atlas Engineer/i)).toBeVisible();
+    expect(screen.getByLabelText("Pull request provenance")).toBeVisible();
+    expect(screen.getByText("reviewer")).toBeVisible();
+    expect(screen.getByText("Approved")).toBeVisible();
+    expect(screen.getByText("Maintainer")).toBeVisible();
+    expect(screen.getByText("Merged by")).toBeVisible();
+  });
+
   it("shows cited Notion decisions and an unavailable state without changing risk", () => {
     const documentedReport: AtlasImpactReport = {
       ...report,

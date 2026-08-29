@@ -29,6 +29,7 @@ import {
 import { PageHeader } from "@/components/app/shared";
 import { ConfidenceBadge } from "@/components/brand";
 import type {
+  AtlasGitHubActor,
   AtlasImpactExplanation,
   AtlasImpactExplanationState,
   AtlasImpactFinding,
@@ -38,6 +39,20 @@ import type {
   AtlasRepository,
   AtlasWorkspace,
 } from "@/lib/api-types";
+
+function githubActorLabel(
+  actor: AtlasGitHubActor | null | undefined,
+  fallback = "User unavailable",
+) {
+  return actor?.displayName ?? actor?.login ?? fallback;
+}
+
+function reviewStateLabel(state: string) {
+  return state
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/^./, (letter) => letter.toUpperCase());
+}
 
 function confidenceType(
   provenance: AtlasImpactFinding["provenance"],
@@ -854,10 +869,52 @@ export function ImpactReportPage({
           <div className="report-hero__metadata">
             <span>{result.repository.owner}/{result.repository.name}</span>
             {report.input.pullRequest ? (
-              <span>PR #{report.input.pullRequest.number} · {report.input.pullRequest.author}</span>
+              <span>
+                PR #{report.input.pullRequest.number} · opened by{" "}
+                {githubActorLabel(
+                  report.input.pullRequest.authorDetails,
+                  report.input.pullRequest.author,
+                )}
+              </span>
             ) : null}
             <span>Revision {result.sourceRevision.slice(0, 12)}</span>
           </div>
+          {report.input.pullRequest &&
+          (report.input.pullRequest.reviewers?.length ||
+            report.input.pullRequest.mergedBy) ? (
+            <div
+              className="pull-request-provenance"
+              aria-label="Pull request provenance"
+            >
+              {report.input.pullRequest.reviewers?.map((review, index) => (
+                <a
+                  href={review.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  key={`${review.actor?.providerUserId ?? "unknown"}-${index}`}
+                >
+                  <b>{githubActorLabel(review.actor, "Reviewer unavailable")}</b>
+                  <span>{reviewStateLabel(review.state)}</span>
+                </a>
+              ))}
+              {report.input.pullRequest.mergedBy ? (
+                <a
+                  href={
+                    report.input.pullRequest.mergedBy.profileUrl ??
+                    report.input.pullRequest.url
+                  }
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <b>{githubActorLabel(report.input.pullRequest.mergedBy)}</b>
+                  <span>Merged by</span>
+                </a>
+              ) : null}
+              {report.input.pullRequest.reviewsTruncated ? (
+                <small>Older reviews are not shown</small>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <div className="risk-score" aria-label="Change risk">
           <span>Change risk</span>

@@ -218,6 +218,8 @@ export class GitHubAppService {
     number: number,
   ): Promise<{
     pullRequest: GitHubPullRequest;
+    author: GitHubActor | null;
+    mergedBy: GitHubActor | null;
     files: GitHubPullRequestFile[];
     filesTruncated: boolean;
     reviews: GitHubPullRequestReview[];
@@ -268,6 +270,8 @@ export class GitHubAppService {
     }
     return {
       pullRequest,
+      author: this.restActor(pullRequest.user),
+      mergedBy: this.restActor(pullRequest.merged_by),
       files,
       filesTruncated: pullRequest.changed_files > files.length,
       reviews,

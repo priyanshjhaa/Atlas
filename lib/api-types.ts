@@ -567,6 +567,15 @@ export interface AtlasWorkspaceContextActivity {
 
 export type AtlasImpactScope = "repository" | "workspace";
 
+export interface AtlasGitHubActor {
+  providerUserId: string | null;
+  login: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  profileUrl: string | null;
+  kind: "person" | "bot" | "unknown";
+}
+
 export const ATLAS_LEGACY_IMPACT_EXPLANATION_SCHEMA_VERSION = "1" as const;
 export const ATLAS_IMPACT_EXPLANATION_SCHEMA_VERSION = "2" as const;
 
@@ -753,6 +762,15 @@ export interface AtlasImpactReport {
       title: string;
       url: string;
       author: string;
+      authorDetails?: AtlasGitHubActor | null;
+      reviewers?: Array<{
+        actor: AtlasGitHubActor | null;
+        state: string;
+        submittedAt: string | null;
+        url: string;
+      }>;
+      mergedBy?: AtlasGitHubActor | null;
+      reviewsTruncated?: boolean;
       baseRevision: string;
       headRevision: string;
       analysisBudget?: {

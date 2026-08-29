@@ -6951,6 +6951,28 @@ body {
   color: #b5ad9e;
   content: "·";
 }
+.impact-report .pull-request-provenance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+.impact-report .pull-request-provenance a {
+  display: grid;
+  gap: 2px;
+  padding: 7px 9px;
+  border: 1px solid rgba(82, 91, 70, .13);
+  border-radius: 9px;
+  color: #555d4c;
+  background: rgba(255, 255, 255, .35);
+  font-size: 8px;
+}
+.impact-report .pull-request-provenance a span,
+.impact-report .pull-request-provenance small {
+  color: #817b6e;
+  font: 7px var(--mono);
+}
+.impact-report .pull-request-provenance small { align-self: center; }
 .impact-report .report-hero--compact .risk-score {
   width: 210px;
   min-width: 0;
