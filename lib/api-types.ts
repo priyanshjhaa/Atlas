@@ -554,6 +554,24 @@ export interface AtlasWorkspaceOverview {
     notion: AtlasWorkspaceContextActivity[];
   };
   recentReports: Array<{ id: string; title: string; status: "complete" | "insufficient_evidence"; riskLevel: "insufficient" | "low" | "medium" | "high"; riskScore: number | null; unknownCount: number; repository: { id: string; owner: string; name: string }; createdAt: string }>;
+  recentPullRequests: Array<{
+    id: string;
+    repository: string;
+    number: number;
+    title: string;
+    url: string;
+    state: string;
+    isDraft: boolean;
+    author: AtlasGitHubActor | null;
+    reviewers: Array<{
+      actor: AtlasGitHubActor | null;
+      state: string;
+      url: string;
+    }>;
+    mergedBy: AtlasGitHubActor | null;
+    reviewsTruncated: boolean;
+    updatedAt: string;
+  }>;
   attention: Array<{ id: string; severity: "critical" | "warning" | "info"; title: string; detail: string; action: { label: string; href: string } }>;
 }
 

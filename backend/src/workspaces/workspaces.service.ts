@@ -64,6 +64,24 @@ export interface WorkspaceOverview {
     repository: { id: string; owner: string; name: string };
     createdAt: string;
   }>;
+  recentPullRequests: Array<{
+    id: string;
+    repository: string;
+    number: number;
+    title: string;
+    url: string;
+    state: string;
+    isDraft: boolean;
+    author: WorkspaceOverviewActor | null;
+    reviewers: Array<{
+      actor: WorkspaceOverviewActor | null;
+      state: string;
+      url: string;
+    }>;
+    mergedBy: WorkspaceOverviewActor | null;
+    reviewsTruncated: boolean;
+    updatedAt: string;
+  }>;
   streams: {
     github: WorkspaceContextActivity[];
     notion: WorkspaceContextActivity[];
@@ -75,6 +93,15 @@ export interface WorkspaceOverview {
     detail: string;
     action: { label: string; href: string };
   }>;
+}
+
+interface WorkspaceOverviewActor {
+  providerUserId: string | null;
+  login: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  profileUrl: string | null;
+  kind: "person" | "bot" | "unknown";
 }
 
 export interface WorkspaceContextActivity {
@@ -373,6 +400,39 @@ export class WorkspacesService {
             name: report.repositoryName,
           },
           createdAt: report.createdAt.toISOString(),
+        };
+      }),
+      recentPullRequests: (snapshot.recentPullRequests ?? []).map((pullRequest) => {
+        const seenReviewers = new Set<string>();
+        const reviewers = (snapshot.recentPullRequestReviews ?? [])
+          .filter((review) => review.pullRequestId === pullRequest.id)
+          .filter((review) => {
+            const key =
+              review.reviewer?.providerUserId ??
+              review.reviewer?.login ??
+              review.providerReviewId;
+            if (seenReviewers.has(key)) return false;
+            seenReviewers.add(key);
+            return true;
+          })
+          .map((review) => ({
+            actor: review.reviewer,
+            state: review.state,
+            url: review.url,
+          }));
+        return {
+          id: pullRequest.id,
+          repository: `${pullRequest.repositoryOwner}/${pullRequest.repositoryName}`,
+          number: pullRequest.number,
+          title: pullRequest.title,
+          url: pullRequest.url,
+          state: pullRequest.state,
+          isDraft: pullRequest.isDraft,
+          author: pullRequest.author,
+          reviewers,
+          mergedBy: pullRequest.mergedBy,
+          reviewsTruncated: pullRequest.reviewsTruncated,
+          updatedAt: pullRequest.providerUpdatedAt.toISOString(),
         };
       }),
       streams: {

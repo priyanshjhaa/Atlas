@@ -46,6 +46,49 @@ const overview: AtlasWorkspaceOverview = {
     notion: [],
   },
   recentReports: [],
+  recentPullRequests: [
+    {
+      id: "pull-request-42",
+      repository: "atlas/web",
+      number: 42,
+      title: "Add provenance",
+      url: "https://github.com/atlas/web/pull/42",
+      state: "MERGED",
+      isDraft: false,
+      author: {
+        providerUserId: "U_author",
+        login: "engineer",
+        displayName: "Atlas Engineer",
+        avatarUrl: null,
+        profileUrl: "https://github.com/engineer",
+        kind: "person",
+      },
+      reviewers: [
+        {
+          actor: {
+            providerUserId: "U_reviewer",
+            login: "reviewer",
+            displayName: null,
+            avatarUrl: null,
+            profileUrl: "https://github.com/reviewer",
+            kind: "person",
+          },
+          state: "APPROVED",
+          url: "https://github.com/atlas/web/pull/42#pullrequestreview-1",
+        },
+      ],
+      mergedBy: {
+        providerUserId: "U_maintainer",
+        login: "maintainer",
+        displayName: null,
+        avatarUrl: null,
+        profileUrl: "https://github.com/maintainer",
+        kind: "person",
+      },
+      reviewsTruncated: false,
+      updatedAt: "2026-08-01T09:30:00.000Z",
+    },
+  ],
   attention: [{ id: "connect-notion", severity: "info", title: "Add decisions and documentation", detail: "Connect Notion for richer context.", action: { label: "Connect Notion", href: "/app/sources" } }],
 };
 
@@ -87,6 +130,8 @@ describe("DashboardPage", () => {
     expect(screen.getAllByText("Ready for analysis")).not.toHaveLength(0);
     expect(screen.getAllByText("Optional · not connected")).not.toHaveLength(0);
     expect(screen.getByRole("heading", { name: "GitHub changes" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /PR #42 — Add provenance/ })).toHaveAttribute("href", "https://github.com/atlas/web/pull/42");
+    expect(screen.getByText(/opened by Atlas Engineer · reviewed by reviewer · merged by maintainer/i)).toBeVisible();
     expect(screen.getByRole("heading", { name: "Notion changes" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Review GitHub activity/ })).toHaveAttribute("href", "/app/activity?source=github");
     expect(screen.getByRole("link", { name: /Review Notion activity/ })).toHaveAttribute("href", "/app/activity?source=notion");

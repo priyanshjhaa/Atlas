@@ -4807,6 +4807,7 @@ body {
 .context-stream__activity > div:last-child { border-bottom: 0; }
 .context-stream__activity p { display: flex; flex-direction: column; gap: 3px; margin: 0; }
 .context-stream__activity strong { font-size: 9px; }
+.context-stream__activity a { color: inherit; }
 .context-stream__activity small,
 .context-stream__activity time { color: var(--muted-2); font: 7px var(--mono); }
 .stream-event { width: 6px; height: 6px; border-radius: 50%; background: var(--app-moss); }

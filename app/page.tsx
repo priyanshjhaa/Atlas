@@ -21,7 +21,7 @@ export const metadata = {
 };
 
 const capabilities = [
-  { icon: GitPullRequest, index: "01", label: "Sync", title: "GitHub intelligence", detail: "Code, bounded history, pull requests, reviews, and revisions" },
+  { icon: GitPullRequest, index: "01", label: "Sync", title: "GitHub intelligence", detail: "Code, PR authors, review outcomes, mergers, and bounded history" },
   { icon: Database, index: "02", label: "Context", title: "Notion knowledge", detail: "Selected specifications, ADRs, runbooks, pages, and data sources" },
   { icon: Network, index: "03", label: "Map", title: "Living system graph", detail: "Packages, files, symbols, APIs, dependencies, and architecture" },
   { icon: ShieldCheck, index: "04", label: "Analyze", title: "Verifiable change impact", detail: "Risk, affected paths, evidence, unknowns, and verification steps" },
