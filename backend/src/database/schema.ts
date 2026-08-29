@@ -32,6 +32,13 @@ export interface GitHubActorRecord {
   kind: "person" | "bot" | "unknown";
 }
 
+export interface NotionEditorRecord {
+  providerUserId: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  kind: "person" | "bot" | "unknown";
+}
+
 export const workspaceRole = pgEnum("workspace_role", [
   "owner",
   "admin",
@@ -268,6 +275,7 @@ export const notionResources = pgTable(
     isSelected: boolean("is_selected").default(true).notNull(),
     isActive: boolean("is_active").default(true).notNull(),
     lastEditedAt: timestamp("last_edited_at", { withTimezone: true }),
+    lastEditor: jsonb("last_editor").$type<NotionEditorRecord>(),
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
     ...timestamps,
   },
@@ -303,6 +311,7 @@ export const notionDocuments = pgTable(
     content: text("content").notNull(),
     contentHash: text("content_hash").notNull(),
     sourceRevision: text("source_revision").notNull(),
+    lastEditor: jsonb("last_editor").$type<NotionEditorRecord>(),
     citation: jsonb("citation")
       .$type<Record<string, unknown>>()
       .default({})
@@ -333,6 +342,7 @@ export const notionDocumentVersions = pgTable(
       .references(() => notionDocuments.id, { onDelete: "cascade" }),
     contentHash: text("content_hash").notNull(),
     sourceRevision: text("source_revision").notNull(),
+    editor: jsonb("editor").$type<NotionEditorRecord>(),
     content: text("content").notNull(),
     citation: jsonb("citation")
       .$type<Record<string, unknown>>()
@@ -344,9 +354,9 @@ export const notionDocumentVersions = pgTable(
       .notNull(),
   },
   (table) => [
-    uniqueIndex("notion_document_versions_document_hash_unique").on(
+    uniqueIndex("notion_document_versions_document_revision_unique").on(
       table.documentId,
-      table.contentHash,
+      table.sourceRevision,
     ),
     index("notion_document_versions_workspace_id_idx").on(table.workspaceId),
     index("notion_document_versions_document_id_idx").on(table.documentId),
