@@ -99,7 +99,7 @@ export class PullRequestResolverService {
         title: pullRequest.title,
         body: pullRequest.body?.slice(0, 2_000),
         url: pullRequest.html_url,
-        author: pullRequest.user.login,
+        author: pullRequest.user?.login ?? "unknown",
         baseRevision: pullRequest.base.sha,
         headRevision: pullRequest.head.sha,
         analysisBudget: {
