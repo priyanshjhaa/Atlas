@@ -63,6 +63,10 @@ describe("NotionApiService", () => {
                 id: "page-1",
                 url: "https://notion.so/page-1",
                 last_edited_time: "2026-08-01T00:00:00.000Z",
+                last_edited_by: {
+                  object: "user",
+                  id: "user-1",
+                },
                 parent: { type: "workspace", workspace: true },
                 properties: {
                   Name: {
@@ -103,6 +107,12 @@ describe("NotionApiService", () => {
           providerResourceId: "page-1",
           kind: "page",
           title: "Architecture",
+          lastEditor: {
+            providerUserId: "user-1",
+            displayName: null,
+            avatarUrl: null,
+            kind: "unknown",
+          },
         }),
         expect.objectContaining({
           providerResourceId: "source-1",
@@ -115,6 +125,60 @@ describe("NotionApiService", () => {
     expect(
       JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string),
     ).toMatchObject({ start_cursor: "next-page" });
+  });
+
+  it("resolves editor names without retaining email fields", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          object: "user",
+          id: "user-1",
+          name: "Maya Chen",
+          avatar_url: "https://notion.so/avatar.png",
+          type: "person",
+          person: { email: "not-stored@example.com" },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const editor = await service().resolveEditor("access-token", {
+      providerUserId: "user-1",
+      displayName: null,
+      avatarUrl: null,
+      kind: "unknown",
+    });
+
+    expect(editor).toEqual({
+      providerUserId: "user-1",
+      displayName: "Maya Chen",
+      avatarUrl: "https://notion.so/avatar.png",
+      kind: "person",
+    });
+    expect(JSON.stringify(editor)).not.toContain("email");
+  });
+
+  it("keeps partial editor attribution when user details are forbidden", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(
+          JSON.stringify({ code: "restricted_resource", message: "Forbidden" }),
+          { status: 403, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    const partial = {
+      providerUserId: "user-1",
+      displayName: null,
+      avatarUrl: null,
+      kind: "unknown" as const,
+    };
+
+    await expect(service().resolveEditor("access-token", partial)).resolves.toEqual(
+      partial,
+    );
   });
 
   it("retrieves page Markdown and expands unknown child blocks", async () => {

@@ -313,6 +313,7 @@ export class NotionConnectorsRepository {
             parentId: resource.parentId,
             isActive: true,
             lastEditedAt: resource.lastEditedAt,
+            lastEditor: resource.lastEditor,
             updatedAt: new Date(),
           },
         });

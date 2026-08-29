@@ -31,6 +31,7 @@ interface NotionSearchResult {
   id: string;
   url?: string;
   last_edited_time?: string;
+  last_edited_by?: NotionUser;
   parent?: {
     type?: string;
     page_id?: string;
@@ -46,6 +47,21 @@ interface NotionSearchResult {
       title?: NotionRichText[];
     }
   >;
+}
+
+interface NotionUser {
+  object: "user";
+  id: string;
+  name?: string | null;
+  avatar_url?: string | null;
+  type?: "person" | "bot";
+}
+
+export interface NotionEditor {
+  providerUserId: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  kind: "person" | "bot" | "unknown";
 }
 
 interface NotionSearchResponse {
@@ -79,6 +95,7 @@ export interface AccessibleNotionResource {
   url: string | null;
   parentId: string | null;
   lastEditedAt: Date | null;
+  lastEditor: NotionEditor | null;
 }
 
 export interface NotionPageContent {
@@ -210,6 +227,33 @@ export class NotionApiService {
     };
   }
 
+  async resolveEditor(
+    accessToken: string,
+    editor: NotionEditor | null,
+  ): Promise<NotionEditor | null> {
+    if (!editor || editor.displayName) return editor;
+    try {
+      const response = await fetch(
+        `https://api.notion.com/v1/users/${encodeURIComponent(editor.providerUserId)}`,
+        {
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            "Notion-Version": NOTION_API_VERSION,
+          },
+          signal: AbortSignal.timeout(15_000),
+        },
+      );
+      const user = await this.readJson<NotionUser>(response);
+      return this.normalizeEditor(user);
+    } catch (error) {
+      if (error instanceof NotionApiRequestError && error.status === 403) {
+        return editor;
+      }
+      throw error;
+    }
+  }
+
   redirectUri(): string {
     return (
       this.config.get("NOTION_REDIRECT_URI", { infer: true }) ??
@@ -292,6 +336,22 @@ export class NotionApiService {
       lastEditedAt: resource.last_edited_time
         ? new Date(resource.last_edited_time)
         : null,
+      lastEditor: this.normalizeEditor(resource.last_edited_by),
+    };
+  }
+
+  private normalizeEditor(user: NotionUser | undefined): NotionEditor | null {
+    if (!user?.id) return null;
+    return {
+      providerUserId: user.id,
+      displayName: user.name ?? null,
+      avatarUrl: user.avatar_url ?? null,
+      kind:
+        user.type === "bot"
+          ? "bot"
+          : user.type === "person"
+            ? "person"
+            : "unknown",
     };
   }
 }

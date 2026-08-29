@@ -178,6 +178,7 @@ export class NotionSyncJobsRepository {
           content: page.markdown,
           contentHash,
           sourceRevision,
+          lastEditor: resource.lastEditor,
           citation,
           truncated: page.truncated,
         })
@@ -188,6 +189,7 @@ export class NotionSyncJobsRepository {
             content: page.markdown,
             contentHash,
             sourceRevision,
+            lastEditor: resource.lastEditor,
             citation,
             truncated: page.truncated,
             syncedAt: new Date(),
@@ -203,6 +205,7 @@ export class NotionSyncJobsRepository {
           documentId: document.id,
           contentHash,
           sourceRevision,
+          editor: resource.lastEditor,
           content: page.markdown,
           citation,
           truncated: page.truncated,
@@ -255,7 +258,11 @@ export class NotionSyncJobsRepository {
       }
       await transaction
         .update(notionResources)
-        .set({ lastSyncedAt: new Date(), updatedAt: new Date() })
+        .set({
+          lastEditor: resource.lastEditor,
+          lastSyncedAt: new Date(),
+          updatedAt: new Date(),
+        })
         .where(eq(notionResources.id, resource.id));
       return {
         versionCreated: Boolean(version),
