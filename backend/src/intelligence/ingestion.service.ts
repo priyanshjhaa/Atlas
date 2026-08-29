@@ -10,7 +10,10 @@ import {
 import { ArchitectureBuilderService } from "./architecture-builder.service";
 import { EmbeddingsService } from "./embeddings.service";
 import { IntelligenceRepository } from "./intelligence.repository";
-import type { IngestionSummary } from "./intelligence.types";
+import type {
+  IngestionSummary,
+  PullRequestSyncSummary,
+} from "./intelligence.types";
 import { ParserService } from "./parser.service";
 import { RelationshipExtractorService } from "./relationship-extractor.service";
 import { SourceDiscoveryService } from "./source-discovery.service";
@@ -222,6 +225,25 @@ export class IngestionService {
     } finally {
       await rm(syncPath, { recursive: true, force: true }).catch(() => undefined);
     }
+  }
+
+  async syncPullRequestProvenance(input: {
+    workspaceId: string;
+    repositoryId: string;
+    repositoryName: string;
+    owner: string;
+    installationId: string;
+  }): Promise<PullRequestSyncSummary> {
+    const pullRequests = await this.github.getRecentPullRequestProvenance({
+      installationId: input.installationId,
+      owner: input.owner,
+      repository: input.repositoryName,
+    });
+    return this.repository.persistRecentPullRequests({
+      workspaceId: input.workspaceId,
+      repositoryId: input.repositoryId,
+      pullRequests,
+    });
   }
 
   private async checkCancellation(input: IngestionInput): Promise<void> {

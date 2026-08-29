@@ -8,7 +8,10 @@ import {
   IngestionCancelledError,
   IngestionService,
 } from "../intelligence/ingestion.service";
-import type { IngestionSummary } from "../intelligence/intelligence.types";
+import type {
+  IngestionSummary,
+  PullRequestSyncSummary,
+} from "../intelligence/intelligence.types";
 import { redisConnectionFromUrl } from "./redis-connection";
 import { SyncJobsRepository } from "./sync-jobs.repository";
 import {
@@ -20,6 +23,7 @@ export interface SyncResult {
   outcome: "updated" | "no_change" | "cancelled";
   revision?: string;
   summary?: IngestionSummary;
+  provenance?: PullRequestSyncSummary;
 }
 
 @Injectable()
@@ -98,15 +102,25 @@ export class SyncWorkerService implements OnModuleDestroy {
         return { outcome: "cancelled" };
       }
 
+      await this.progress(job, 30, "fetching_pull_request_provenance");
+      const provenance = await this.ingestion.syncPullRequestProvenance({
+        workspaceId: context.workspaceId,
+        repositoryId: context.repositoryId,
+        repositoryName: context.name,
+        owner: context.owner,
+        installationId: context.installationId,
+      });
+
       if (revision === context.lastSyncedRevision) {
         await this.jobs.complete(
           job.data.syncJobId,
           context.repositoryId,
           revision,
           "no_change",
+          { provenance },
         );
         await job.updateProgress(100);
-        return { outcome: "no_change", revision };
+        return { outcome: "no_change", revision, provenance };
       }
 
       const summary = await this.ingestion.ingest({
@@ -117,7 +131,8 @@ export class SyncWorkerService implements OnModuleDestroy {
         installationId: context.installationId,
         revision,
         previousRevision: context.lastSyncedRevision,
-        progress: (percent, stage) => this.progress(job, percent, stage),
+        progress: (percent, stage) =>
+          this.progress(job, 35 + Math.round(percent * 0.6), stage),
         cancellationRequested: () =>
           this.jobs.cancellationRequested(job.data.syncJobId),
       });
@@ -126,10 +141,10 @@ export class SyncWorkerService implements OnModuleDestroy {
         context.repositoryId,
         revision,
         "updated",
-        { ...summary },
+        { ...summary, provenance },
       );
       await job.updateProgress(100);
-      return { outcome: "updated", revision, summary };
+      return { outcome: "updated", revision, summary, provenance };
     } catch (error) {
       if (error instanceof IngestionCancelledError) {
         await this.jobs.markCancelled(job.data.syncJobId);

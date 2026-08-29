@@ -207,3 +207,8 @@ export interface IngestionSummary {
     inferredGraphRelationships: number;
   };
 }
+
+export interface PullRequestSyncSummary {
+  pullRequestsSynced: number;
+  reviewsSynced: number;
+}
