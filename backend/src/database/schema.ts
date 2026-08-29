@@ -23,6 +23,15 @@ const timestamps = {
     .notNull(),
 };
 
+export interface GitHubActorRecord {
+  providerUserId: string | null;
+  login: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  profileUrl: string | null;
+  kind: "person" | "bot" | "unknown";
+}
+
 export const workspaceRole = pgEnum("workspace_role", [
   "owner",
   "admin",
@@ -1129,6 +1138,93 @@ export const repositoryCommits = pgTable(
     index("repository_commits_workspace_id_idx").on(table.workspaceId),
     index("repository_commits_repository_id_idx").on(table.repositoryId),
     index("repository_commits_committed_at_idx").on(table.committedAt),
+  ],
+);
+
+export const repositoryPullRequests = pgTable(
+  "repository_pull_requests",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    repositoryId: uuid("repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    providerPullRequestId: text("provider_pull_request_id").notNull(),
+    number: integer("number").notNull(),
+    title: text("title").notNull(),
+    url: text("url").notNull(),
+    state: text("state").notNull(),
+    isDraft: boolean("is_draft").default(false).notNull(),
+    author: jsonb("author").$type<GitHubActorRecord>(),
+    mergedBy: jsonb("merged_by").$type<GitHubActorRecord>(),
+    baseRevision: text("base_revision").notNull(),
+    headRevision: text("head_revision").notNull(),
+    reviewsTruncated: boolean("reviews_truncated").default(false).notNull(),
+    providerCreatedAt: timestamp("provider_created_at", { withTimezone: true })
+      .notNull(),
+    providerUpdatedAt: timestamp("provider_updated_at", { withTimezone: true })
+      .notNull(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    mergedAt: timestamp("merged_at", { withTimezone: true }),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("repository_pull_requests_repository_number_unique").on(
+      table.repositoryId,
+      table.number,
+    ),
+    uniqueIndex("repository_pull_requests_repository_provider_id_unique").on(
+      table.repositoryId,
+      table.providerPullRequestId,
+    ),
+    index("repository_pull_requests_workspace_id_idx").on(table.workspaceId),
+    index("repository_pull_requests_repository_id_idx").on(table.repositoryId),
+    index("repository_pull_requests_updated_at_idx").on(
+      table.repositoryId,
+      table.providerUpdatedAt,
+    ),
+  ],
+);
+
+export const repositoryPullRequestReviews = pgTable(
+  "repository_pull_request_reviews",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    repositoryId: uuid("repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    pullRequestId: uuid("pull_request_id")
+      .notNull()
+      .references(() => repositoryPullRequests.id, { onDelete: "cascade" }),
+    providerReviewId: text("provider_review_id").notNull(),
+    reviewer: jsonb("reviewer").$type<GitHubActorRecord>(),
+    state: text("state").notNull(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    url: text("url").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("repository_pull_request_reviews_pr_provider_id_unique").on(
+      table.pullRequestId,
+      table.providerReviewId,
+    ),
+    index("repository_pull_request_reviews_workspace_id_idx").on(
+      table.workspaceId,
+    ),
+    index("repository_pull_request_reviews_repository_id_idx").on(
+      table.repositoryId,
+    ),
+    index("repository_pull_request_reviews_pull_request_id_idx").on(
+      table.pullRequestId,
+    ),
   ],
 );
 
