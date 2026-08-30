@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { and, desc, eq, ilike, inArray, ne, notInArray, or, sql } from "drizzle-orm";
 import { DatabaseService } from "../database/database.service";
+import type { NotionEditorRecord } from "../database/schema";
 import type {
   GitHubPullRequestProvenance,
   GitHubRepositoryHistory,
@@ -119,6 +120,7 @@ export interface WorkspaceNotionChunkRow extends Record<string, unknown> {
   title: string;
   url: string | null;
   lastEditedAt: Date | null;
+  lastEditedBy: NotionEditorRecord | null;
   lastSyncedAt: Date | null;
   distance?: number;
 }
@@ -1076,6 +1078,7 @@ export class IntelligenceRepository {
         d.title,
         r.url,
         r.last_edited_at as "lastEditedAt",
+        r.last_editor as "lastEditedBy",
         r.last_synced_at as "lastSyncedAt",
         c.embedding <=> ${vectorValue}::vector as distance
       from ${notionDocumentChunks} c
@@ -1119,6 +1122,7 @@ export class IntelligenceRepository {
         title: notionDocuments.title,
         url: notionResources.url,
         lastEditedAt: notionResources.lastEditedAt,
+        lastEditedBy: notionResources.lastEditor,
         lastSyncedAt: notionResources.lastSyncedAt,
         distance: sql<number>`1`,
       })

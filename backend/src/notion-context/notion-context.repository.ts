@@ -22,6 +22,7 @@ import {
   notionResources,
   workspaceNotionCursors,
 } from "../database/schema";
+import type { NotionEditorRecord } from "../database/schema";
 
 export interface EligibleNotionReviewDocument {
   documentId: string;
@@ -34,6 +35,7 @@ export interface EligibleNotionReviewDocument {
     sourceRevision: string;
     capturedAt: Date;
     truncated: boolean;
+    editor: NotionEditorRecord | null;
   }>;
 }
 
@@ -49,6 +51,7 @@ export interface NotionReviewInput {
     content: string;
     truncated: boolean;
     capturedAt: Date;
+    editor: NotionEditorRecord | null;
   };
   previous: {
     id: string;
@@ -57,6 +60,7 @@ export interface NotionReviewInput {
     content: string;
     truncated: boolean;
     capturedAt: Date;
+    editor: NotionEditorRecord | null;
   };
 }
 
@@ -77,6 +81,7 @@ export interface EligibleNotionDocumentChange {
     citation: Record<string, unknown>;
     truncated: boolean;
     capturedAt: Date;
+    editor: NotionEditorRecord | null;
   }>;
 }
 
@@ -148,6 +153,7 @@ export class NotionContextRepository {
         sourceRevision: notionDocumentVersions.sourceRevision,
         capturedAt: notionDocumentVersions.capturedAt,
         truncated: notionDocumentVersions.truncated,
+        editor: notionDocumentVersions.editor,
       })
       .from(notionDocuments)
       .innerJoin(
@@ -188,6 +194,7 @@ export class NotionContextRepository {
         sourceRevision: row.sourceRevision,
         capturedAt: row.capturedAt,
         truncated: row.truncated,
+        editor: row.editor,
       });
       documents.set(row.documentId, document);
     }
@@ -234,6 +241,7 @@ export class NotionContextRepository {
         content: notionDocumentVersions.content,
         truncated: notionDocumentVersions.truncated,
         capturedAt: notionDocumentVersions.capturedAt,
+        editor: notionDocumentVersions.editor,
       })
       .from(notionDocumentVersions)
       .where(
@@ -391,6 +399,7 @@ export class NotionContextRepository {
         citation: notionDocumentVersions.citation,
         truncated: notionDocumentVersions.truncated,
         capturedAt: notionDocumentVersions.capturedAt,
+        editor: notionDocumentVersions.editor,
       })
       .from(notionDocumentVersions)
       .where(
@@ -422,6 +431,7 @@ export class NotionContextRepository {
           citation: version.citation,
           truncated: version.truncated,
           capturedAt: version.capturedAt,
+          editor: version.editor,
         })),
       })),
       truncated: changed.length > limit,

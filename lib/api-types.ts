@@ -218,6 +218,7 @@ export type AtlasWorkspaceIntelligenceSearchResult =
         url: string | null;
         sourceRevision: string;
         lastEditedAt: string | null;
+        lastEditedBy?: AtlasNotionEditor | null;
         heading: string | null;
         provenance: "indexed_notion_chunk";
       };
@@ -259,6 +260,13 @@ export interface AtlasNotionConnector {
   updatedAt: string;
 }
 
+export interface AtlasNotionEditor {
+  providerUserId: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  kind: "person" | "bot" | "unknown";
+}
+
 export interface AtlasNotionResource {
   id: string;
   connectorId: string;
@@ -270,6 +278,7 @@ export interface AtlasNotionResource {
   isSelected: boolean;
   isActive: boolean;
   lastEditedAt: string | null;
+  lastEditor: AtlasNotionEditor | null;
   lastSyncedAt: string | null;
 }
 
@@ -283,6 +292,7 @@ export interface AtlasNotionContextCitation {
   sourceRevision: string;
   capturedAt: string;
   lastEditedAt: string | null;
+  lastEditedBy: AtlasNotionEditor | null;
   heading: string | null;
   provenance: "notion_document_revision" | "indexed_notion_chunk";
 }
@@ -306,6 +316,7 @@ export interface AtlasNotionCatchUpSnapshot {
     previousRevision: string | null;
     changedAt: string;
     lastEditedAt: string | null;
+    lastEditedBy: AtlasNotionEditor | null;
     lastSyncedAt: string | null;
     truncated: boolean;
     baselineUnavailable: boolean;
@@ -357,6 +368,7 @@ export interface AtlasNotionReviewDocumentsResponse {
       sourceRevision: string;
       capturedAt: string;
       truncated: boolean;
+      lastEditedBy: AtlasNotionEditor | null;
       isCurrent: boolean;
     }>;
   }>;
@@ -398,6 +410,8 @@ export interface AtlasNotionDocumentReview {
     previousRevision: string;
     currentCapturedAt: string;
     previousCapturedAt: string;
+    currentEditor: AtlasNotionEditor | null;
+    previousEditor: AtlasNotionEditor | null;
     sourceAvailable: boolean;
   };
   whatChanged: AtlasNotionReviewFinding[];
@@ -848,6 +862,7 @@ export interface AtlasImpactReport {
         excerpt: string;
         sourceRevision: string;
         lastEditedAt: string | null;
+        lastEditedBy?: AtlasNotionEditor | null;
         freshness: string | null;
         relevance: number;
       }>;

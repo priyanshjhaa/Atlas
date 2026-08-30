@@ -42,6 +42,7 @@ const notionResource: AtlasNotionResource = {
   isSelected: true,
   isActive: true,
   lastEditedAt: "2026-08-11T10:00:00.000Z",
+  lastEditor: null,
   lastSyncedAt: null,
 };
 

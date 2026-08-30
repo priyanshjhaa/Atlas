@@ -125,6 +125,7 @@ export class NotionConnectorsRepository {
         isSelected: notionResources.isSelected,
         isActive: notionResources.isActive,
         lastEditedAt: notionResources.lastEditedAt,
+        lastEditor: notionResources.lastEditor,
         lastSyncedAt: notionResources.lastSyncedAt,
       })
       .from(notionResources)

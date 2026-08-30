@@ -133,6 +133,12 @@ export interface ImpactDocumentationEvidence {
   excerpt: string;
   sourceRevision: string;
   lastEditedAt: string | null;
+  lastEditedBy?: {
+    providerUserId: string;
+    displayName: string | null;
+    avatarUrl: string | null;
+    kind: "person" | "bot" | "unknown";
+  } | null;
   freshness: string | null;
   relevance: number;
 }

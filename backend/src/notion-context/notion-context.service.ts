@@ -175,6 +175,7 @@ export class NotionContextService {
       sourceRevision: item.citation.sourceRevision,
       capturedAt: item.freshness ?? new Date().toISOString(),
       lastEditedAt: item.citation.lastEditedAt,
+      lastEditedBy: item.citation.lastEditedBy,
       heading: item.citation.heading,
       provenance: "indexed_notion_chunk",
     }));
@@ -240,6 +241,7 @@ export class NotionContextService {
           sourceRevision: version.sourceRevision,
           capturedAt: version.capturedAt.toISOString(),
           truncated: version.truncated,
+          lastEditedBy: version.editor,
           isCurrent: index === 0,
         })),
       })),
@@ -293,6 +295,7 @@ export class NotionContextService {
         sourceRevision: source.current.sourceRevision,
         capturedAt: source.current.capturedAt.toISOString(),
         lastEditedAt: null,
+        lastEditedBy: source.current.editor,
         heading: null,
         provenance: "notion_document_revision",
       },
@@ -306,6 +309,7 @@ export class NotionContextService {
         sourceRevision: source.previous.sourceRevision,
         capturedAt: source.previous.capturedAt.toISOString(),
         lastEditedAt: null,
+        lastEditedBy: source.previous.editor,
         heading: null,
         provenance: "notion_document_revision",
       },
@@ -319,6 +323,7 @@ export class NotionContextService {
         sourceRevision: item.citation.sourceRevision,
         capturedAt: item.freshness ?? new Date().toISOString(),
         lastEditedAt: item.citation.lastEditedAt,
+        lastEditedBy: item.citation.lastEditedBy,
         heading: item.citation.heading,
         provenance: "indexed_notion_chunk" as const,
       })),
@@ -402,7 +407,13 @@ export class NotionContextService {
       currentCapturedAt: source.current.capturedAt,
       previousCapturedAt: source.previous.capturedAt,
       generationStatus: status,
-      result: { ...result, citations, revisionComparison },
+      result: {
+        ...result,
+        citations,
+        revisionComparison,
+        currentEditor: source.current.editor,
+        previousEditor: source.previous.editor,
+      },
     });
     if (!stored) {
       throw new BadRequestException("The document review could not be saved.");
@@ -506,6 +517,7 @@ export class NotionContextService {
         sourceRevision: current.sourceRevision,
         capturedAt: current.capturedAt.toISOString(),
         lastEditedAt: document.lastEditedAt?.toISOString() ?? null,
+        lastEditedBy: current.editor,
         heading: changedSections[0]?.heading ?? null,
         provenance: "notion_document_revision",
       });
@@ -519,6 +531,7 @@ export class NotionContextService {
         previousRevision: baseline?.sourceRevision ?? null,
         changedAt: document.latestChangeAt.toISOString(),
         lastEditedAt: document.lastEditedAt?.toISOString() ?? null,
+        lastEditedBy: current.editor,
         lastSyncedAt: document.lastSyncedAt?.toISOString() ?? null,
         truncated: current.truncated,
         baselineUnavailable: changeType === "changed" && !baseline,
@@ -1065,6 +1078,8 @@ export class NotionContextService {
     const result = row.result as unknown as NotionGeneratedReview & {
       citations: NotionContextCitation[];
       revisionComparison?: NotionRevisionComparison;
+      currentEditor?: NotionContextCitation["lastEditedBy"];
+      previousEditor?: NotionContextCitation["lastEditedBy"];
     };
     return {
       id: row.id,
@@ -1080,6 +1095,8 @@ export class NotionContextService {
         previousRevision: row.previousRevision,
         currentCapturedAt: row.currentCapturedAt.toISOString(),
         previousCapturedAt: row.previousCapturedAt.toISOString(),
+        currentEditor: result.currentEditor ?? null,
+        previousEditor: result.previousEditor ?? null,
         sourceAvailable: row.documentId !== null,
       },
       whatChanged: result.whatChanged ?? [],

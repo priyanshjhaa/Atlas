@@ -83,6 +83,12 @@ describe("RetrievalService", () => {
           title: "ADR 12: Session security",
           url: "https://notion.so/adr-12",
           lastEditedAt: new Date("2026-08-01T12:00:00.000Z"),
+          lastEditedBy: {
+            providerUserId: "notion-user-1",
+            displayName: "Maya Chen",
+            avatarUrl: null,
+            kind: "person",
+          },
           lastSyncedAt: new Date("2026-08-02T12:00:00.000Z"),
           distance: 0.1,
         },
@@ -113,6 +119,10 @@ describe("RetrievalService", () => {
       resourceId: "resource-1",
       url: "https://notion.so/adr-12",
       provenance: "indexed_notion_chunk",
+      lastEditedBy: {
+        providerUserId: "notion-user-1",
+        displayName: "Maya Chen",
+      },
     });
     expect(
       result.results.find((item) => item.provider === "github")?.citation,
