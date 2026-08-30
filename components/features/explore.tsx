@@ -36,6 +36,7 @@ import type {
   AtlasRepository,
   AtlasWorkspace,
 } from "@/lib/api-types";
+import { notionEditorAttribution } from "@/lib/notion-provenance";
 
 function readable(value: string) {
   return value
@@ -883,6 +884,7 @@ export function SearchPage({
                 key={`${item.provider}:${item.id}`}
                 target={item.provider === "notion" && item.citation.url ? "_blank" : undefined}
                 rel={item.provider === "notion" && item.citation.url ? "noreferrer" : undefined}
+                aria-label={item.provider === "notion" ? `Open ${item.title} in Notion — ${notionEditorAttribution(item.citation.lastEditedBy, item.citation.lastEditedAt ?? item.freshness)}` : undefined}
               >
                 <div className="search-result-icon">
                   {item.provider === "notion" ? (
@@ -909,9 +911,10 @@ export function SearchPage({
                   <p>{item.reason}</p>
                   {item.provider === "notion" && (
                     <small>
-                      {item.freshness
-                        ? `Synchronized ${new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(item.freshness))}`
-                        : "Freshness unavailable"}
+                      {notionEditorAttribution(
+                        item.citation.lastEditedBy,
+                        item.citation.lastEditedAt ?? item.freshness,
+                      )}
                     </small>
                   )}
                 </div>

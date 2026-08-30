@@ -39,6 +39,7 @@ import type {
   AtlasRepository,
   AtlasWorkspace,
 } from "@/lib/api-types";
+import { notionEditorAttribution } from "@/lib/notion-provenance";
 
 function githubActorLabel(
   actor: AtlasGitHubActor | null | undefined,
@@ -1059,10 +1060,12 @@ export function ImpactReportPage({
                           target={item.url ? "_blank" : undefined}
                           rel={item.url ? "noreferrer" : undefined}
                           key={item.id}
+                          aria-label={`${item.url ? `Open ${item.title} in Notion` : "Open Notion source settings"} — ${notionEditorAttribution(item.lastEditedBy, item.lastEditedAt)}`}
                         >
                           <span>Notion · {Math.round(item.relevance * 100)}% relevant</span>
                           <h3>{item.title}</h3>
                           <p>{item.excerpt}</p>
+                          <small>{notionEditorAttribution(item.lastEditedBy, item.lastEditedAt)}</small>
                         </a>
                       ))}
                     </div>
@@ -1284,9 +1287,10 @@ export function ImpactReportPage({
                       target={item.url ? "_blank" : undefined}
                       rel={item.url ? "noreferrer" : undefined}
                       key={item.id}
+                      aria-label={`${item.url ? `Open ${item.title} in Notion` : "Open Notion source settings"} — ${notionEditorAttribution(item.lastEditedBy, item.lastEditedAt)}`}
                     >
                       <b>{item.title}</b>
-                      <small>{item.sourceRevision.slice(0, 12)}</small>
+                      <small>{item.sourceRevision.slice(0, 12)} · {notionEditorAttribution(item.lastEditedBy, item.lastEditedAt)}</small>
                     </a>
                   ))}
                 </div>

@@ -28,6 +28,10 @@ import type {
   AtlasNotionReviewFinding,
   AtlasWorkspace,
 } from "@/lib/api-types";
+import {
+  notionEditorAttribution,
+  notionEditorName,
+} from "@/lib/notion-provenance";
 
 type ContextView = "catch-up" | "ask" | "review";
 
@@ -443,7 +447,11 @@ export function NotionContextPage({
                 <article className="context-document panel" key={document.documentId}>
                   <header>
                     <i className={document.changeType}>{document.changeType}</i>
-                    <div><h3>{document.title}</h3><p>{document.changedSections.length ? `${document.changedSections.length} changed ${document.changedSections.length === 1 ? "section" : "sections"}` : "Revision changed"} · {formatDate(document.changedAt)}</p></div>
+                    <div>
+                      <h3>{document.title}</h3>
+                      <p>{document.changedSections.length ? `${document.changedSections.length} changed ${document.changedSections.length === 1 ? "section" : "sections"}` : "Revision changed"} · {formatDate(document.changedAt)}</p>
+                      <small className="notion-editor-attribution">{notionEditorAttribution(document.lastEditedBy, document.lastEditedAt)}</small>
+                    </div>
                     {document.url && <a href={document.url} target="_blank" rel="noreferrer" aria-label={`Open ${document.title} in Notion`}><ExternalLink size={15} /></a>}
                   </header>
                   <div className="context-section-diffs">
@@ -542,7 +550,7 @@ export function NotionContextPage({
                       >
                         {previousRevisions.map((revision) => (
                           <option key={revision.id} value={revision.id}>
-                            {formatDate(revision.capturedAt)} · {revision.sourceRevision.slice(0, 14)}
+                            {formatDate(revision.capturedAt)} · {revision.sourceRevision.slice(0, 14)} · {notionEditorName(revision.lastEditedBy) === "Editor unavailable" ? "Editor unavailable" : `Edited by ${notionEditorName(revision.lastEditedBy)}`}
                           </option>
                         ))}
                       </select>
@@ -551,7 +559,7 @@ export function NotionContextPage({
                     <div>
                       <span>To current</span>
                       <strong>{selectedDocument?.currentRevision.slice(0, 18)}</strong>
-                      <small>{selectedDocument?.revisions[0] ? formatDate(selectedDocument.revisions[0].capturedAt) : "Latest sync"}</small>
+                      <small className="notion-editor-attribution">{selectedDocument?.revisions[0] ? notionEditorAttribution(selectedDocument.revisions[0].lastEditedBy, selectedDocument.revisions[0].capturedAt) : "Latest sync"}</small>
                     </div>
                   </div>
                   <button
@@ -623,6 +631,10 @@ export function NotionContextPage({
                     <span>{review.status === "generated" ? "Grounded document review" : "Deterministic revision review"}{review.cached ? " · reused" : ""}</span>
                     <h2>{review.document.title}</h2>
                     <p>{review.document.previousRevision.slice(0, 16)} <ArrowRight size={11} /> {review.document.currentRevision.slice(0, 16)} · reviewed {formatDate(review.createdAt)}</p>
+                    <div className="notion-review-editor-pair">
+                      <small>Previous: {notionEditorAttribution(review.document.previousEditor, review.document.previousCapturedAt)}</small>
+                      <small>Current: {notionEditorAttribution(review.document.currentEditor, review.document.currentCapturedAt)}</small>
+                    </div>
                   </div>
                   <div className="notion-review-report__actions">
                     <Link href={`/app/context/reviews/${review.id}`}>Permanent view <ArrowRight size={13} /></Link>
