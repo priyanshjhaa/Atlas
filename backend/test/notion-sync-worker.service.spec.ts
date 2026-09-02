@@ -70,7 +70,12 @@ function worker(
     {
       decrypt: vi.fn(() => ({ accessToken: "access-token" })),
     } as unknown as ConnectorEncryptionService,
-    notion as unknown as NotionApiService,
+    {
+      resolveEditor: vi.fn(async (_accessToken: string, editor: unknown) =>
+        editor,
+      ),
+      ...notion,
+    } as unknown as NotionApiService,
     chunker as unknown as NotionDocumentChunkerService,
     embeddings as unknown as EmbeddingsService,
   );
@@ -119,6 +124,12 @@ describe("NotionSyncWorkerService", () => {
       title: "Current",
       url: "https://notion.so/page-1",
       lastEditedAt: new Date("2026-08-01T12:00:00.000Z"),
+      lastEditor: {
+        providerUserId: "notion-user-1",
+        displayName: null,
+        avatarUrl: null,
+        kind: "unknown" as const,
+      },
     };
     const persistDocument = vi.fn(
       async (
@@ -152,6 +163,12 @@ describe("NotionSyncWorkerService", () => {
       { refreshResources: vi.fn(async () => undefined) },
       {
         listAccessibleResources: vi.fn(async () => []),
+        resolveEditor: vi.fn(async () => ({
+          providerUserId: "notion-user-1",
+          displayName: "Maya Chen",
+          avatarUrl: "https://notion.so/avatar.png",
+          kind: "person" as const,
+        })),
         retrievePageMarkdown: vi.fn(async () => ({
           markdown: "# Current",
           truncated: false,
@@ -169,7 +186,15 @@ describe("NotionSyncWorkerService", () => {
     expect(persistDocument).toHaveBeenCalledOnce();
     const [persistedResource, persistedPage, persistedChunks] =
       persistDocument.mock.calls[0] ?? [];
-    expect(persistedResource).toBe(resource);
+    expect(persistedResource).toEqual({
+      ...resource,
+      lastEditor: {
+        providerUserId: "notion-user-1",
+        displayName: "Maya Chen",
+        avatarUrl: "https://notion.so/avatar.png",
+        kind: "person",
+      },
+    });
     expect(persistedPage).toMatchObject({ markdown: "# Current" });
     expect(persistedChunks).toHaveLength(1);
     expect(persistedChunks?.[0]).toMatchObject({
@@ -177,6 +202,75 @@ describe("NotionSyncWorkerService", () => {
       content: "# Current",
     });
     expect(persistedChunks?.[0]?.embedding).toHaveLength(1536);
+  });
+
+  it("captures a new editor when the source revision changes but content does not", async () => {
+    const chunk = vi.fn();
+    const resource = {
+      id: "resource-1",
+      providerResourceId: "page-1",
+      title: "Decision",
+      url: "https://notion.so/page-1",
+      lastEditedAt: new Date("2026-08-02T12:00:00.000Z"),
+      lastEditor: {
+        providerUserId: "notion-user-2",
+        displayName: null,
+        avatarUrl: null,
+        kind: "unknown" as const,
+      },
+    };
+    const markdown = "# Unchanged decision";
+    const persistDocument = vi.fn(
+      async (
+        resourceInput: typeof resource,
+        pageInput: { markdown: string; truncated: boolean },
+        chunksInput?: unknown[],
+      ) => {
+        void resourceInput;
+        void pageInput;
+        void chunksInput;
+        return { versionCreated: true, chunksCreated: 0 };
+      },
+    );
+
+    await worker(
+      {
+        markRunning: vi.fn(async () => undefined),
+        executionContext: vi.fn(async () => context()),
+        selectedPages: vi.fn(async () => [
+          {
+            resource,
+            sourceRevision: "2026-08-01T12:00:00.000Z",
+            contentHash: createHash("sha256").update(markdown).digest("hex"),
+          },
+        ]),
+        updateProgress: vi.fn(async () => undefined),
+        persistDocument,
+        complete: vi.fn(async () => undefined),
+      },
+      { refreshResources: vi.fn(async () => undefined) },
+      {
+        listAccessibleResources: vi.fn(async () => []),
+        resolveEditor: vi.fn(async () => ({
+          ...resource.lastEditor,
+          displayName: "Priya Shah",
+          kind: "person" as const,
+        })),
+        retrievePageMarkdown: vi.fn(async () => ({
+          markdown,
+          truncated: false,
+          unknownBlockIdsVisited: 0,
+        })),
+      },
+      { chunk },
+    ).processJob(syncJob());
+
+    expect(chunk).not.toHaveBeenCalled();
+    const [persistedResource, persistedPage, persistedChunks] =
+      persistDocument.mock.calls[0] ?? [];
+    expect(persistedResource?.lastEditor?.displayName).toBe("Priya Shah");
+    expect(persistedPage?.markdown).toBe(markdown);
+    expect(persistedChunks).toBeUndefined();
   });
 
   it("does not rebuild chunks when only the Notion revision changes", async () => {

@@ -14,11 +14,14 @@ import {
   notionDocuments,
   notionResources,
   repositories,
+  repositoryPullRequestReviews,
+  repositoryPullRequests,
   syncJobs,
   users,
   workspaceMembers,
   workspaces,
 } from "../database/schema";
+import type { GitHubActorRecord } from "../database/schema";
 import type { WorkspaceRole } from "../auth/auth.types";
 
 export interface WorkspaceRecord {
@@ -92,6 +95,28 @@ export interface WorkspaceOverviewSnapshot {
     repositoryOwner: string;
     repositoryName: string;
     createdAt: Date;
+  }>;
+  recentPullRequests: Array<{
+    id: string;
+    repositoryOwner: string;
+    repositoryName: string;
+    number: number;
+    title: string;
+    url: string;
+    state: string;
+    isDraft: boolean;
+    author: GitHubActorRecord | null;
+    mergedBy: GitHubActorRecord | null;
+    reviewsTruncated: boolean;
+    providerUpdatedAt: Date;
+  }>;
+  recentPullRequestReviews: Array<{
+    pullRequestId: string;
+    providerReviewId: string;
+    reviewer: GitHubActorRecord | null;
+    state: string;
+    submittedAt: Date | null;
+    url: string;
   }>;
 }
 
@@ -400,6 +425,7 @@ export class WorkspacesRepository {
       notionDocumentCount,
       notionChunkCount,
       reportRows,
+      pullRequestRows,
     ] = await Promise.all([
       this.listRepositories(workspaceId),
       this.database.client
@@ -468,7 +494,54 @@ export class WorkspacesRepository {
         .where(eq(impactReports.workspaceId, workspaceId))
         .orderBy(desc(impactReports.createdAt))
         .limit(5),
+      this.database.client
+        .select({
+          id: repositoryPullRequests.id,
+          repositoryOwner: repositories.owner,
+          repositoryName: repositories.name,
+          number: repositoryPullRequests.number,
+          title: repositoryPullRequests.title,
+          url: repositoryPullRequests.url,
+          state: repositoryPullRequests.state,
+          isDraft: repositoryPullRequests.isDraft,
+          author: repositoryPullRequests.author,
+          mergedBy: repositoryPullRequests.mergedBy,
+          reviewsTruncated: repositoryPullRequests.reviewsTruncated,
+          providerUpdatedAt: repositoryPullRequests.providerUpdatedAt,
+        })
+        .from(repositoryPullRequests)
+        .innerJoin(
+          repositories,
+          eq(repositories.id, repositoryPullRequests.repositoryId),
+        )
+        .where(eq(repositoryPullRequests.workspaceId, workspaceId))
+        .orderBy(desc(repositoryPullRequests.providerUpdatedAt))
+        .limit(10),
     ]);
+    const pullRequestIds = pullRequestRows.map((pullRequest) => pullRequest.id);
+    const pullRequestReviewRows = pullRequestIds.length
+      ? await this.database.client
+          .select({
+            pullRequestId: repositoryPullRequestReviews.pullRequestId,
+            providerReviewId:
+              repositoryPullRequestReviews.providerReviewId,
+            reviewer: repositoryPullRequestReviews.reviewer,
+            state: repositoryPullRequestReviews.state,
+            submittedAt: repositoryPullRequestReviews.submittedAt,
+            url: repositoryPullRequestReviews.url,
+          })
+          .from(repositoryPullRequestReviews)
+          .where(
+            and(
+              eq(repositoryPullRequestReviews.workspaceId, workspaceId),
+              inArray(
+                repositoryPullRequestReviews.pullRequestId,
+                pullRequestIds,
+              ),
+            ),
+          )
+          .orderBy(desc(repositoryPullRequestReviews.submittedAt))
+      : [];
 
     return {
       workspace: { onboardingCompletedAt: workspace.onboardingCompletedAt },
@@ -485,6 +558,8 @@ export class WorkspacesRepository {
         notionChunks: notionChunkCount,
       },
       recentReports: reportRows,
+      recentPullRequests: pullRequestRows,
+      recentPullRequestReviews: pullRequestReviewRows,
     };
   }
 

@@ -36,6 +36,53 @@ function setup() {
         base: { sha: "base-sha", ref: "main" },
         head: { sha: "head-sha", ref: "session-check" },
       },
+      author: {
+        providerUserId: "U_engineer",
+        login: "engineer",
+        displayName: "Atlas Engineer",
+        avatarUrl: null,
+        profileUrl: "https://github.com/engineer",
+        kind: "person",
+      },
+      mergedBy: {
+        providerUserId: "U_maintainer",
+        login: "maintainer",
+        displayName: null,
+        avatarUrl: null,
+        profileUrl: "https://github.com/maintainer",
+        kind: "person",
+      },
+      reviews: [
+        {
+          providerReviewId: "R_1",
+          reviewer: {
+            providerUserId: "U_reviewer",
+            login: "reviewer",
+            displayName: null,
+            avatarUrl: null,
+            profileUrl: "https://github.com/reviewer",
+            kind: "person",
+          },
+          state: "CHANGES_REQUESTED",
+          submittedAt: "2026-08-01T00:00:00.000Z",
+          url: "https://github.com/atlas/web/pull/42#pullrequestreview-1",
+        },
+        {
+          providerReviewId: "R_2",
+          reviewer: {
+            providerUserId: "U_reviewer",
+            login: "reviewer",
+            displayName: null,
+            avatarUrl: null,
+            profileUrl: "https://github.com/reviewer",
+            kind: "person",
+          },
+          state: "APPROVED",
+          submittedAt: "2026-08-02T00:00:00.000Z",
+          url: "https://github.com/atlas/web/pull/42#pullrequestreview-2",
+        },
+      ],
+      reviewsTruncated: false,
       files: [
         {
           filename: "lib/auth-session.ts",
@@ -84,6 +131,7 @@ describe("PullRequestResolverService", () => {
         number: 42,
         body: "Validate the session before loading workspace data.",
         author: "engineer",
+        reviewsTruncated: false,
         baseRevision: "base-sha",
         headRevision: "head-sha",
         analysisBudget: {
@@ -94,6 +142,13 @@ describe("PullRequestResolverService", () => {
         },
       },
     });
+    expect(result.pullRequest?.authorDetails?.displayName).toBe(
+      "Atlas Engineer",
+    );
+    expect(result.pullRequest?.reviewers).toHaveLength(1);
+    expect(result.pullRequest?.reviewers?.[0]?.state).toBe("APPROVED");
+    expect(result.pullRequest?.reviewers?.[0]?.actor?.login).toBe("reviewer");
+    expect(result.pullRequest?.mergedBy?.login).toBe("maintainer");
     expect(result.description).toContain("Reject revoked sessions");
     expect(result.description).toContain("requireAtlasSession");
   });

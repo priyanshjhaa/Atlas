@@ -81,6 +81,14 @@ describe("IngestionService", () => {
       }));
     const github = {
       getRepositoryHistory,
+      getRecentPullRequestProvenance: vi.fn(async () => [
+        {
+          providerPullRequestId: "PR_42",
+          number: 42,
+          title: "Update API",
+          reviews: [],
+        },
+      ]),
       downloadRepositoryArchive: vi.fn(
         async ({ destinationPath }: { destinationPath: string }) => {
           await mkdir(join(destinationPath, "src"), { recursive: true });
@@ -114,9 +122,14 @@ describe("IngestionService", () => {
         },
       ),
     } as unknown as GitHubAppService;
+    const persistRecentPullRequests = vi.fn(async () => ({
+      pullRequestsSynced: 1,
+      reviewsSynced: 0,
+    }));
     const repository = {
       embeddingKey: (path: string, index: number) => `${path}:${index}`,
       persist,
+      persistRecentPullRequests,
     } as unknown as IntelligenceRepository;
     const service = new IngestionService(
       config,
@@ -229,6 +242,22 @@ describe("IngestionService", () => {
         repository: "api",
         baseRevision: "previous-sha",
         headRevision: "abcdef1234567890",
+      });
+      await expect(
+        service.syncPullRequestProvenance({
+          workspaceId: "workspace-1",
+          repositoryId: "repository-1",
+          repositoryName: "api",
+          owner: "atlas",
+          installationId: "42",
+        }),
+      ).resolves.toEqual({ pullRequestsSynced: 1, reviewsSynced: 0 });
+      expect(persistRecentPullRequests).toHaveBeenCalledWith({
+        workspaceId: "workspace-1",
+        repositoryId: "repository-1",
+        pullRequests: [
+          expect.objectContaining({ providerPullRequestId: "PR_42" }),
+        ],
       });
     } finally {
       await rm(storageRoot, { recursive: true, force: true });

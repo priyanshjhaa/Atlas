@@ -155,6 +155,66 @@ describe("ImpactReportPage", () => {
     ).toBeVisible();
   });
 
+  it("shows pull-request authors, latest reviewer states, and merger", () => {
+    const pullRequestReport: AtlasImpactReport = {
+      ...report,
+      input: {
+        ...report.input,
+        mode: "pull-request",
+        pullRequest: {
+          number: 42,
+          title: "Change session validation",
+          url: "https://github.com/atlas/web/pull/42",
+          author: "engineer",
+          authorDetails: {
+            providerUserId: "U_engineer",
+            login: "engineer",
+            displayName: "Atlas Engineer",
+            avatarUrl: null,
+            profileUrl: "https://github.com/engineer",
+            kind: "person",
+          },
+          reviewers: [
+            {
+              actor: {
+                providerUserId: "U_reviewer",
+                login: "reviewer",
+                displayName: null,
+                avatarUrl: null,
+                profileUrl: "https://github.com/reviewer",
+                kind: "person",
+              },
+              state: "APPROVED",
+              submittedAt: "2026-08-02T00:00:00.000Z",
+              url: "https://github.com/atlas/web/pull/42#pullrequestreview-2",
+            },
+          ],
+          mergedBy: {
+            providerUserId: "U_maintainer",
+            login: "maintainer",
+            displayName: "Maintainer",
+            avatarUrl: null,
+            profileUrl: "https://github.com/maintainer",
+            kind: "person",
+          },
+          reviewsTruncated: false,
+          baseRevision: "base",
+          headRevision: "head",
+          changedFiles: [],
+        },
+      },
+    };
+
+    render(<ImpactReportPage report={pullRequestReport} />);
+
+    expect(screen.getByText(/opened by Atlas Engineer/i)).toBeVisible();
+    expect(screen.getByLabelText("Pull request provenance")).toBeVisible();
+    expect(screen.getByText("reviewer")).toBeVisible();
+    expect(screen.getByText("Approved")).toBeVisible();
+    expect(screen.getByText("Maintainer")).toBeVisible();
+    expect(screen.getByText("Merged by")).toBeVisible();
+  });
+
   it("shows cited Notion decisions and an unavailable state without changing risk", () => {
     const documentedReport: AtlasImpactReport = {
       ...report,
@@ -171,6 +231,12 @@ describe("ImpactReportPage", () => {
               excerpt: "Preserve the public session validation contract.",
               sourceRevision: "notion-revision-1",
               lastEditedAt: "2026-07-28T12:00:00.000Z",
+              lastEditedBy: {
+                providerUserId: "notion-user-1",
+                displayName: "Maya Chen",
+                avatarUrl: null,
+                kind: "person",
+              },
               freshness: "2026-07-29T11:00:00.000Z",
               relevance: 0.87,
             },
@@ -186,6 +252,12 @@ describe("ImpactReportPage", () => {
     fireEvent.click(screen.getByText("Documentation context"));
     expect(screen.getByText("ADR 12: Session validation")).toBeVisible();
     expect(screen.getByText("87% relevant", { exact: false })).toBeVisible();
+    expect(screen.getByText(/Edited by Maya Chen.*editor observed at sync/i)).toBeVisible();
+    expect(
+      screen.getByRole("link", {
+        name: /Open ADR 12: Session validation in Notion.*Edited by Maya Chen/i,
+      }),
+    ).toHaveAttribute("href", "https://notion.so/adr-12");
     expect(
       screen.getByText("Medium", { selector: ".risk-score strong" }),
     ).toBeVisible();

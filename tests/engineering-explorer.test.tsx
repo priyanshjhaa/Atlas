@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-import { ArchitecturePage, GraphPage } from "@/components/features/explore";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ArchitecturePage, GraphPage, SearchPage } from "@/components/features/explore";
 import type {
   AtlasArchitectureSnapshot,
   AtlasGraph,
@@ -131,6 +131,10 @@ const architecture: AtlasArchitectureSnapshot = {
 };
 
 describe("engineering explorer", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("exposes traversal controls and lets a graph node become the new focus", () => {
     render(
       <GraphPage
@@ -177,5 +181,63 @@ describe("engineering explorer", () => {
     fireEvent.click(screen.getByRole("button", { name: /Module Src \/ Data/ }));
     expect(screen.getByRole("heading", { name: "Src / Data" })).toBeInTheDocument();
     expect(screen.getByText("Used by")).toBeInTheDocument();
+  });
+
+  it("shows editor attribution on linked Notion search citations", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        query: "session policy",
+        filters: { repositoryId: null, providers: ["notion"] },
+        lowConfidence: false,
+        results: [
+          {
+            id: "notion-1",
+            provider: "notion",
+            score: 0.9,
+            lexicalMatches: 2,
+            title: "ADR: Session rotation",
+            excerpt: "Rotate tokens after use.",
+            reason: "Notion documentation directly matched the search.",
+            freshness: "2026-08-20T05:00:00.000Z",
+            citation: {
+              provider: "notion",
+              documentId: "document-1",
+              resourceId: "resource-1",
+              title: "ADR: Session rotation",
+              url: "https://notion.so/session-rotation",
+              sourceRevision: "revision-2",
+              lastEditedAt: "2026-08-20T04:00:00.000Z",
+              lastEditedBy: {
+                providerUserId: "notion-user-2",
+                displayName: "Maya Chen",
+                avatarUrl: null,
+                kind: "person",
+              },
+              heading: "Decision",
+              provenance: "indexed_notion_chunk",
+            },
+          },
+        ],
+      }),
+    }));
+    render(
+      <SearchPage
+        workspace={workspace}
+        repositories={repositories}
+        initialScope="notion"
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Engineering search"), {
+      target: { value: "session policy" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    const citation = await screen.findByRole("link", {
+      name: /Open ADR: Session rotation in Notion.*Edited by Maya Chen.*editor observed at sync/i,
+    });
+    expect(citation).toHaveAttribute("href", "https://notion.so/session-rotation");
+    expect(screen.getByText(/Edited by Maya Chen.*editor observed at sync/i)).toBeVisible();
   });
 });

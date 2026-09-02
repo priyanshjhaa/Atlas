@@ -1,5 +1,12 @@
 export type NotionContextGenerationStatus = "generated" | "fallback";
 
+export interface NotionEditorAttribution {
+  providerUserId: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  kind: "person" | "bot" | "unknown";
+}
+
 export interface NotionContextCitation {
   id: string;
   provider: "notion";
@@ -10,6 +17,7 @@ export interface NotionContextCitation {
   sourceRevision: string;
   capturedAt: string;
   lastEditedAt: string | null;
+  lastEditedBy: NotionEditorAttribution | null;
   heading: string | null;
   provenance: "notion_document_revision" | "indexed_notion_chunk";
 }
@@ -30,6 +38,7 @@ export interface NotionCatchUpDocument {
   previousRevision: string | null;
   changedAt: string;
   lastEditedAt: string | null;
+  lastEditedBy: NotionEditorAttribution | null;
   lastSyncedAt: string | null;
   truncated: boolean;
   baselineUnavailable: boolean;
@@ -91,6 +100,7 @@ export interface NotionDocumentRevisionSummary {
   sourceRevision: string;
   capturedAt: string;
   truncated: boolean;
+  lastEditedBy: NotionEditorAttribution | null;
   isCurrent: boolean;
 }
 
@@ -146,6 +156,8 @@ export interface NotionDocumentReview {
     previousRevision: string;
     currentCapturedAt: string;
     previousCapturedAt: string;
+    currentEditor: NotionEditorAttribution | null;
+    previousEditor: NotionEditorAttribution | null;
     sourceAvailable: boolean;
   };
   whatChanged: NotionReviewFinding[];

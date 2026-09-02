@@ -36,6 +36,12 @@ const snapshot: AtlasNotionCatchUpSnapshot = {
       previousRevision: "revision-1",
       changedAt: "2026-08-20T04:00:00.000Z",
       lastEditedAt: "2026-08-20T03:00:00.000Z",
+      lastEditedBy: {
+        providerUserId: "notion-user-2",
+        displayName: "Maya Chen",
+        avatarUrl: null,
+        kind: "person",
+      },
       lastSyncedAt: "2026-08-20T04:00:00.000Z",
       truncated: false,
       baselineUnavailable: false,
@@ -60,6 +66,12 @@ const snapshot: AtlasNotionCatchUpSnapshot = {
       sourceRevision: "revision-2",
       capturedAt: "2026-08-20T04:00:00.000Z",
       lastEditedAt: "2026-08-20T03:00:00.000Z",
+      lastEditedBy: {
+        providerUserId: "notion-user-2",
+        displayName: "Maya Chen",
+        avatarUrl: null,
+        kind: "person",
+      },
       heading: "Decision",
       provenance: "notion_document_revision",
     },
@@ -84,6 +96,12 @@ const reviewDocuments: AtlasNotionReviewDocumentsResponse = {
           sourceRevision: "revision-2",
           capturedAt: "2026-08-20T05:00:00.000Z",
           truncated: false,
+          lastEditedBy: {
+            providerUserId: "notion-user-2",
+            displayName: "Maya Chen",
+            avatarUrl: null,
+            kind: "person",
+          },
           isCurrent: true,
         },
         {
@@ -91,6 +109,12 @@ const reviewDocuments: AtlasNotionReviewDocumentsResponse = {
           sourceRevision: "revision-1",
           capturedAt: "2026-08-19T05:00:00.000Z",
           truncated: false,
+          lastEditedBy: {
+            providerUserId: "notion-user-1",
+            displayName: "Alex Kim",
+            avatarUrl: null,
+            kind: "person",
+          },
           isCurrent: false,
         },
       ],
@@ -111,7 +135,30 @@ describe("NotionContextPage", () => {
 
     expect(screen.getByText("Documents in this catch-up")).toBeInTheDocument();
     expect(screen.getByText("ADR: Session rotation")).toBeInTheDocument();
+    expect(screen.getByText(/Edited by Maya Chen.*editor observed at sync/i)).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps unavailable editor attribution readable in a narrow layout", () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    window.dispatchEvent(new Event("resize"));
+
+    render(
+      <NotionContextPage
+        workspace={workspace}
+        initialSnapshot={{
+          ...snapshot,
+          documents: [{ ...snapshot.documents[0], lastEditedBy: null }],
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByText(/Editor unavailable.*editor observed at sync/i),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Open ADR: Session rotation in Notion" }),
+    ).toHaveAttribute("href", "https://notion.so/session-rotation");
   });
 
   it("advances the personal cursor only through the explicit action", async () => {
@@ -229,6 +276,18 @@ describe("NotionContextPage", () => {
           previousRevision: "revision-1",
           currentCapturedAt: "2026-08-20T05:00:00.000Z",
           previousCapturedAt: "2026-08-19T05:00:00.000Z",
+          currentEditor: {
+            providerUserId: "notion-user-2",
+            displayName: "Maya Chen",
+            avatarUrl: null,
+            kind: "person",
+          },
+          previousEditor: {
+            providerUserId: "notion-user-1",
+            displayName: "Alex Kim",
+            avatarUrl: null,
+            kind: "person",
+          },
           sourceAvailable: true,
         },
         whatChanged: [
@@ -291,6 +350,9 @@ describe("NotionContextPage", () => {
       }),
     );
     expect(screen.getByText("See how a decision changed—not merely that it changed.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /Edited by Alex Kim/i }),
+    ).toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: "Review selected revisions" }),
     );
@@ -306,6 +368,8 @@ describe("NotionContextPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Refresh tokens remain persistent.")).toBeInTheDocument();
     expect(screen.getByText("Refresh tokens rotate after use.")).toBeInTheDocument();
+    expect(screen.getByText(/Previous: Edited by Alex Kim.*editor observed at sync/i)).toBeVisible();
+    expect(screen.getByText(/Current: Edited by Maya Chen.*editor observed at sync/i)).toBeVisible();
     expect(
       screen.getByRole("link", { name: /Open saved review/ }),
     ).toHaveAttribute("href", "/app/context/reviews/review-1");

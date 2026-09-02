@@ -299,6 +299,7 @@ export class ImpactAnalysisService {
         excerpt: result.excerpt.slice(0, 1_200),
         sourceRevision: result.citation.sourceRevision,
         lastEditedAt: result.citation.lastEditedAt,
+        lastEditedBy: result.citation.lastEditedBy,
         freshness: result.freshness,
         relevance: result.score,
       }));

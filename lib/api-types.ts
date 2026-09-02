@@ -218,6 +218,7 @@ export type AtlasWorkspaceIntelligenceSearchResult =
         url: string | null;
         sourceRevision: string;
         lastEditedAt: string | null;
+        lastEditedBy?: AtlasNotionEditor | null;
         heading: string | null;
         provenance: "indexed_notion_chunk";
       };
@@ -259,6 +260,13 @@ export interface AtlasNotionConnector {
   updatedAt: string;
 }
 
+export interface AtlasNotionEditor {
+  providerUserId: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  kind: "person" | "bot" | "unknown";
+}
+
 export interface AtlasNotionResource {
   id: string;
   connectorId: string;
@@ -270,6 +278,7 @@ export interface AtlasNotionResource {
   isSelected: boolean;
   isActive: boolean;
   lastEditedAt: string | null;
+  lastEditor: AtlasNotionEditor | null;
   lastSyncedAt: string | null;
 }
 
@@ -283,6 +292,7 @@ export interface AtlasNotionContextCitation {
   sourceRevision: string;
   capturedAt: string;
   lastEditedAt: string | null;
+  lastEditedBy: AtlasNotionEditor | null;
   heading: string | null;
   provenance: "notion_document_revision" | "indexed_notion_chunk";
 }
@@ -306,6 +316,7 @@ export interface AtlasNotionCatchUpSnapshot {
     previousRevision: string | null;
     changedAt: string;
     lastEditedAt: string | null;
+    lastEditedBy: AtlasNotionEditor | null;
     lastSyncedAt: string | null;
     truncated: boolean;
     baselineUnavailable: boolean;
@@ -357,6 +368,7 @@ export interface AtlasNotionReviewDocumentsResponse {
       sourceRevision: string;
       capturedAt: string;
       truncated: boolean;
+      lastEditedBy: AtlasNotionEditor | null;
       isCurrent: boolean;
     }>;
   }>;
@@ -398,6 +410,8 @@ export interface AtlasNotionDocumentReview {
     previousRevision: string;
     currentCapturedAt: string;
     previousCapturedAt: string;
+    currentEditor: AtlasNotionEditor | null;
+    previousEditor: AtlasNotionEditor | null;
     sourceAvailable: boolean;
   };
   whatChanged: AtlasNotionReviewFinding[];
@@ -554,6 +568,24 @@ export interface AtlasWorkspaceOverview {
     notion: AtlasWorkspaceContextActivity[];
   };
   recentReports: Array<{ id: string; title: string; status: "complete" | "insufficient_evidence"; riskLevel: "insufficient" | "low" | "medium" | "high"; riskScore: number | null; unknownCount: number; repository: { id: string; owner: string; name: string }; createdAt: string }>;
+  recentPullRequests: Array<{
+    id: string;
+    repository: string;
+    number: number;
+    title: string;
+    url: string;
+    state: string;
+    isDraft: boolean;
+    author: AtlasGitHubActor | null;
+    reviewers: Array<{
+      actor: AtlasGitHubActor | null;
+      state: string;
+      url: string;
+    }>;
+    mergedBy: AtlasGitHubActor | null;
+    reviewsTruncated: boolean;
+    updatedAt: string;
+  }>;
   attention: Array<{ id: string; severity: "critical" | "warning" | "info"; title: string; detail: string; action: { label: string; href: string } }>;
 }
 
@@ -566,6 +598,15 @@ export interface AtlasWorkspaceContextActivity {
 }
 
 export type AtlasImpactScope = "repository" | "workspace";
+
+export interface AtlasGitHubActor {
+  providerUserId: string | null;
+  login: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  profileUrl: string | null;
+  kind: "person" | "bot" | "unknown";
+}
 
 export const ATLAS_LEGACY_IMPACT_EXPLANATION_SCHEMA_VERSION = "1" as const;
 export const ATLAS_IMPACT_EXPLANATION_SCHEMA_VERSION = "2" as const;
@@ -753,6 +794,15 @@ export interface AtlasImpactReport {
       title: string;
       url: string;
       author: string;
+      authorDetails?: AtlasGitHubActor | null;
+      reviewers?: Array<{
+        actor: AtlasGitHubActor | null;
+        state: string;
+        submittedAt: string | null;
+        url: string;
+      }>;
+      mergedBy?: AtlasGitHubActor | null;
+      reviewsTruncated?: boolean;
       baseRevision: string;
       headRevision: string;
       analysisBudget?: {
@@ -812,6 +862,7 @@ export interface AtlasImpactReport {
         excerpt: string;
         sourceRevision: string;
         lastEditedAt: string | null;
+        lastEditedBy?: AtlasNotionEditor | null;
         freshness: string | null;
         relevance: number;
       }>;

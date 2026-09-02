@@ -32,6 +32,9 @@ test("protects the workspace onboarding route", async ({ page }) => {
 test("keeps the landing hierarchy separated at every supported viewport", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /See your whole system/ })).toBeVisible();
+  await expect(
+    page.getByText(/Edited by Maya Chen.*editor observed at sync/i),
+  ).toBeVisible();
 
   const layout = await page.evaluate(() => {
     const rectangle = (selector: string) => {

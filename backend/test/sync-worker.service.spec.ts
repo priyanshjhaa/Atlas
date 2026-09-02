@@ -31,6 +31,7 @@ describe("SyncWorkerService", () => {
       markRunning: vi.fn(async () => undefined),
       cancellationRequested: vi.fn(async () => false),
       executionContext: vi.fn(async () => ({
+        workspaceId: "workspace-1",
         repositoryId: "repository-1",
         owner: "atlas",
         name: "api",
@@ -46,22 +47,28 @@ describe("SyncWorkerService", () => {
     const github = {
       getRepositoryHead: vi.fn(async () => "sha-1"),
     } as unknown as GitHubAppService;
+    const syncPullRequestProvenance = vi.fn(async () => ({
+      pullRequestsSynced: 2,
+      reviewsSynced: 3,
+    }));
     const worker = new SyncWorkerService(
       {} as ConfigService<Environment, true>,
       jobs,
       github,
-      {} as IngestionService,
+      { syncPullRequestProvenance } as unknown as IngestionService,
     );
 
     await expect(worker.processJob(syncJob())).resolves.toEqual({
       outcome: "no_change",
       revision: "sha-1",
+      provenance: { pullRequestsSynced: 2, reviewsSynced: 3 },
     });
     expect(complete).toHaveBeenCalledWith(
       "job-1",
       "repository-1",
       "sha-1",
       "no_change",
+      { provenance: { pullRequestsSynced: 2, reviewsSynced: 3 } },
     );
   });
 
@@ -121,17 +128,22 @@ describe("SyncWorkerService", () => {
       embeddingProvider: "local" as const,
     };
     const ingest = vi.fn(async () => summary);
+    const syncPullRequestProvenance = vi.fn(async () => ({
+      pullRequestsSynced: 4,
+      reviewsSynced: 7,
+    }));
     const worker = new SyncWorkerService(
       {} as ConfigService<Environment, true>,
       jobs,
       github,
-      { ingest } as unknown as IngestionService,
+      { ingest, syncPullRequestProvenance } as unknown as IngestionService,
     );
 
     await expect(worker.processJob(syncJob())).resolves.toEqual({
       outcome: "updated",
       revision: "sha-new",
       summary,
+      provenance: { pullRequestsSynced: 4, reviewsSynced: 7 },
     });
     expect(ingest).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -146,7 +158,7 @@ describe("SyncWorkerService", () => {
       "repository-1",
       "sha-new",
       "updated",
-      summary,
+      { ...summary, provenance: { pullRequestsSynced: 4, reviewsSynced: 7 } },
     );
   });
 });

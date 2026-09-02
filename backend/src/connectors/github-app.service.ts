@@ -24,16 +24,80 @@ export interface GitHubRepository {
 }
 
 export interface GitHubPullRequest {
+  id?: number;
+  node_id?: string;
   number: number;
   title: string;
   body: string | null;
   html_url: string;
+  state?: string;
+  draft?: boolean;
   changed_files: number;
   additions: number;
   deletions: number;
-  user: { login: string };
+  user: GitHubRestActor | null;
+  merged_by?: GitHubRestActor | null;
+  created_at?: string;
+  updated_at?: string;
+  closed_at?: string | null;
+  merged_at?: string | null;
   base: { sha: string; ref: string };
   head: { sha: string; ref: string };
+}
+
+interface GitHubRestActor {
+  id?: number;
+  node_id?: string;
+  login?: string;
+  name?: string | null;
+  avatar_url?: string;
+  html_url?: string;
+  type?: string;
+}
+
+interface GitHubGraphqlActor {
+  id?: string;
+  login: string;
+  name?: string | null;
+  avatarUrl: string;
+  url: string;
+  __typename: string;
+}
+
+export interface GitHubActor {
+  providerUserId: string | null;
+  login: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  profileUrl: string | null;
+  kind: "person" | "bot" | "unknown";
+}
+
+export interface GitHubPullRequestReview {
+  providerReviewId: string;
+  reviewer: GitHubActor | null;
+  state: string;
+  submittedAt: string | null;
+  url: string;
+}
+
+export interface GitHubPullRequestProvenance {
+  providerPullRequestId: string;
+  number: number;
+  title: string;
+  url: string;
+  state: string;
+  isDraft: boolean;
+  author: GitHubActor | null;
+  mergedBy: GitHubActor | null;
+  baseRevision: string;
+  headRevision: string;
+  providerCreatedAt: string;
+  providerUpdatedAt: string;
+  closedAt: string | null;
+  mergedAt: string | null;
+  reviews: GitHubPullRequestReview[];
+  reviewsTruncated: boolean;
 }
 
 export interface GitHubPullRequestFile {
@@ -96,6 +160,9 @@ const GITHUB_HISTORY_MAX_PAGES = 3;
 const GITHUB_HISTORY_MAX_COMMITS =
   GITHUB_HISTORY_PAGE_SIZE * GITHUB_HISTORY_MAX_PAGES;
 const GITHUB_HISTORY_MAX_FILES = 300;
+const GITHUB_RECENT_PULL_REQUEST_LIMIT = 50;
+const GITHUB_PULL_REQUEST_REVIEW_LIMIT = 50;
+const GITHUB_ON_DEMAND_REVIEW_MAX_PAGES = 3;
 
 @Injectable()
 export class GitHubAppService {
@@ -151,8 +218,12 @@ export class GitHubAppService {
     number: number,
   ): Promise<{
     pullRequest: GitHubPullRequest;
+    author: GitHubActor | null;
+    mergedBy: GitHubActor | null;
     files: GitHubPullRequestFile[];
     filesTruncated: boolean;
+    reviews: GitHubPullRequestReview[];
+    reviewsTruncated: boolean;
   }> {
     const token = await this.createInstallationToken(installationId);
     const pullRequest = await this.request<GitHubPullRequest>(
@@ -169,11 +240,129 @@ export class GitHubAppService {
       files.push(...batch);
       if (batch.length < 100) break;
     }
+    const reviews: GitHubPullRequestReview[] = [];
+    let reviewsTruncated = false;
+    for (let page = 1; page <= GITHUB_ON_DEMAND_REVIEW_MAX_PAGES; page += 1) {
+      const batch = await this.request<
+        Array<{
+          id: number;
+          node_id?: string;
+          user: GitHubRestActor | null;
+          state: string;
+          submitted_at: string | null;
+          html_url: string;
+        }>
+      >(
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/pulls/${number}/reviews?per_page=100&page=${page}`,
+        token,
+      );
+      reviews.push(
+        ...batch.map((review) => ({
+          providerReviewId: review.node_id ?? String(review.id),
+          reviewer: this.restActor(review.user),
+          state: review.state,
+          submittedAt: review.submitted_at,
+          url: review.html_url,
+        })),
+      );
+      if (batch.length < 100) break;
+      reviewsTruncated = page === GITHUB_ON_DEMAND_REVIEW_MAX_PAGES;
+    }
     return {
       pullRequest,
+      author: this.restActor(pullRequest.user),
+      mergedBy: this.restActor(pullRequest.merged_by),
       files,
       filesTruncated: pullRequest.changed_files > files.length,
+      reviews,
+      reviewsTruncated,
     };
+  }
+
+  async getRecentPullRequestProvenance(input: {
+    installationId: string;
+    owner: string;
+    repository: string;
+  }): Promise<GitHubPullRequestProvenance[]> {
+    const token = await this.createInstallationToken(input.installationId);
+    const response = await this.graphql<{
+      repository: {
+        pullRequests: {
+          nodes: Array<{
+            id: string;
+            number: number;
+            title: string;
+            url: string;
+            state: string;
+            isDraft: boolean;
+            author: GitHubGraphqlActor | null;
+            mergedBy: GitHubGraphqlActor | null;
+            baseRefOid: string;
+            headRefOid: string;
+            createdAt: string;
+            updatedAt: string;
+            closedAt: string | null;
+            mergedAt: string | null;
+            reviews: {
+              nodes: Array<{
+                id: string;
+                author: GitHubGraphqlActor | null;
+                state: string;
+                submittedAt: string | null;
+                url: string;
+              }>;
+              pageInfo: { hasPreviousPage: boolean };
+            };
+          }>;
+        };
+      } | null;
+    }>(
+      `query AtlasRecentPullRequests($owner: String!, $repository: String!) {
+        repository(owner: $owner, name: $repository) {
+          pullRequests(first: ${GITHUB_RECENT_PULL_REQUEST_LIMIT}, orderBy: { field: UPDATED_AT, direction: DESC }) {
+            nodes {
+              id number title url state isDraft baseRefOid headRefOid
+              createdAt updatedAt closedAt mergedAt
+              author { login avatarUrl url __typename ... on Node { id } ... on User { name } }
+              mergedBy { login avatarUrl url __typename ... on Node { id } ... on User { name } }
+              reviews(last: ${GITHUB_PULL_REQUEST_REVIEW_LIMIT}) {
+                nodes {
+                  id state submittedAt url
+                  author { login avatarUrl url __typename ... on Node { id } ... on User { name } }
+                }
+                pageInfo { hasPreviousPage }
+              }
+            }
+          }
+        }
+      }`,
+      { owner: input.owner, repository: input.repository },
+      token,
+    );
+    return (response.repository?.pullRequests.nodes ?? []).map((pullRequest) => ({
+      providerPullRequestId: pullRequest.id,
+      number: pullRequest.number,
+      title: pullRequest.title,
+      url: pullRequest.url,
+      state: pullRequest.state,
+      isDraft: pullRequest.isDraft,
+      author: this.graphqlActor(pullRequest.author),
+      mergedBy: this.graphqlActor(pullRequest.mergedBy),
+      baseRevision: pullRequest.baseRefOid,
+      headRevision: pullRequest.headRefOid,
+      providerCreatedAt: pullRequest.createdAt,
+      providerUpdatedAt: pullRequest.updatedAt,
+      closedAt: pullRequest.closedAt,
+      mergedAt: pullRequest.mergedAt,
+      reviews: pullRequest.reviews.nodes.map((review) => ({
+        providerReviewId: review.id,
+        reviewer: this.graphqlActor(review.author),
+        state: review.state,
+        submittedAt: review.submittedAt,
+        url: review.url,
+      })),
+      reviewsTruncated: pullRequest.reviews.pageInfo.hasPreviousPage,
+    }));
   }
 
   async getRepositoryHistory(input: {
@@ -424,6 +613,62 @@ export class GitHubAppService {
       );
     }
     return (await response.json()) as T;
+  }
+
+  private async graphql<T>(
+    query: string,
+    variables: Record<string, string>,
+    token: string,
+  ): Promise<T> {
+    const response = await fetch("https://api.github.com/graphql", {
+      method: "POST",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": this.apiVersion,
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+    const body = (await response.json().catch(() => ({}))) as {
+      data?: T;
+      errors?: Array<{ message?: string }>;
+    };
+    if (!response.ok || !body.data || body.errors?.length) {
+      throw new ServiceUnavailableException(
+        `GitHub GraphQL request failed with status ${response.status}.`,
+      );
+    }
+    return body.data;
+  }
+
+  private restActor(actor: GitHubRestActor | null | undefined): GitHubActor | null {
+    if (!actor) return null;
+    return {
+      providerUserId: actor.node_id ?? (actor.id ? String(actor.id) : null),
+      login: actor.login ?? null,
+      displayName: actor.name ?? null,
+      avatarUrl: actor.avatar_url ?? null,
+      profileUrl: actor.html_url ?? null,
+      kind:
+        actor.type?.toLowerCase() === "bot"
+          ? "bot"
+          : actor.login || actor.id
+            ? "person"
+            : "unknown",
+    };
+  }
+
+  private graphqlActor(actor: GitHubGraphqlActor | null): GitHubActor | null {
+    if (!actor) return null;
+    return {
+      providerUserId: actor.id ?? null,
+      login: actor.login,
+      displayName: actor.name ?? null,
+      avatarUrl: actor.avatarUrl,
+      profileUrl: actor.url,
+      kind: actor.__typename === "Bot" ? "bot" : "person",
+    };
   }
 
   private requireConfig(

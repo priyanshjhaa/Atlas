@@ -9,6 +9,12 @@ function version(input: {
   revision: string;
   content: string;
   capturedAt: Date;
+  editor?: {
+    providerUserId: string;
+    displayName: string | null;
+    avatarUrl: string | null;
+    kind: "person" | "bot" | "unknown";
+  } | null;
 }) {
   return {
     id: input.id,
@@ -18,6 +24,7 @@ function version(input: {
     citation: {},
     truncated: false,
     capturedAt: input.capturedAt,
+    editor: input.editor ?? null,
   };
 }
 
@@ -110,6 +117,12 @@ function retrieval() {
             url: "https://notion.so/adr-session-rotation",
             sourceRevision: "revision-2",
             lastEditedAt: "2026-08-20T04:00:00.000Z",
+            lastEditedBy: {
+              providerUserId: "notion-user-2",
+              displayName: "Maya Chen",
+              avatarUrl: null,
+              kind: "person",
+            },
             heading: "Decision",
             provenance: "indexed_notion_chunk",
           },
@@ -238,6 +251,7 @@ describe("NotionContextService", () => {
     expect(answer.status).toBe("fallback");
     expect(answer.answer).toContain("Refresh tokens rotate");
     expect(answer.citations).toHaveLength(1);
+    expect(answer.citations[0]?.lastEditedBy?.displayName).toBe("Maya Chen");
   });
 
   it("accepts a grounded cited answer", async () => {
@@ -280,12 +294,24 @@ describe("NotionContextService", () => {
             sourceRevision: "revision-2",
             capturedAt: new Date("2026-08-20T05:00:00.000Z"),
             truncated: false,
+            editor: {
+              providerUserId: "notion-user-2",
+              displayName: "Maya Chen",
+              avatarUrl: null,
+              kind: "person",
+            },
           },
           {
             id: "version-1",
             sourceRevision: "revision-1",
             capturedAt: new Date("2026-08-19T05:00:00.000Z"),
             truncated: false,
+            editor: {
+              providerUserId: "notion-user-1",
+              displayName: "Alex Kim",
+              avatarUrl: null,
+              kind: "person",
+            },
           },
         ],
       },
@@ -301,6 +327,7 @@ describe("NotionContextService", () => {
             sourceRevision: "revision-1",
             capturedAt: new Date("2026-08-20T05:00:00.000Z"),
             truncated: false,
+            editor: null,
           },
         ],
       },
@@ -319,6 +346,10 @@ describe("NotionContextService", () => {
       reviewable: true,
     });
     expect(documents.documents[0].revisions[0].isCurrent).toBe(true);
+    expect(documents.documents[0].revisions.map((item) => item.lastEditedBy?.displayName)).toEqual([
+      "Maya Chen",
+      "Alex Kim",
+    ]);
     expect(documents.documents[1].reviewable).toBe(false);
   });
 
@@ -337,6 +368,12 @@ describe("NotionContextService", () => {
           "# Decision\nWe decided refresh tokens must rotate.\n# Open questions\nWhen should old sessions expire?",
         truncated: false,
         capturedAt: new Date("2026-08-20T05:00:00.000Z"),
+        editor: {
+          providerUserId: "notion-user-2",
+          displayName: "Maya Chen",
+          avatarUrl: null,
+          kind: "person",
+        },
       },
       previous: {
         id: "version-1",
@@ -345,6 +382,12 @@ describe("NotionContextService", () => {
         content: "# Decision\nWe decided refresh tokens remain persistent.",
         truncated: false,
         capturedAt: new Date("2026-08-19T05:00:00.000Z"),
+        editor: {
+          providerUserId: "notion-user-1",
+          displayName: "Alex Kim",
+          avatarUrl: null,
+          kind: "person",
+        },
       },
     });
     repository.saveReview.mockImplementation(async (
@@ -376,8 +419,18 @@ describe("NotionContextService", () => {
       document: {
         currentRevision: "revision-2",
         previousRevision: "revision-1",
+        currentEditor: { displayName: "Maya Chen" },
+        previousEditor: { displayName: "Alex Kim" },
       },
     });
+    expect(
+      review.citations.find((item) => item.sourceRevision === "revision-2")
+        ?.lastEditedBy?.displayName,
+    ).toBe("Maya Chen");
+    expect(
+      review.citations.find((item) => item.sourceRevision === "revision-1")
+        ?.lastEditedBy?.displayName,
+    ).toBe("Alex Kim");
     expect(review.whatChanged.map((item) => item.text)).toContain(
       "Decision changed between the selected revisions.",
     );

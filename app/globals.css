@@ -4807,6 +4807,7 @@ body {
 .context-stream__activity > div:last-child { border-bottom: 0; }
 .context-stream__activity p { display: flex; flex-direction: column; gap: 3px; margin: 0; }
 .context-stream__activity strong { font-size: 9px; }
+.context-stream__activity a { color: inherit; }
 .context-stream__activity small,
 .context-stream__activity time { color: var(--muted-2); font: 7px var(--mono); }
 .stream-event { width: 6px; height: 6px; border-radius: 50%; background: var(--app-moss); }
@@ -5966,6 +5967,7 @@ body {
 .context-document > header > i.changed { color: #9a6048; background: rgba(185,109,80,.12); }
 .context-document h3 { margin: 1px 0 5px; color: #36423b; font: 600 18px var(--display); }
 .context-document header p { margin: 0; color: #918a7d; font-size: 8px; }
+.context-document header .notion-editor-attribution { display: block; margin-top: 6px; color: #788073; font: 7px/1.45 var(--mono); }
 .context-document header > a { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--app-border); border-radius: 9px; color: #667962; background: rgba(255,253,247,.54); }
 .context-section-diffs { display: grid; gap: 8px; margin-top: 16px; padding-left: 62px; }
 .context-section-diffs > div { display: grid; grid-template-columns: 54px 160px minmax(0, 1fr); align-items: start; gap: 10px; padding: 10px 12px; border-left: 2px solid rgba(99,125,92,.22); background: rgba(255,253,247,.38); }
@@ -6086,6 +6088,8 @@ body {
 .notion-review-report > header h2 { margin: 5px 0 4px; color: var(--context-ink); font: 560 26px var(--display); }
 .notion-review-report > header p { display: flex; align-items: center; gap: 6px; margin: 0; color: #918a7d; font: 7px var(--mono); }
 .notion-review-report__actions { display: flex; align-items: center; gap: 7px; }
+.notion-review-editor-pair { display: grid; gap: 3px; margin-top: 7px; }
+.notion-review-editor-pair small { color: #7e796e; font: 7px/1.45 var(--mono); }
 .notion-review-report__actions a { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 12px; border: 1px solid rgba(84,91,69,.13); border-radius: 999px; color: #60705e; background: rgba(255,253,247,.6); font-size: 8px; font-weight: 700; white-space: nowrap; }
 .notion-review-report__actions a:last-child:not(:first-child) { width: 38px; justify-content: center; padding: 0; }
 .notion-revision-diff { overflow: hidden; border: 1px solid rgba(72,75,58,.12); border-radius: 20px; background: rgba(255,251,240,.72); box-shadow: var(--app-shadow); }
@@ -6951,6 +6955,28 @@ body {
   color: #b5ad9e;
   content: "·";
 }
+.impact-report .pull-request-provenance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+.impact-report .pull-request-provenance a {
+  display: grid;
+  gap: 2px;
+  padding: 7px 9px;
+  border: 1px solid rgba(82, 91, 70, .13);
+  border-radius: 9px;
+  color: #555d4c;
+  background: rgba(255, 255, 255, .35);
+  font-size: 8px;
+}
+.impact-report .pull-request-provenance a span,
+.impact-report .pull-request-provenance small {
+  color: #817b6e;
+  font: 7px var(--mono);
+}
+.impact-report .pull-request-provenance small { align-self: center; }
 .impact-report .report-hero--compact .risk-score {
   width: 210px;
   min-width: 0;

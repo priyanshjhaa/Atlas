@@ -42,6 +42,31 @@ function timeAgo(date: string | null, now: string) {
   return `Updated ${days}d ago`;
 }
 
+function actorName(actor: { displayName: string | null; login: string | null } | null) {
+  return actor?.displayName ?? actor?.login ?? "user unavailable";
+}
+
+function pullRequestSummary(
+  pullRequest: AtlasWorkspaceOverview["recentPullRequests"][number],
+) {
+  const parts = [
+    pullRequest.isDraft ? "Draft" : pullRequest.state.toLowerCase(),
+    `opened by ${actorName(pullRequest.author)}`,
+  ];
+  if (pullRequest.reviewers.length) {
+    parts.push(
+      `reviewed by ${pullRequest.reviewers
+        .slice(0, 2)
+        .map((review) => actorName(review.actor))
+        .join(", ")}`,
+    );
+  }
+  if (pullRequest.mergedBy) {
+    parts.push(`merged by ${actorName(pullRequest.mergedBy)}`);
+  }
+  return parts.join(" · ");
+}
+
 function ReadinessCard({ provider, overview }: { provider: "github" | "notion"; overview: AtlasWorkspaceOverview }) {
   const source = overview.readiness[provider];
   const Icon = provider === "github" ? GitBranch : BookOpenText;
@@ -65,6 +90,7 @@ function ContextStream({ provider, overview }: { provider: "github" | "notion"; 
   const github = provider === "github";
   const source = overview.readiness[provider];
   const activity = overview.streams[provider];
+  const pullRequests = github ? overview.recentPullRequests.slice(0, 3) : [];
   const Icon = github ? GitBranch : BookOpenText;
   return (
     <article className={`context-stream context-stream--${provider}`}>
@@ -79,7 +105,7 @@ function ContextStream({ provider, overview }: { provider: "github" | "notion"; 
       </dl>
       <div className="context-stream__activity">
         <span>Recent {github ? "GitHub" : "Notion"} updates</span>
-        {activity.length ? activity.map((item) => <div key={item.id}><i className={`stream-event stream-event--${item.status}`} /><p><strong>{item.title}</strong><small>{item.summary}</small></p><time>{timeAgo(item.occurredAt, overview.generatedAt).replace("Updated ", "")}</time></div>) : <div className="context-stream__empty"><CircleDashed size={15} /><p><strong>No updates recorded yet</strong><small>{github ? "Synchronize a repository to see implementation changes." : "Connect and synchronize Notion to see documentation changes."}</small></p></div>}
+        {pullRequests.length ? pullRequests.map((pullRequest) => <div key={pullRequest.id}><i className="stream-event stream-event--completed" /><p><a href={pullRequest.url} target="_blank" rel="noreferrer"><strong>{pullRequest.repository} · PR #{pullRequest.number} — {pullRequest.title}</strong></a><small>{pullRequestSummary(pullRequest)}</small></p><time>{timeAgo(pullRequest.updatedAt, overview.generatedAt).replace("Updated ", "")}</time></div>) : activity.length ? activity.map((item) => <div key={item.id}><i className={`stream-event stream-event--${item.status}`} /><p><strong>{item.title}</strong><small>{item.summary}</small></p><time>{timeAgo(item.occurredAt, overview.generatedAt).replace("Updated ", "")}</time></div>) : <div className="context-stream__empty"><CircleDashed size={15} /><p><strong>No updates recorded yet</strong><small>{github ? "Synchronize a repository to see implementation changes." : "Connect and synchronize Notion to see documentation changes."}</small></p></div>}
       </div>
       <footer>
         <Link className="button button--ghost" href={`/app/activity?source=${provider}`}>Review {github ? "GitHub" : "Notion"} activity <ArrowRight size={13} /></Link>

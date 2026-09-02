@@ -138,6 +138,12 @@ describe("GitHubAppService", () => {
           { headers: { "Content-Type": "application/json" }, status: 200 },
         );
       }
+      if (url.includes("/pulls/42/reviews")) {
+        return new Response(JSON.stringify([]), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
       const page = new URL(url).searchParams.get("page");
       return new Response(
         JSON.stringify(page === "1" ? files.slice(0, 100) : files.slice(100)),
@@ -164,6 +170,176 @@ describe("GitHubAppService", () => {
         return url.includes("per_page=100&page=2");
       }),
     ).toBe(true);
+  });
+
+  it("retrieves bounded recent pull-request provenance in one GraphQL request", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (request, init) => {
+      const url =
+        request instanceof Request ? request.url : request.toString();
+      if (url.endsWith("/app/installations/456/access_tokens")) {
+        return new Response(JSON.stringify({ token: "installation-token" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 201,
+        });
+      }
+      const body = JSON.parse(init?.body as string) as {
+        query: string;
+        variables: Record<string, string>;
+      };
+      expect(url).toBe("https://api.github.com/graphql");
+      expect(body.query).toContain("pullRequests(first: 50");
+      expect(body.query).toContain("reviews(last: 50)");
+      expect(body.query.match(/\.\.\. on Node \{ id \}/g)).toHaveLength(3);
+      expect(body.query).not.toMatch(/author \{ id /);
+      expect(body.query).not.toMatch(/mergedBy \{ id /);
+      expect(body.variables).toEqual({ owner: "atlas", repository: "web" });
+      return new Response(
+        JSON.stringify({
+          data: {
+            repository: {
+              pullRequests: {
+                nodes: [
+                  {
+                    id: "PR_node",
+                    number: 42,
+                    title: "Add provenance",
+                    url: "https://github.com/atlas/web/pull/42",
+                    state: "MERGED",
+                    isDraft: false,
+                    author: {
+                      id: "U_author",
+                      login: "engineer",
+                      name: "Atlas Engineer",
+                      avatarUrl: "https://avatars.githubusercontent.com/u/1",
+                      url: "https://github.com/engineer",
+                      __typename: "User",
+                    },
+                    mergedBy: null,
+                    baseRefOid: "base",
+                    headRefOid: "head",
+                    createdAt: "2026-08-01T00:00:00.000Z",
+                    updatedAt: "2026-08-02T00:00:00.000Z",
+                    closedAt: "2026-08-02T00:00:00.000Z",
+                    mergedAt: "2026-08-02T00:00:00.000Z",
+                    reviews: {
+                      nodes: [
+                        {
+                          id: "R_review",
+                          author: {
+                            id: "B_bot",
+                            login: "review-bot",
+                            avatarUrl: "https://avatars.githubusercontent.com/u/2",
+                            url: "https://github.com/apps/review-bot",
+                            __typename: "Bot",
+                          },
+                          state: "APPROVED",
+                          submittedAt: "2026-08-01T12:00:00.000Z",
+                          url: "https://github.com/atlas/web/pull/42#pullrequestreview-1",
+                        },
+                      ],
+                      pageInfo: { hasPreviousPage: true },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        }),
+        { headers: { "Content-Type": "application/json" }, status: 200 },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await githubService().getRecentPullRequestProvenance({
+      installationId: "456",
+      owner: "atlas",
+      repository: "web",
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      providerPullRequestId: "PR_node",
+      number: 42,
+      mergedBy: null,
+      reviewsTruncated: true,
+    });
+    expect(result[0]?.author).toMatchObject({
+      login: "engineer",
+      displayName: "Atlas Engineer",
+      kind: "person",
+    });
+    expect(result[0]?.reviews[0]).toMatchObject({
+      providerReviewId: "R_review",
+      state: "APPROVED",
+    });
+    expect(result[0]?.reviews[0]?.reviewer?.kind).toBe("bot");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("captures on-demand review actors and unavailable identities", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (request) => {
+      const url =
+        request instanceof Request ? request.url : request.toString();
+      if (url.endsWith("/app/installations/456/access_tokens")) {
+        return new Response(JSON.stringify({ token: "installation-token" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 201,
+        });
+      }
+      if (url.endsWith("/repos/atlas/web/pulls/42")) {
+        return new Response(
+          JSON.stringify({
+            number: 42,
+            title: "Review provenance",
+            body: null,
+            html_url: "https://github.com/atlas/web/pull/42",
+            changed_files: 0,
+            additions: 0,
+            deletions: 0,
+            user: null,
+            base: { sha: "base", ref: "main" },
+            head: { sha: "head", ref: "feature" },
+          }),
+          { headers: { "Content-Type": "application/json" }, status: 200 },
+        );
+      }
+      if (url.includes("/pulls/42/files")) {
+        return new Response(JSON.stringify([]), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+      return new Response(
+        JSON.stringify([
+          {
+            id: 8,
+            node_id: "R_8",
+            user: null,
+            state: "COMMENTED",
+            submitted_at: "2026-08-03T00:00:00.000Z",
+            html_url: "https://github.com/atlas/web/pull/42#pullrequestreview-8",
+          },
+        ]),
+        { headers: { "Content-Type": "application/json" }, status: 200 },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await githubService().getPullRequest(
+      "456",
+      "atlas",
+      "web",
+      42,
+    );
+
+    expect(result.reviews).toEqual([
+      expect.objectContaining({
+        providerReviewId: "R_8",
+        reviewer: null,
+        state: "COMMENTED",
+      }),
+    ]);
+    expect(result.reviewsTruncated).toBe(false);
   });
 
   it("captures a bounded three-page comparison with aggregate file changes", async () => {

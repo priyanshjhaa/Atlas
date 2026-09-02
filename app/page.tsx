@@ -21,7 +21,7 @@ export const metadata = {
 };
 
 const capabilities = [
-  { icon: GitPullRequest, index: "01", label: "Sync", title: "GitHub intelligence", detail: "Code, bounded history, pull requests, reviews, and revisions" },
+  { icon: GitPullRequest, index: "01", label: "Sync", title: "GitHub intelligence", detail: "Code, PR authors, review outcomes, mergers, and bounded history" },
   { icon: Database, index: "02", label: "Context", title: "Notion knowledge", detail: "Selected specifications, ADRs, runbooks, pages, and data sources" },
   { icon: Network, index: "03", label: "Map", title: "Living system graph", detail: "Packages, files, symbols, APIs, dependencies, and architecture" },
   { icon: ShieldCheck, index: "04", label: "Analyze", title: "Verifiable change impact", detail: "Risk, affected paths, evidence, unknowns, and verification steps" },
@@ -163,7 +163,7 @@ export default function Home() {
         <div className="evidence-stack">
           <article className="evidence-card"><span>CODE · OBSERVED</span><b>SessionController.refresh</b><p>identity-service/src/session/session.controller.ts</p><code>return this.sessions.rotate(refreshTokenId);</code></article>
           <article className="evidence-card evidence-card--offset"><span>GITHUB · HISTORICAL</span><b>PR #401 — Rotate compromised sessions</b><p>8 files · reviewed by Maya Chen</p></article>
-          <article className="evidence-card evidence-card--last"><span>NOTION · DECISION</span><b>ADR-024 — Token rotation</b><p>Updated 6 weeks ago</p></article>
+          <article className="evidence-card evidence-card--last"><span>NOTION · DECISION</span><b>ADR-024 — Token rotation</b><p>Edited by Maya Chen · 6 weeks ago · editor observed at sync</p></article>
         </div>
       </section>
 

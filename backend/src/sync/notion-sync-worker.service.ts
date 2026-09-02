@@ -121,6 +121,11 @@ export class NotionSyncWorkerService implements OnModuleDestroy {
           "fetching_notion_content",
         );
         try {
+          const lastEditor = await this.notion.resolveEditor(
+            credentials.accessToken,
+            selected.resource.lastEditor,
+          );
+          const resource = { ...selected.resource, lastEditor };
           const page = await this.notion.retrievePageMarkdown(
             credentials.accessToken,
             selected.resource.providerResourceId,
@@ -156,7 +161,7 @@ export class NotionSyncWorkerService implements OnModuleDestroy {
             throw new Error("Notion embedding count did not match chunk count.");
           }
           const persisted = await this.jobs.persistDocument(
-            selected.resource,
+            resource,
             page,
             chunks?.map((chunk, chunkIndex) => ({
               ...chunk,

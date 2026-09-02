@@ -336,6 +336,7 @@ export class RetrievalService {
               url: row.url,
               sourceRevision: row.sourceRevision,
               lastEditedAt: row.lastEditedAt?.toISOString() ?? null,
+              lastEditedBy: row.lastEditedBy,
               heading:
                 typeof row.metadata.heading === "string"
                   ? row.metadata.heading

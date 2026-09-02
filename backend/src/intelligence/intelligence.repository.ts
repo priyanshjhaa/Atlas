@@ -1,7 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, ne, notInArray, or, sql } from "drizzle-orm";
 import { DatabaseService } from "../database/database.service";
-import type { GitHubRepositoryHistory } from "../connectors/github-app.service";
+import type { NotionEditorRecord } from "../database/schema";
+import type {
+  GitHubPullRequestProvenance,
+  GitHubRepositoryHistory,
+} from "../connectors/github-app.service";
 import {
   architectureSnapshots,
   codeCalls,
@@ -22,6 +26,8 @@ import {
   repositoryCommits,
   repositoryFileChanges,
   repositoryHistoryRanges,
+  repositoryPullRequestReviews,
+  repositoryPullRequests,
   repositories,
   symbolRelationships,
 } from "../database/schema";
@@ -40,6 +46,7 @@ import {
 import { PackageLinkerService } from "./package-linker.service";
 import { RelationshipObservationBuilder } from "./relationship-observation.builder";
 import { boundRepositoryHistory } from "./repository-history";
+import { boundPullRequestProvenance } from "./pull-request-provenance";
 
 interface PersistInput {
   workspaceId: string;
@@ -113,6 +120,7 @@ export interface WorkspaceNotionChunkRow extends Record<string, unknown> {
   title: string;
   url: string | null;
   lastEditedAt: Date | null;
+  lastEditedBy: NotionEditorRecord | null;
   lastSyncedAt: Date | null;
   distance?: number;
 }
@@ -799,6 +807,142 @@ export class IntelligenceRepository {
     });
   }
 
+  async persistRecentPullRequests(input: {
+    workspaceId: string;
+    repositoryId: string;
+    pullRequests: GitHubPullRequestProvenance[];
+  }): Promise<{ pullRequestsSynced: number; reviewsSynced: number }> {
+    const pullRequests = boundPullRequestProvenance(input.pullRequests);
+    return this.database.client.transaction(async (transaction) => {
+      const providerIds = pullRequests.map(
+        (pullRequest) => pullRequest.providerPullRequestId,
+      );
+      if (providerIds.length) {
+        await transaction
+          .delete(repositoryPullRequests)
+          .where(
+            and(
+              eq(repositoryPullRequests.workspaceId, input.workspaceId),
+              eq(repositoryPullRequests.repositoryId, input.repositoryId),
+              notInArray(
+                repositoryPullRequests.providerPullRequestId,
+                providerIds,
+              ),
+            ),
+          );
+      } else {
+        await transaction
+          .delete(repositoryPullRequests)
+          .where(
+            and(
+              eq(repositoryPullRequests.workspaceId, input.workspaceId),
+              eq(repositoryPullRequests.repositoryId, input.repositoryId),
+            ),
+          );
+      }
+
+      const persisted = pullRequests.length
+        ? await transaction
+            .insert(repositoryPullRequests)
+            .values(
+              pullRequests.map((pullRequest) => ({
+                workspaceId: input.workspaceId,
+                repositoryId: input.repositoryId,
+                providerPullRequestId: pullRequest.providerPullRequestId,
+                number: pullRequest.number,
+                title: pullRequest.title.slice(0, 10_000),
+                url: pullRequest.url.slice(0, 2_000),
+                state: pullRequest.state.slice(0, 100),
+                isDraft: pullRequest.isDraft,
+                author: pullRequest.author,
+                mergedBy: pullRequest.mergedBy,
+                baseRevision: pullRequest.baseRevision,
+                headRevision: pullRequest.headRevision,
+                reviewsTruncated: pullRequest.reviewsTruncated,
+                providerCreatedAt: new Date(pullRequest.providerCreatedAt),
+                providerUpdatedAt: new Date(pullRequest.providerUpdatedAt),
+                closedAt: pullRequest.closedAt
+                  ? new Date(pullRequest.closedAt)
+                  : null,
+                mergedAt: pullRequest.mergedAt
+                  ? new Date(pullRequest.mergedAt)
+                  : null,
+                lastSyncedAt: new Date(),
+              })),
+            )
+            .onConflictDoUpdate({
+              target: [
+                repositoryPullRequests.repositoryId,
+                repositoryPullRequests.number,
+              ],
+              set: {
+                providerPullRequestId: sql`excluded.provider_pull_request_id`,
+                title: sql`excluded.title`,
+                url: sql`excluded.url`,
+                state: sql`excluded.state`,
+                isDraft: sql`excluded.is_draft`,
+                author: sql`excluded.author`,
+                mergedBy: sql`excluded.merged_by`,
+                baseRevision: sql`excluded.base_revision`,
+                headRevision: sql`excluded.head_revision`,
+                reviewsTruncated: sql`excluded.reviews_truncated`,
+                providerCreatedAt: sql`excluded.provider_created_at`,
+                providerUpdatedAt: sql`excluded.provider_updated_at`,
+                closedAt: sql`excluded.closed_at`,
+                mergedAt: sql`excluded.merged_at`,
+                lastSyncedAt: new Date(),
+                updatedAt: new Date(),
+              },
+            })
+            .returning({
+              id: repositoryPullRequests.id,
+              providerPullRequestId:
+                repositoryPullRequests.providerPullRequestId,
+            })
+        : [];
+
+      await transaction
+        .delete(repositoryPullRequestReviews)
+        .where(
+          and(
+            eq(repositoryPullRequestReviews.workspaceId, input.workspaceId),
+            eq(repositoryPullRequestReviews.repositoryId, input.repositoryId),
+          ),
+        );
+      const idByProvider = new Map(
+        persisted.map((pullRequest) => [
+          pullRequest.providerPullRequestId,
+          pullRequest.id,
+        ]),
+      );
+      const reviews = pullRequests.flatMap((pullRequest) => {
+        const pullRequestId = idByProvider.get(
+          pullRequest.providerPullRequestId,
+        );
+        if (!pullRequestId) return [];
+        return pullRequest.reviews.map((review) => ({
+          workspaceId: input.workspaceId,
+          repositoryId: input.repositoryId,
+          pullRequestId,
+          providerReviewId: review.providerReviewId,
+          reviewer: review.reviewer,
+          state: review.state.slice(0, 100),
+          submittedAt: review.submittedAt
+            ? new Date(review.submittedAt)
+            : null,
+          url: review.url.slice(0, 2_000),
+        }));
+      });
+      if (reviews.length) {
+        await transaction.insert(repositoryPullRequestReviews).values(reviews);
+      }
+      return {
+        pullRequestsSynced: persisted.length,
+        reviewsSynced: reviews.length,
+      };
+    });
+  }
+
   async architecture(workspaceId: string, repositoryId: string) {
     const [snapshot] = await this.database.client
       .select()
@@ -934,6 +1078,7 @@ export class IntelligenceRepository {
         d.title,
         r.url,
         r.last_edited_at as "lastEditedAt",
+        r.last_editor as "lastEditedBy",
         r.last_synced_at as "lastSyncedAt",
         c.embedding <=> ${vectorValue}::vector as distance
       from ${notionDocumentChunks} c
@@ -977,6 +1122,7 @@ export class IntelligenceRepository {
         title: notionDocuments.title,
         url: notionResources.url,
         lastEditedAt: notionResources.lastEditedAt,
+        lastEditedBy: notionResources.lastEditor,
         lastSyncedAt: notionResources.lastSyncedAt,
         distance: sql<number>`1`,
       })

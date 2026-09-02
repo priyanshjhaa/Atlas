@@ -31,7 +31,15 @@ export class PullRequestResolverService {
       );
     }
 
-    const { pullRequest, files, filesTruncated } = await this.github
+    const {
+      pullRequest,
+      author,
+      mergedBy,
+      files,
+      filesTruncated,
+      reviews = [],
+      reviewsTruncated = false,
+    } = await this.github
       .getPullRequest(
         repository.installationId,
         repository.owner,
@@ -99,7 +107,11 @@ export class PullRequestResolverService {
         title: pullRequest.title,
         body: pullRequest.body?.slice(0, 2_000),
         url: pullRequest.html_url,
-        author: pullRequest.user.login,
+        author: author?.login ?? pullRequest.user?.login ?? "unknown",
+        authorDetails: author,
+        reviewers: this.latestReviewers(reviews),
+        mergedBy,
+        reviewsTruncated,
         baseRevision: pullRequest.base.sha,
         headRevision: pullRequest.head.sha,
         analysisBudget: {
@@ -112,6 +124,38 @@ export class PullRequestResolverService {
         changedFiles,
       },
     };
+  }
+
+  private latestReviewers(
+    reviews: Array<{
+      providerReviewId: string;
+      reviewer: import("../connectors/github-app.service").GitHubActor | null;
+      state: string;
+      submittedAt: string | null;
+      url: string;
+    }>,
+  ) {
+    const latest = new Map<string, (typeof reviews)[number]>();
+    for (const review of reviews) {
+      const key =
+        review.reviewer?.providerUserId ??
+        review.reviewer?.login ??
+        review.providerReviewId;
+      const current = latest.get(key);
+      if (
+        !current ||
+        (Date.parse(review.submittedAt ?? "") || 0) >=
+          (Date.parse(current.submittedAt ?? "") || 0)
+      ) {
+        latest.set(key, review);
+      }
+    }
+    return [...latest.values()].map((review) => ({
+      actor: review.reviewer,
+      state: review.state,
+      submittedAt: review.submittedAt,
+      url: review.url,
+    }));
   }
 
   private takePatch(

@@ -142,6 +142,12 @@ describe("ImpactAnalysisService", () => {
             url: "https://notion.so/session-rotation",
             sourceRevision: "notion-revision-1",
             lastEditedAt: "2026-08-01T12:00:00.000Z",
+            lastEditedBy: {
+              providerUserId: "notion-user-1",
+              displayName: "Maya Chen",
+              avatarUrl: null,
+              kind: "person",
+            },
             heading: "Decision",
             provenance: "indexed_notion_chunk",
           },
@@ -169,6 +175,9 @@ describe("ImpactAnalysisService", () => {
         }),
       ],
     });
+    expect(
+      report.documentationContext?.evidence[0]?.lastEditedBy?.displayName,
+    ).toBe("Maya Chen");
     expect(report.risk.level).toBe("low");
     expect(report.directImpacts).toHaveLength(1);
     expect(report.downstreamImpacts).toHaveLength(1);
