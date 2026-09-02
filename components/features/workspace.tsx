@@ -253,7 +253,10 @@ export function ActivityPage({
   const [filter, setFilter] = useState<"all" | "running" | "completed">("all");
   const [sourceFilter, setSourceFilter] = useState<"all" | "github" | "notion">(initialSource);
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<{
+    message: string;
+    dismissWhenIdle: boolean;
+  } | null>(null);
   const canSynchronize = workspace.role !== "viewer";
   const activityJobs = [
     ...jobs.map((job) => ({ ...job, source: "github" as const })),
@@ -302,11 +305,24 @@ export function ActivityPage({
         { cache: "no-store" },
       ),
     ]);
-    if (githubResponse.ok) {
-      setJobs((await githubResponse.json()) as AtlasSyncJob[]);
-    }
-    if (notionResponse.ok) {
-      setNotionJobs((await notionResponse.json()) as AtlasNotionSyncJob[]);
+    const githubJobs = githubResponse.ok
+      ? ((await githubResponse.json()) as AtlasSyncJob[])
+      : null;
+    const refreshedNotionJobs = notionResponse.ok
+      ? ((await notionResponse.json()) as AtlasNotionSyncJob[])
+      : null;
+    if (githubJobs) setJobs(githubJobs);
+    if (refreshedNotionJobs) setNotionJobs(refreshedNotionJobs);
+    if (
+      githubJobs &&
+      refreshedNotionJobs &&
+      ![...githubJobs, ...refreshedNotionJobs].some((job) =>
+        ["queued", "running"].includes(job.status),
+      )
+    ) {
+      setNotice((current) =>
+        current?.dismissWhenIdle ? null : current,
+      );
     }
   }, [workspace.id]);
 
@@ -319,7 +335,7 @@ export function ActivityPage({
 
   async function syncAll() {
     setSyncing(true);
-    setNotice("");
+    setNotice(null);
     const headers = {
       "Content-Type": "application/json",
       "Idempotency-Key": crypto.randomUUID(),
@@ -344,14 +360,18 @@ export function ActivityPage({
         ? ((await notionResponse.json()) as AtlasNotionSyncJob[])
         : [];
       const queued = githubQueued.length + notionQueued.length;
-      setNotice(
-        queued
-          ? `${queued} source synchronization job${queued === 1 ? "" : "s"} queued.`
+      setNotice({
+        message: queued
+          ? `${queued} source synchronization request${queued === 1 ? "" : "s"} submitted.`
           : "Connect at least one active source before synchronizing.",
-      );
+        dismissWhenIdle: queued > 0,
+      });
       await refresh();
     } else {
-      setNotice("Atlas could not queue synchronization jobs.");
+      setNotice({
+        message: "Atlas could not queue synchronization jobs.",
+        dismissWhenIdle: false,
+      });
     }
     setSyncing(false);
   }
@@ -362,20 +382,21 @@ export function ActivityPage({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ workspaceId: workspace.id }),
     });
-    setNotice(
-      response.ok
+    setNotice({
+      message: response.ok
         ? action === "cancel"
           ? "Cancellation requested."
           : "Synchronization queued for retry."
         : `Atlas could not ${action} this synchronization job.`,
-    );
+      dismissWhenIdle: response.ok,
+    });
     await refresh();
   }
 
   return (
     <>
       <PageHeader eyebrow="Source ingestion and freshness" title="Sync activity" detail="Track GitHub revision checks, bounded history capture, source discovery, parsing, embeddings, graph persistence, and Notion document versioning. Cancel active repository jobs, retry failures, and verify no-change work that Atlas safely skipped." action={<button className="button button--primary" onClick={() => void syncAll()} disabled={syncing || !canSynchronize}><RefreshCw className={syncing ? "spin" : ""} size={15} /> {syncing ? "Queueing…" : "Sync all"}</button>} />
-      {notice && <p className="action-notice" aria-live="polite">{notice}</p>}
+      {notice && <p className="action-notice" aria-live="polite">{notice.message}</p>}
       <nav className="context-source-switch" aria-label="Activity source">
         <span>Inspect activity for</span>
         {(["github", "notion", "all"] as const).map((source) => <button className={sourceFilter === source ? "active" : ""} onClick={() => setSourceFilter(source)} key={source}>{source === "all" ? "All context" : source === "github" ? "GitHub changes" : "Notion changes"}</button>)}
@@ -383,7 +404,7 @@ export function ActivityPage({
       <div className="activity-grid">
         <section className="panel active-sync">
           <div className="panel-heading"><div><span>{activeJob ? "Current synchronization" : "Queue status"}</span><h2>{activeJob ? activeJob.source === "github" ? `${activeJob.repositoryOwner}/${activeJob.repositoryName}` : activeJob.configuration.workspaceName ?? "Notion" : "No active jobs"}</h2></div>{activeJob && <span className="running-badge"><RefreshCw className={activeJob.status === "running" ? "spin" : ""} size={13} /> {activeJob.source === "github" && activeJob.cancelRequestedAt ? "Cancelling" : syncStageLabel(activeJob.status)}</span>}</div>
-          <div className="sync-progress"><div><span>{activeJob ? syncStageLabel(activeJob.stage) : "Ready for the next repository update"}</span><b>{activeJob?.progress ?? 0}%</b></div><div className="progress-track"><i style={{ width: `${activeJob?.progress ?? 0}%` }} /></div><p>{activeJob ? `Attempt ${Math.max(activeJob.attempt, 1)} · queued ${syncTime(activeJob.createdAt)}` : "Synchronization jobs will appear here as soon as they are queued."}</p></div>
+          <div className="sync-progress"><div><span>{activeJob ? syncStageLabel(activeJob.stage) : "Ready for the next repository update"}</span><b>{activeJob ? `${activeJob.progress}%` : "Idle"}</b></div><div className="progress-track"><i style={{ width: `${activeJob?.progress ?? 0}%` }} /></div><p>{activeJob ? `Attempt ${Math.max(activeJob.attempt, 1)} · queued ${syncTime(activeJob.createdAt)}` : "Synchronization jobs will appear here as soon as they are queued."}</p></div>
           <div className="sync-stages">{syncStages.map((step, index) => { const progress = activeJob?.progress ?? -1; const currentIndex = progress >= 90 ? 5 : progress >= 52 ? 4 : progress >= 32 ? 3 : progress >= 15 ? 2 : progress >= 8 ? 1 : progress >= 0 ? 0 : -1; return <div className={index < currentIndex ? "done" : index === currentIndex ? "current" : ""} key={step}><i>{index < currentIndex ? <Check size={12} /> : index + 1}</i><span>{syncStageLabel(step)}</span></div>; })}</div>
           {activeJob?.source === "github" && canSynchronize && <div className="settings-actions"><button className="button button--ghost" onClick={() => void jobAction(activeJob.id, "cancel")} disabled={Boolean(activeJob.cancelRequestedAt)}>Cancel synchronization</button></div>}
         </section>
