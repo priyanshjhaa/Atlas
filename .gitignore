@@ -5,6 +5,10 @@ ATLAS_PLAN.md
 BACKEND_FOUNDATION_PLAN.md
 LLM_EXPLANATION_LAYER_PLAN.md
 
+# Local agent tooling
+.agents/
+skills-lock.json
+
 # dependencies
 node_modules/
 /.pnp
@@ -25,7 +29,7 @@ test-results/
 backend/dist/
 
 # next.js
-/.next/
+.next/
 /out/
 
 # misc

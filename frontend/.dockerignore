@@ -2,9 +2,7 @@
 .github
 .next
 .vercel
-backend
 coverage
-docs
 e2e
 node_modules
 playwright-report
@@ -14,4 +12,3 @@ tests
 *.log
 *.tsbuildinfo
 Dockerfile*
-compose*.yaml

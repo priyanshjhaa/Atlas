@@ -27,7 +27,7 @@ product before sign-in.
 
 Atlas is a single repository containing:
 
-- A Next.js web application in the repository root.
+- A Next.js web application under `frontend/`.
 - A NestJS API and BullMQ worker under `backend/`.
 - PostgreSQL with `pgvector` for product data and indexed intelligence.
 - Redis for synchronization queues and distributed request limiting.
@@ -47,8 +47,10 @@ Requirements:
 Install dependencies and create local environment files:
 
 ```bash
+cd frontend
 npm ci
 cp .env.example .env.local
+cd ..
 
 cd backend
 npm ci
@@ -61,6 +63,7 @@ cd ..
 Start these processes in separate terminals:
 
 ```bash
+cd frontend
 npm run dev
 ```
 
@@ -105,6 +108,7 @@ private keys, webhook secrets, or database URLs.
 Frontend:
 
 ```bash
+cd frontend
 npm audit --omit=dev --audit-level=high
 npm run typecheck
 npm run lint

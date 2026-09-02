@@ -22,8 +22,8 @@ host the backend application processes.
 
 ### 2. Create the Vercel web project
 
-- [ ] Import the repository into Vercel with the repository root as the project
-      root and Node.js 22 as the runtime.
+- [ ] Import the repository into Vercel with `frontend` as the project root and
+      Node.js 22 as the runtime.
 - [ ] Keep the framework preset as Next.js, build command as `npm run build`,
       and install command as `npm ci`.
 - [ ] Assign the production web domain, but do not promote production traffic
@@ -183,7 +183,7 @@ Generate or obtain these values only after the production environment exists:
 - [ ] Notion OAuth client ID and client secret
 - [ ] LLM provider key, primary model, and fallback model
 
-Review `.env.example`, `backend/.env.example`, and
+Review `frontend/.env.example`, `backend/.env.example`, and
 `docs/production-runbook.md` for the complete configuration contract and
 validation rules.
 

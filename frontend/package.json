@@ -13,7 +13,7 @@
     "test:e2e": "playwright test",
     "test:lighthouse": "npm run build && node scripts/lighthouse-audit.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . --ignore-pattern .next --ignore-pattern backend"
+    "lint": "eslint . --ignore-pattern .next"
   },
   "dependencies": {
     "@xyflow/react": "^12.11.2",

@@ -45,7 +45,7 @@ services:
   web:
     image: atlas-web:${ATLAS_RELEASE:-local}
     build:
-      context: .
+      context: frontend
       target: runtime
     init: true
     restart: unless-stopped
