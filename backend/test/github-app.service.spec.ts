@@ -189,6 +189,9 @@ describe("GitHubAppService", () => {
       expect(url).toBe("https://api.github.com/graphql");
       expect(body.query).toContain("pullRequests(first: 50");
       expect(body.query).toContain("reviews(last: 50)");
+      expect(body.query.match(/\.\.\. on Node \{ id \}/g)).toHaveLength(3);
+      expect(body.query).not.toMatch(/author \{ id /);
+      expect(body.query).not.toMatch(/mergedBy \{ id /);
       expect(body.variables).toEqual({ owner: "atlas", repository: "web" });
       return new Response(
         JSON.stringify({

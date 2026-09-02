@@ -56,7 +56,7 @@ interface GitHubRestActor {
 }
 
 interface GitHubGraphqlActor {
-  id: string;
+  id?: string;
   login: string;
   name?: string | null;
   avatarUrl: string;
@@ -323,12 +323,12 @@ export class GitHubAppService {
             nodes {
               id number title url state isDraft baseRefOid headRefOid
               createdAt updatedAt closedAt mergedAt
-              author { id login avatarUrl url __typename ... on User { name } }
-              mergedBy { id login avatarUrl url __typename ... on User { name } }
+              author { login avatarUrl url __typename ... on Node { id } ... on User { name } }
+              mergedBy { login avatarUrl url __typename ... on Node { id } ... on User { name } }
               reviews(last: ${GITHUB_PULL_REQUEST_REVIEW_LIMIT}) {
                 nodes {
                   id state submittedAt url
-                  author { id login avatarUrl url __typename ... on User { name } }
+                  author { login avatarUrl url __typename ... on Node { id } ... on User { name } }
                 }
                 pageInfo { hasPreviousPage }
               }
@@ -662,7 +662,7 @@ export class GitHubAppService {
   private graphqlActor(actor: GitHubGraphqlActor | null): GitHubActor | null {
     if (!actor) return null;
     return {
-      providerUserId: actor.id,
+      providerUserId: actor.id ?? null,
       login: actor.login,
       displayName: actor.name ?? null,
       avatarUrl: actor.avatarUrl,
