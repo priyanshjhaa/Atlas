@@ -16,7 +16,7 @@ Before deploying:
 
 1. Confirm the target commit passed `.github/workflows/ci.yml`.
 2. Back up PostgreSQL and record the backup identifier.
-3. Run `npm ci && npm run build` in the repository root and `backend/`.
+3. Run `npm ci && npm run build` in `frontend/` and `backend/`.
 4. Build immutable `runtime`, `api`, `worker`, and `migration` container
    targets from the release commit.
 5. Run the migration target as a one-off release task.
